@@ -1,0 +1,73 @@
+module ai.tangram_os
+
+class AppName {
+  group: String
+  name: String
+}
+
+class ResourceType {
+  app: AppName
+  name: String
+}
+
+class ResourceTypeVersion {
+  app: AppName
+  name: String
+  version: String
+}
+
+workspaceType = new ResourceType {
+  app = new AppName {
+    group = "ai.tangram-os"
+    name = "core"
+  }
+  name = "Workspace"
+}
+
+datasetType = new ResourceType {
+  app = new AppName {
+    group = "ai.tangram-os"
+    name = "core"
+  }
+  name = "Dataset"
+}
+
+catalogType = new ResourceType {
+  app = new AppName {
+    group = "ai.tangram-os"
+    name = "core"
+  }
+  name = "DataCatalog"
+}
+
+storageType = new ResourceType {
+  app = new AppName {
+    group = "ai.tangram-os"
+    name = "core"
+  }
+  name = "Storage"
+}
+
+databaseType = new ResourceType {
+  app = new AppName {
+    group = "ai.tangram-os"
+    name = "core"
+  }
+  name = "Database"
+}
+
+computeType = new ResourceType {
+  app = new AppName {
+    group = "ai.tangram-os"
+    name = "core"
+  }
+  name = "Compute"
+}
+
+sqlEngineType = new ResourceType {
+  app = new AppName {
+    group = "ai.tangram-os"
+    name = "core"
+  }
+  name = "SQLEngine"
+}
