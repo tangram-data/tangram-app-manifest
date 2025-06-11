@@ -27,7 +27,7 @@ jobs:
         env:
           VERSION: ${{ github.ref_name }}
         run: |
-          ./gradlew build
+          ./gradlew createPackage
 
       - name: release
         uses: softprops/action-gh-release@v1

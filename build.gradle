@@ -2,24 +2,27 @@ plugins {
   id "org.pkl-lang" version "0.28.2"
 }
 
+def projectDirs = file("src")
+def outputDir = file("build")
+
 pkl {
   project {
+    resolvers {
+      register('resolveProjects') {
+        projectDirectories.from(projectDirs)
+      }
+    }
     packagers {
-      register("makePackages") {
+      register('createPackage') {
+        projectDirectories.from(projectDirs)
+        outputPath.set(file('build/generated/packages/%{name}/%{version}'))
+
+        // Set environment variables
         def maybeVersion = System.getenv("VERSION")
         if (maybeVersion != null) {
           environmentVariables.put("VERSION", maybeVersion)
         }
-        projectDirectories.from(file("src/"))
       }
     }
   }
-  // ./gradlew pkldoc
-  /*
-  pkldocGenerators {
-      register("pkldoc") {
-          sourceModules.addAll(files("src/doc-package-info.pkl", "src/project.pkl"))
-      }
-  }
-  */
 }
