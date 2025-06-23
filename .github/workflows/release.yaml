@@ -33,3 +33,9 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: build/generated/packages/**
+
+      - name: print release details
+        run: |
+          echo "Release URL: ${{ steps.release.outputs.release_url }}"
+          echo "Upload URL: ${{ steps.release.outputs.upload_url }}"
+          echo "Assets: ${{ steps.release.outputs.assets }}"
