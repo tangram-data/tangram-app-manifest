@@ -1,7 +1,7 @@
 amends "pkl:Project"
 
 package {
-  name = "tangram-app-manifests"
+  name = "tangram-app-manifest"
   version = read("env:VERSION")
   baseUri = "package://github.com/tangram-data/\(name)"
   packageZipUrl = "https://github.com/tangram-data/\(name)/releases/download/\(version)/\(name)@\(version).zip"
