@@ -36,6 +36,6 @@ jobs:
 
       - name: print release details
         run: |
-          echo "Release URL: ${{ steps.release.outputs.release_url }}"
+          echo "URL: ${{ steps.release.outputs.url }}"
           echo "Upload URL: ${{ steps.release.outputs.upload_url }}"
           echo "Assets: ${{ steps.release.outputs.assets }}"
