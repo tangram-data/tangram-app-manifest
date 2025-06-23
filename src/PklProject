@@ -4,7 +4,7 @@ package {
   name = "tangram-app-manifests"
   version = read?("env:VERSION")?.replaceFirst("\(name)@", "") ?? "0.0.1-SNAPSHOT"
   baseUri = "package://github.com/tangram-data/tangram-app-manifest"
-  packageZipUrl = "https://github.com/tangram-data/tangram-app-manifest/releases/download/\(version)/\(name)@\(version).zip"
+  packageZipUrl = "https://github.com/tangram-data/tangram-app-manifest/releases/download/\(name)@\(version).zip"
   sourceCode = "https://github.com/tangram-data/tangram-app-manifest"
   sourceCodeUrlScheme = "https://github.com/tangram-data/tangram-app-manifest/blob/\(version)/generated-package%{path}#%{line}-%{endLine}"
   description = """
