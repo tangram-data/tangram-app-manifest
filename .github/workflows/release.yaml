@@ -32,4 +32,4 @@ jobs:
       - name: release
         uses: softprops/action-gh-release@v1
         with:
-          files: build/generated/pkl/packages/*
+          files: build/generated/packages/*
