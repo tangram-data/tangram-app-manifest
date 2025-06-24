@@ -16,3 +16,35 @@ class IntegrationImplementation {
   implementationType: String?
   version: String?
 }
+
+tangramSQL = new AppName{
+  group="ai.tangram-os"
+  name = "sql"
+}
+
+tangramDataCatalog =  new AppName{
+  group="ai.tangram-os"
+  name = "data-catalog"
+}
+
+sparkIO = new AppIntegrationInterface {
+  app= tangramDataCatalog
+  name= "spark-io"
+  version = "v1"
+}
+
+sqlQueryable = new AppIntegrationInterface {
+  app= tangramSQL
+  name= "queryable"
+  version = "v1"
+}
+
+schemaUpdator = new AppIntegrationInterface {
+  app= tangramDataCatalog
+  name= "schema-update-executor"
+  version = "v1"
+}
+
+class TangramSQLQueryableSpec {
+  sqlCommandPrivilegeMapping : Map<String, List<String>>
+}
