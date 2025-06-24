@@ -19,7 +19,7 @@ abstract class InfraResourceClaim {
   resourceName: String
   resourceType: String
   resourceVersion: String? = "v1"
-  function loadResource(): Resource = (new json.Parser {}.parse(read("file:_tangram_os_ir_\(resourceName).json")) as Dynamic).toTyped(Resource)
+  function loadResource(): Resource = (new json.Parser {}.parse(read("file:./_tangram_os_ir_\(resourceName).json")) as Dynamic).toTyped(Resource)
 }
 
 class PostgresqlDatabaseClaim extends InfraResourceClaim {
