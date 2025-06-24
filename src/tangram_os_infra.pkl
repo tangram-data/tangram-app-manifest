@@ -1,0 +1,108 @@
+module ai.tangram.os.infra
+import "pkl:json"
+
+
+class Resource {
+  resource: Dynamic
+  secrets: Dynamic
+
+  function resource(): Dynamic = this.resource
+  function secrets(): Dynamic = this.secrets
+}
+
+
+class InfraResourceClaimSpec {
+  configInput: Dynamic?
+}
+
+abstract class InfraResourceClaim {
+  resourceName: String
+  resourceType: String
+  resourceVersion: String? = "v1"
+  function loadResource(): Resource = (new json.Parser {}.parse(read("_tangram_os_ir_\(resourceName).json")) as Dynamic).toTyped(Resource)
+}
+
+class PostgresqlDatabaseClaim extends InfraResourceClaim {
+  resourceType: String = "ai.tangram.os.PostgresqlDatabase"
+  function database(): PostgresqlDatabase = this.loadResource().resource().toTyped(PostgresqlDatabase)
+  function secrets(): PostgresqlDatabaseSecrets = this.loadResource().secrets().toTyped(PostgresqlDatabaseSecrets)
+}
+
+
+class PostgresqlDatabase {
+  host: String
+  port: Int
+  name: String
+}
+
+class PostgresqlDatabaseSecrets {
+  user: String
+  password: String
+}
+
+class StorageBucketClaim extends InfraResourceClaim {
+  resourceType: String = "ai.tangram.os.PostgresqlDatabase"
+  function bucket(): StorageBucket = this.loadResource().resource().toTyped(StorageBucket)
+  function secrets(): BucketAccessPermit = this.loadResource().secrets().toTyped(BucketAccessPermit)
+}
+
+
+class StorageBucket {
+  name: String
+  endpoint: String
+  port: Int
+  securedConnection: Boolean
+}
+
+class BucketAccessPermit {
+  accessKey: String
+  secretKey: String
+}
+
+
+class ContainerFile {
+  name: String
+  path: String
+  isSensitive: Boolean? = false
+  content: String
+}
+
+
+class AppComponentServiceSpec {
+  port: Int
+  targetPort: Int
+  protocol: String
+}
+
+
+class AppContainerMeta {
+  name: String
+  image: String
+  description: String?
+}
+
+
+
+class AppComponentMeta extends Annotation {
+  name: String
+  containers: List<AppContainerMeta>
+  apiServiceComponent: Boolean? = false
+  maxReplica: Int?
+  recommendedReplica: Int? = 1
+  optional: Boolean? = false
+}
+
+
+
+class AppContainerSpec {
+  ports: List<Int>
+  variables: Map<String, String>
+  files: List<ContainerFile>
+}
+
+
+class AppComponentSpec {
+  service: AppComponentServiceSpec?
+  containers: List<AppContainerSpec>
+}
+
