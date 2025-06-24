@@ -2,7 +2,7 @@ amends "pkl:Project"
 
 package {
   name = "tangram-app-manifest"
-  version = read?("env:VERSION")?.replaceFirst("\(name)@", "") ?? "1.0.0"
+  version = read("env:VERSION")
   baseUri = "package://github.com/tangram-data/\(name)"
   packageZipUrl = "https://github.com/tangram-data/\(name)/releases/download/\(version)/\(name)@\(version).zip"
   sourceCode = "https://github.com/tangram-data/tangram-app-manifest"
