@@ -1,0 +1,18 @@
+class AppName {
+  group: String
+  name: String
+}
+
+class AppIntegrationInterface {
+  app: AppName
+  name: String
+  version: String
+}
+
+
+class IntegrationImplementation {
+  interface: AppIntegrationInterface
+  implementationSpec: Dynamic
+  implementationType: String?
+  version: String?
+}
