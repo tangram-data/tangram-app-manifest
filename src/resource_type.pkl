@@ -71,3 +71,11 @@ sqlEngineType = new ResourceType {
   }
   name = "SQLEngine"
 }
+
+workflowType = new ResourceType {
+  app = new AppName {
+    group = "ai.tangram-os"
+    name = "core"
+  }
+  name = "Workflow"
+}
