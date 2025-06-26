@@ -2,11 +2,11 @@ amends "pkl:Project"
 
 package {
   name = "tangram-app-manifest"
-  version = read("env:VERSION").replaceFirst("\(name)@", "")
+  version = read("env:TAG").replaceFirst("\(name)@", "")
   baseUri = "package://github.com/tangram-data/\(name)"
-  packageZipUrl = "https://github.com/tangram-data/\(name)/releases/download/\(read("env:VERSION"))/\(read("env:VERSION")).zip"
+  packageZipUrl = "https://github.com/tangram-data/\(name)/releases/download/\(read("env:TAG"))/\(read("env:TAG")).zip"
   sourceCode = "https://github.com/tangram-data/tangram-app-manifest"
   description = """
-    Pkl Modules for tangram-apps
-  """
+      Pkl Modules for tangram-apps
+    """
 }
