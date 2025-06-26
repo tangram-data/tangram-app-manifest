@@ -79,3 +79,11 @@ workflowType = new ResourceType {
   }
   name = "Workflow"
 }
+
+dashboardType = new ResourceType {
+  app = new AppName {
+    group = "ai.tangram-os"
+    name = "core"
+  }
+  name = "Dashboard"
+}
