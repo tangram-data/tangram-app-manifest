@@ -48,15 +48,18 @@ class StorageBucketClaim extends InfraResourceClaim {
 
 
 class StorageBucket {
+  type: String
   name: String
-  endpoint: String
-  port: Int
-  securedConnection: Boolean
+  region: String?
+  endpoint: String?
+  port: Int?
+  securedConnection: Boolean?
 }
 
 class BucketAccessPermit {
+  type: String
   accessKey: String
-  secretKey: String
+  secretKey: String?
 }
 
 
