@@ -102,11 +102,13 @@ class AppContainerSpec {
   ports: List<Int>
   variables: Map<String, String>
   files: List<ContainerFile>
+  command: List<String>
+  args: List<String>?
 }
 
 
 class AppComponentSpec {
   service: AppComponentServiceSpec?
+  initContainers: List<AppContainerSpec>?
   containers: List<AppContainerSpec>
 }
-
