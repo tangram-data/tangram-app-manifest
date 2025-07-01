@@ -88,6 +88,7 @@ class AppContainerMeta {
 
 class AppComponentMeta extends Annotation {
   name: String
+  initContainers: List<AppContainerMeta>?
   containers: List<AppContainerMeta>
   apiServiceComponent: Boolean? = false
   maxReplica: Int?
