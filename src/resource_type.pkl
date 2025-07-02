@@ -16,7 +16,7 @@ class ResourceTypeVersion {
   version: String
 }
 
-workspaceType = new ResourceType {
+WORKSPACE_TYPE = new ResourceType {
   app = new AppName {
     group = "ai.tangram-os"
     name = "core"
@@ -24,7 +24,7 @@ workspaceType = new ResourceType {
   name = "Workspace"
 }
 
-datasetType = new ResourceType {
+DATASET_TYPE = new ResourceType {
   app = new AppName {
     group = "ai.tangram-os"
     name = "core"
@@ -32,7 +32,7 @@ datasetType = new ResourceType {
   name = "Dataset"
 }
 
-catalogType = new ResourceType {
+CATALOG_TYPE = new ResourceType {
   app = new AppName {
     group = "ai.tangram-os"
     name = "core"
@@ -40,7 +40,7 @@ catalogType = new ResourceType {
   name = "DataCatalog"
 }
 
-storageType = new ResourceType {
+STORAGE_TYPE = new ResourceType {
   app = new AppName {
     group = "ai.tangram-os"
     name = "core"
@@ -48,7 +48,7 @@ storageType = new ResourceType {
   name = "Storage"
 }
 
-databaseType = new ResourceType {
+DATABASE_TYPE = new ResourceType {
   app = new AppName {
     group = "ai.tangram-os"
     name = "core"
@@ -56,7 +56,7 @@ databaseType = new ResourceType {
   name = "Database"
 }
 
-computeType = new ResourceType {
+COMPUTE_TYPE = new ResourceType {
   app = new AppName {
     group = "ai.tangram-os"
     name = "core"
@@ -64,7 +64,7 @@ computeType = new ResourceType {
   name = "Compute"
 }
 
-sqlEngineType = new ResourceType {
+SQL_ENGINE_TYPE = new ResourceType {
   app = new AppName {
     group = "ai.tangram-os"
     name = "core"
@@ -72,7 +72,7 @@ sqlEngineType = new ResourceType {
   name = "SQLEngine"
 }
 
-workflowType = new ResourceType {
+WORKFLOW_TYPE = new ResourceType {
   app = new AppName {
     group = "ai.tangram-os"
     name = "core"
@@ -80,7 +80,7 @@ workflowType = new ResourceType {
   name = "Workflow"
 }
 
-dashboardType = new ResourceType {
+DASHBOARD_TYPE = new ResourceType {
   app = new AppName {
     group = "ai.tangram-os"
     name = "core"
