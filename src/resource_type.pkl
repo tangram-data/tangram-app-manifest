@@ -1,5 +1,9 @@
 module ai.tangram_os
 
+class Action {
+  action: String
+}
+
 class AppName {
   group: String
   name: String
@@ -11,9 +15,19 @@ class ResourceType {
 }
 
 class ResourceTypeVersion {
-  app: AppName
-  name: String
   version: String
+  served: Boolean
+  superTypeVersion: String
+  actions: List<Action>
+}
+
+class ResourceTypeDefinition {
+  name: String
+  activeVersion: String
+  versions: List<ResourceTypeVersion>
+  superType: ResourceType?
+  scopeType: ResourceType?
+  doc: String?
 }
 
 WORKSPACE_TYPE = new ResourceType {
