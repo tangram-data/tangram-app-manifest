@@ -2,6 +2,8 @@ module ai.tangram_os
 
 class Action {
   action: String
+  description: String?
+  skipAudit: Boolean?
 }
 
 class AppName {
