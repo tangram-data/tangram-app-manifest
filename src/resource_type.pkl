@@ -19,7 +19,7 @@ class ResourceType {
 class ResourceTypeVersion {
   version: String
   served: Boolean
-  superTypeVersion: String
+  superTypeVersion: String?
   actions: List<Action>
 }
 
