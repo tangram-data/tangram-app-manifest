@@ -4,6 +4,7 @@ class Action {
   action: String
   description: String?
   skipAudit: Boolean?
+  skipAuth: Boolean?
 }
 
 class AppName {
