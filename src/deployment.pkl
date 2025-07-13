@@ -1,0 +1,50 @@
+module ai.tangram.os
+
+
+class ContainerFile {
+  name: String
+  path: String
+  isSensitive: Boolean? = false
+  content: String
+}
+
+
+class AppComponentServiceSpec {
+  port: Int
+  targetPort: Int
+  protocol: String
+}
+
+
+class AppContainerMeta {
+  name: String
+  image: String
+  description: String?
+}
+
+class AppComponentMeta extends Annotation {
+  name: String
+  initContainers: List<AppContainerMeta>?
+  containers: List<AppContainerMeta>
+  apiServiceComponent: Boolean? = false
+  maxReplica: Int?
+  recommendedReplica: Int? = 1
+  optional: Boolean? = false
+}
+
+
+
+class AppContainerSpec {
+  ports: List<Int>
+  variables: Map<String, String>
+  files: List<ContainerFile>
+  command: List<String>
+  args: List<String>?
+}
+
+
+class AppComponentSpec {
+  service: AppComponentServiceSpec?
+  initContainers: List<AppContainerSpec>?
+  containers: List<AppContainerSpec>
+}
