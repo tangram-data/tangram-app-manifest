@@ -1,8 +1,15 @@
 module ai.tangram.os
+class DeploymentContext {
+  id: String
+  workspace: String
+  k8sNamespace: String
+}
 
-id: String = read("prop:tangram_app_deployment_id")
-workspace: String = read("prop:tangram_app_deployment_workspace")
-k8sNamespace: String = read("prop:tangram_app_deployment_k8s_namespace")
+context = new DeploymentContext {
+  id: String = read("prop:tangram_app_deployment_id")
+  workspace: String = read("prop:tangram_app_deployment_workspace")
+  k8sNamespace: String = read("prop:tangram_app_deployment_k8s_namespace")
+}
 
 class ContainerFile {
   name: String
