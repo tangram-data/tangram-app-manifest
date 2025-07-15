@@ -1,4 +1,5 @@
 module ai.tangram.os
+
 class DeploymentContext {
   id: String
   workspace: String
@@ -6,9 +7,9 @@ class DeploymentContext {
 }
 
 context = new DeploymentContext {
-  id: String = read("prop:tangram_app_deployment_id")
-  workspace: String = read("prop:tangram_app_deployment_workspace")
-  k8sNamespace: String = read("prop:tangram_app_deployment_k8s_namespace")
+  id = read("prop:tangram_app_deployment_id")
+  workspace = read("prop:tangram_app_deployment_workspace")
+  k8sNamespace = read("prop:tangram_app_deployment_k8s_namespace")
 }
 
 class ContainerFile {
@@ -18,13 +19,11 @@ class ContainerFile {
   content: String
 }
 
-
 class AppComponentServiceSpec {
   port: Int
   targetPort: Int
   protocol: String
 }
-
 
 class AppContainerMeta {
   name: String
@@ -42,8 +41,6 @@ class AppComponentMeta extends Annotation {
   optional: Boolean? = false
 }
 
-
-
 class AppContainerSpec {
   ports: List<Int>
   variables: Map<String, String>
@@ -51,7 +48,6 @@ class AppContainerSpec {
   command: List<String>
   args: List<String>?
 }
-
 
 class AppComponentSpec {
   service: AppComponentServiceSpec?
