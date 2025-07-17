@@ -1,0 +1,139 @@
+module ai.tangram.os
+
+TANGRAM_OS_GROUP_NAME = "ai.tangram-os"
+
+class AppName {
+  group: String
+  name: String
+}
+
+TANGRAM_OS_CORE_APP = new AppName {
+  group = TANGRAM_OS_GROUP_NAME
+  name = "core"
+}
+
+class ResourceType {
+  app: AppName
+  name: String
+}
+
+class Action {
+  action: String
+  description: String?
+  skipAudit: Boolean?
+  skipAuth: Boolean?
+}
+
+class ResourceTypeVersion {
+  version: String
+  served: Boolean
+  superTypeVersion: String?
+  actions: List<Action>
+}
+
+class ResourceTypeDefinition {
+  name: String
+  activeVersion: String
+  versions: List<ResourceTypeVersion>
+  superType: ResourceType?
+  scopeType: ResourceType?
+  doc: String?
+}
+
+WORKSPACE_TYPE = new ResourceType {
+  app = TANGRAM_OS_CORE_APP
+  name = "Workspace"
+}
+
+DATASET_TYPE = new ResourceType {
+  app = TANGRAM_OS_CORE_APP
+  name = "Dataset"
+}
+
+CATALOG_TYPE = new ResourceType {
+  app = TANGRAM_OS_CORE_APP
+  name = "DataCatalog"
+}
+
+STORAGE_TYPE = new ResourceType {
+  app = TANGRAM_OS_CORE_APP
+  name = "Storage"
+}
+
+DATABASE_TYPE = new ResourceType {
+  app = TANGRAM_OS_CORE_APP
+  name = "Database"
+}
+
+COMPUTE_TYPE = new ResourceType {
+  app = TANGRAM_OS_CORE_APP
+  name = "Compute"
+}
+
+SQL_ENGINE_TYPE = new ResourceType {
+  app = TANGRAM_OS_CORE_APP
+  name = "SQLEngine"
+}
+
+WORKFLOW_TYPE = new ResourceType {
+  app = TANGRAM_OS_CORE_APP
+  name = "Workflow"
+}
+
+DASHBOARD_TYPE = new ResourceType {
+  app = TANGRAM_OS_CORE_APP
+  name = "Dashboard"
+}
+
+class AppIntegrationInterface {
+  app: AppName
+  name: String
+  version: String
+}
+
+
+class IntegrationImplementation {
+  interface: AppIntegrationInterface
+  implementationSpec: Dynamic
+  implementationType: String?
+  version: String?
+}
+
+TANGRAM_SQL_APP = new AppName {
+  group = TANGRAM_OS_GROUP_NAME
+  name = "sql"
+}
+
+DATA_CATALOG_APP = new AppName {
+  group = TANGRAM_OS_GROUP_NAME
+  name = "data-catalog"
+}
+
+SPARK_IO = new AppIntegrationInterface {
+  app = DATA_CATALOG_APP
+  name = "spark-io"
+  version = "v1"
+}
+
+SQL_QUERYABLE = new AppIntegrationInterface {
+  app = TANGRAM_SQL_APP
+  name = "queryable"
+  version = "v1"
+}
+
+SCHEMA_UPDATOR = new AppIntegrationInterface {
+  app = DATA_CATALOG_APP
+  name = "schema-update-executor"
+  version = "v1"
+}
+
+class TangramSQLQueryableSpec {
+  sqlCommandPrivilegeMapping: Map<String, List<String>>
+}
+
+class ConfigField {
+  name: String
+  description: String
+  required: Boolean
+  default: String?
+}

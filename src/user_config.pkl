@@ -1,6 +1,0 @@
-class ConfigField{
-  name: String
-  description: String
-  required: Boolean
-  default: String?
-}
