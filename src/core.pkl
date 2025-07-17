@@ -137,3 +137,9 @@ class ConfigField {
   required: Boolean
   default: String?
 }
+
+NATIVE_APP_TYPE = "NativeApp"
+
+CONNECTOR_APP_TYPE = "ConnectorApp"
+
+typealias AppType = "NativeApp"|"ConnectorApp"
