@@ -1,7 +1,6 @@
 module ai.tangram.os.infra
 import "pkl:json"
 
-
 class Resource {
   resource: Dynamic
   secrets: Dynamic
@@ -9,7 +8,6 @@ class Resource {
   function resource(): Dynamic = this.resource
   function secrets(): Dynamic = this.secrets
 }
-
 
 class InfraResourceClaimSpec {
   configInput: Dynamic?
@@ -45,7 +43,6 @@ class StorageBucketClaim extends InfraResourceClaim {
   function bucket(): StorageBucket = this.loadResource().resource().toTyped(StorageBucket)
   function secrets(): BucketAccessPermit = this.loadResource().secrets().toTyped(BucketAccessPermit)
 }
-
 
 class StorageBucket {
   type: String
