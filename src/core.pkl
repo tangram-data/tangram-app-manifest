@@ -136,6 +136,7 @@ class ConfigField {
   description: String
   required: Boolean
   default: String?
+  example: String?
 }
 
 NATIVE_APP_TYPE = "NativeApp"
