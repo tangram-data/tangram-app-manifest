@@ -51,8 +51,12 @@ class StorageBucket {
   endpoint: String?
   port: Int?
   securedConnection: Boolean?
-}
 
+  function extractStorageAccountFromEndpoint(endpoint: String): String = endpoint.replaceAll("https://", "").split(".")[0]
+
+  function storageAccount(): String? = if (endpoint == null) null else extractStorageAccountFromEndpoint(endpoint)
+
+}
 class BucketAccessPermit {
   type: String
   accessKey: String

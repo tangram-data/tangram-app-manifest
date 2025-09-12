@@ -1,4 +1,5 @@
 module ai.tangram.os
+import "pkl:json"
 
 class DeploymentContext {
   id: String
@@ -56,3 +57,28 @@ class AppComponentSpec {
   initContainers: List<AppContainerSpec>?
   containers: List<AppContainerSpec>
 }
+
+function getDeploymentConfig(): Dynamic =
+  (new json.Parser {}.parse(read("prop:deploymentConfig")) as Dynamic)
+
+function formatCpuQuantity(cpuQuantity: Dynamic) =
+  if (cpuQuantity.unit == "Milli")
+    "\(cpuQuantity.quantity)m"
+  else "\(cpuQuantity.quantity)"
+
+function formatMemoryQuantity(memoryQuantity: Dynamic) =
+  if (memoryQuantity.unit == "Bytes")
+    "\(memoryQuantity.quantity)"
+  else "\(memoryQuantity.quantity)\(memoryQuantity.unit)"
+
+function getComponentReplicas(component: String) =
+  getDeploymentConfig().components.getProperty(component).replicas
+
+function getComponentContainerK8sCpuQuanity(component: String, container: String)
+= formatCpuQuantity(getDeploymentConfig().components.getProperty(component).containerResourceRequests.getProperty(container).cpu)
+function getComponentContainerK8sMemoryQuanity(component: String, container: String)
+= formatMemoryQuantity(getDeploymentConfig().components.getProperty(component).containerResourceRequests.getProperty(container).memory)
+
+
+function getConfig(key: String) = getDeploymentConfig().settings.getProperty(key)
+function getSecret(key: String) = getDeploymentConfig().secrets.getProperty(key)
