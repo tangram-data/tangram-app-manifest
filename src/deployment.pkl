@@ -81,4 +81,9 @@ function getComponentContainerK8sMemoryQuanity(component: String, container: Str
 
 
 function getConfig(key: String) = getDeploymentConfig().settings.getProperty(key)
+function getOptionalConfig(key: String)= getDeploymentConfig().settings.getPropertyOrNull(key)
+
 function getSecret(key: String) = getDeploymentConfig().secrets.getProperty(key)
+function getOptionalSecret(key: String) = getDeploymentConfig().secrets.getPropertyOrNull(key)
+
+function getImagePullSecretName()  = getDeploymentConfig().getPropertyOrNull("imagePullSecretName")
