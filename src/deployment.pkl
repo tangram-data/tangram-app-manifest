@@ -86,4 +86,4 @@ function getOptionalConfig(key: String)= getDeploymentConfig().settings.getPrope
 function getSecret(key: String) = getDeploymentConfig().secrets.getProperty(key)
 function getOptionalSecret(key: String) = getDeploymentConfig().secrets.getPropertyOrNull(key)
 
-function getImagePullSecretName()  = getDeploymentConfig().getPropertyOrNull("imagePullSecretName")
+function getImagePullSecretName()  = read?("prop:imagePullSecretName")
