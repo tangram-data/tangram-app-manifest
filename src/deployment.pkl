@@ -44,6 +44,17 @@ class AppComponentMeta extends Annotation {
   optional: Boolean? = false
 }
 
+class HelmChartMeta extends Annotation {
+  repo: String
+  fullName: String
+  version: String
+  components: List<AppComponentMeta>
+}
+
+class HelmChartValues {
+  values: Dynamic
+}
+
 class AppContainerSpec {
   ports: List<Int>
   variables: Map<String, String>
