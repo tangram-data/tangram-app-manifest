@@ -36,6 +36,7 @@ class PostgresqlDatabase {
 class PostgresqlDatabaseSecrets {
   user: String
   password: String
+  urlEncodedPassword: String
 }
 
 class StorageBucketClaim extends InfraResourceClaim {

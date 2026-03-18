@@ -6,6 +6,7 @@ class DeploymentContext {
   tangramOSPublicUrl: String
   workspace: String
   k8sNamespace: String
+  cloudProvider: String
 }
 
 context = new DeploymentContext {
@@ -13,6 +14,7 @@ context = new DeploymentContext {
   tangramOSPublicUrl = read("prop:tangram_os_public_url")
   workspace = read("prop:tangram_app_deployment_workspace")
   k8sNamespace = read("prop:tangram_app_deployment_k8s_namespace")
+  cloudProvider = read("prop:tangram_os_cloud_provider")
 }
 
 class ContainerFile {
