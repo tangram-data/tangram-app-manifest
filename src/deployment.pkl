@@ -1,12 +1,14 @@
 module ai.tangram.os
 import "pkl:json"
 
+typealias CloudProvider = "Local"|"AWS"|"Azure"|"Scaleway"|"GCP"
+
 class DeploymentContext {
   id: String
   tangramOSPublicUrl: String
   workspace: String
   k8sNamespace: String
-  cloudProvider: String
+  cloudProvider: CloudProvider
 }
 
 context = new DeploymentContext {
@@ -14,7 +16,7 @@ context = new DeploymentContext {
   tangramOSPublicUrl = read("prop:tangram_os_public_url")
   workspace = read("prop:tangram_app_deployment_workspace")
   k8sNamespace = read("prop:tangram_app_deployment_k8s_namespace")
-  cloudProvider = read("prop:tangram_os_cloud_provider")
+  cloudProvider = read("prop:tangram_os_cloud_provider") as CloudProvider
 }
 
 class ContainerFile {
@@ -94,9 +96,9 @@ function getComponentContainerK8sMemoryQuanity(component: String, container: Str
 
 
 function getConfig(key: String) = getDeploymentConfig().settings.getProperty(key)
-function getOptionalConfig(key: String)= getDeploymentConfig().settings.getPropertyOrNull(key)
+function getOptionalConfig(key: String) = getDeploymentConfig().settings.getPropertyOrNull(key)
 
 function getSecret(key: String) = getDeploymentConfig().secrets.getProperty(key)
 function getOptionalSecret(key: String) = getDeploymentConfig().secrets.getPropertyOrNull(key)
 
-function getImagePullSecretName()  = read?("prop:imagePullSecretName")
+function getImagePullSecretName() = read?("prop:imagePullSecretName")
