@@ -17,13 +17,111 @@ class ResourceType {
   name: String
 }
 
-class Action {
-  action: String
-  description: String?
-  skipAudit: Boolean?
-  skipAuth: Boolean?
+// ---------------------------------------------------------------------------
+// Privilege constants
+//
+// Privileges are open strings — any value is accepted so apps can define
+// domain-specific privileges (e.g. "Approve", "Publish").
+// These well-known constants are provided for convenience and referenced by
+// the platform for built-in policy evaluation.
+//
+// Usage in resource_types.pkl:
+//   local Describe = tangram.Privilege.Describe
+//   ...or just use the string directly: privilege = "Describe"
+// ---------------------------------------------------------------------------
+class _PrivilegeConstants {
+  Describe: String = "Describe"
+  Read:     String = "Read"
+  Write:    String = "Write"
+  Create:   String = "Create"
+  Delete:   String = "Delete"
+  Admin:    String = "Admin"
+  Execute:  String = "Execute"
+}
+Privilege: _PrivilegeConstants = new _PrivilegeConstants {}
+
+// ---------------------------------------------------------------------------
+// Effect constants
+//
+// Characterises what an action does to the world. Drives AI autonomy decisions,
+// audit policy, and UI affordances.
+//
+//   Stateless    — reads only; no state change; AI executes autonomously; audit skipped by default
+//   Reversible   — mutates state; prior state restorable; audit always recorded
+//   Irreversible — mutates state; cannot be undone; AI requires confirmation; audit always recorded
+// ---------------------------------------------------------------------------
+class _EffectConstants {
+  Stateless:    String = "Stateless"
+  Reversible:   String = "Reversible"
+  Irreversible: String = "Irreversible"
+}
+Effect: _EffectConstants = new _EffectConstants {}
+
+// ---------------------------------------------------------------------------
+// Resource name extractors
+//
+// Used in OpenApiMapping.resourceName and ResourcePrivilegeRequirement.resourceName
+// to identify which parts of an HTTP request form the resource name.
+// ---------------------------------------------------------------------------
+abstract class ResourceNameExtractor {}
+
+/// Extracts from a URL path parameter.
+class PathParam extends ResourceNameExtractor {
+  name: String
 }
 
+/// Extracts from a request body field (dot-separated path).
+/// `index` is only needed when the field is an array.
+class BodyField extends ResourceNameExtractor {
+  path: String
+  index: Int?
+}
+
+// ---------------------------------------------------------------------------
+// OpenAPI mapping — binds an action to one HTTP operationId.
+// ---------------------------------------------------------------------------
+class OpenApiMapping {
+  operationId: String
+  /// How to extract the resource name from the request.
+  /// When omitted, the platform derives it from path parameters in URL order.
+  resourceName: List<ResourceNameExtractor>?
+}
+
+// ---------------------------------------------------------------------------
+// Additional privilege check — cross-resource authorization required on an action.
+// ---------------------------------------------------------------------------
+class ResourcePrivilegeRequirement {
+  /// Resource type identifier: "group/app/TypeName" or just "TypeName" if same app.
+  resourceType: String
+  privilege: String
+  resourceName: List<ResourceNameExtractor>
+}
+
+// ---------------------------------------------------------------------------
+// Action
+// ---------------------------------------------------------------------------
+class Action {
+  name: String
+  /// Privilege class this action belongs to.
+  /// Defaults to the action name when it matches a well-known privilege.
+  privilege: String?
+  /// Characterises the action's effect: Stateless, Reversible, or Irreversible.
+  effect: String
+  idempotent: Boolean
+  doc: String
+  skipAuth: Boolean?
+  skipAudit: Boolean?
+  requiresConfirmation: Boolean?
+  additionalPrivileges: List<ResourcePrivilegeRequirement>?
+  /// HTTP binding for a single operationId.
+  openApiMapping: OpenApiMapping?
+  /// HTTP bindings for multiple operationIds (e.g. native API + Tangram wrapper API).
+  openApiMappings: List<OpenApiMapping>?
+}
+
+// ---------------------------------------------------------------------------
+// Resource type versioning
+// ---------------------------------------------------------------------------
 class ResourceTypeVersion {
   version: String
   served: Boolean
@@ -33,13 +131,19 @@ class ResourceTypeVersion {
 
 class ResourceTypeDefinition {
   name: String
+  doc: String
   activeVersion: String
   versions: List<ResourceTypeVersion>
   superType: ResourceType?
   scopeType: ResourceType?
-  doc: String?
+  /// Explicit privilege inheritance from parent scope.
+  /// Maps a parent privilege to the list of child privileges it grants.
+  scopePrivilegePropagation: Map<String, List<String>>?
 }
 
+// ---------------------------------------------------------------------------
+// Platform super types
+// ---------------------------------------------------------------------------
 WORKSPACE_TYPE = new ResourceType {
   app = TANGRAM_OS_CORE_APP
   name = "Workspace"
@@ -85,12 +189,14 @@ DASHBOARD_TYPE = new ResourceType {
   name = "Dashboard"
 }
 
+// ---------------------------------------------------------------------------
+// Integration interfaces
+// ---------------------------------------------------------------------------
 class AppIntegrationInterface {
   app: AppName
   name: String
   version: String
 }
-
 
 class IntegrationImplementation {
   interface: AppIntegrationInterface
@@ -139,8 +245,64 @@ class ConfigField {
   example: String?
 }
 
-NATIVE_APP_TYPE = "NativeApp"
-
+// ---------------------------------------------------------------------------
+// App types
+// ---------------------------------------------------------------------------
+NATIVE_APP_TYPE    = "NativeApp"
 CONNECTOR_APP_TYPE = "ConnectorApp"
+typealias AppType  = "NativeApp"|"ConnectorApp"
 
-typealias AppType = "NativeApp"|"ConnectorApp"
+// ---------------------------------------------------------------------------
+// Connector auth
+//
+// HTTP credentials injected into every request forwarded to the connector's REST API.
+// Values are evaluated at request time using Mustache-style templates.
+//
+//   Available variables in templates:
+//     {{secrets.<key>}}   — value from workspace secrets
+//     {{settings.<key>}}  — value from workspace settings
+// ---------------------------------------------------------------------------
+class Template {
+  template: String
+}
+
+class ConnectorAuth {
+  httpHeaders: Map<String, Template>
+}
+
+// ---------------------------------------------------------------------------
+// Helm deployment types — used in deployment/helm_charts.pkl.
+//
+// These are plain PKL data classes (not annotations). The platform reads
+// `charts` via evaluateExpression and JSON-decodes it into HelmChartMeta.
+// ---------------------------------------------------------------------------
+class ContainerMeta {
+  name: String
+  image: String
+  description: String?
+}
+
+class HelmComponent {
+  name: String
+  apiServiceComponent: Boolean?
+  recommendedReplica: Int?
+  maxReplica: Int?
+  optional: Boolean?
+  initContainers: List<ContainerMeta>?
+  containers: List<ContainerMeta>
+}
+
+class HelmChart {
+  repo: String
+  fullName: String
+  version: String
+  components: List<HelmComponent>
+}
+
+// ---------------------------------------------------------------------------
+// UI spec types
+// ---------------------------------------------------------------------------
+/// URL pattern for proxy-mode apps — defines which paths Tangram forwards.
+class UriPattern {
+  pattern: String
+}

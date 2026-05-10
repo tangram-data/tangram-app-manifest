@@ -43,6 +43,8 @@ class StorageBucketClaim extends InfraResourceClaim {
   resourceType: String = "ai.tangram.os.StorageBucket"
   function bucket(): StorageBucket = this.loadResource().resource().toTyped(StorageBucket)
   function secrets(): BucketAccessPermit = this.loadResource().secrets().toTyped(BucketAccessPermit)
+  /// Alias for secrets() — returns bucket access credentials.
+  function accessPermit(): BucketAccessPermit = this.secrets()
 }
 
 class StorageBucket {

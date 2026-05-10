@@ -12,13 +12,20 @@ class DeploymentContext {
 }
 
 context = new DeploymentContext {
-  id = read("prop:tangram_app_deployment_id")
+  id             = read("prop:tangram_app_deployment_id")
   tangramOSPublicUrl = read("prop:tangram_os_public_url")
-  workspace = read("prop:tangram_app_deployment_workspace")
-  k8sNamespace = read("prop:tangram_app_deployment_k8s_namespace")
-  cloudProvider = read("prop:tangram_os_cloud_provider") as CloudProvider
+  workspace      = read("prop:tangram_app_deployment_workspace")
+  k8sNamespace   = read("prop:tangram_app_deployment_k8s_namespace")
+  cloudProvider  = read("prop:tangram_os_cloud_provider") as CloudProvider
 }
 
+// ---------------------------------------------------------------------------
+// Custom Kubernetes deployment types
+//
+// Used by deployment/components.pkl (non-Helm apps).
+// AppComponentMeta is a PKL annotation — attach it to each component variable
+// so the platform can discover component metadata without evaluating the full module.
+// ---------------------------------------------------------------------------
 class ContainerFile {
   name: String
   path: String
@@ -48,17 +55,6 @@ class AppComponentMeta extends Annotation {
   optional: Boolean? = false
 }
 
-class HelmChartMeta extends Annotation {
-  repo: String
-  fullName: String
-  version: String
-  components: List<AppComponentMeta>
-}
-
-class HelmChartValues {
-  values: Dynamic
-}
-
 class AppContainerSpec {
   ports: List<Int>
   variables: Map<String, String>
@@ -73,6 +69,11 @@ class AppComponentSpec {
   containers: List<AppContainerSpec>
 }
 
+// ---------------------------------------------------------------------------
+// Runtime configuration helpers
+//
+// All values are injected by the platform at deploy time via PKL properties.
+// ---------------------------------------------------------------------------
 function getDeploymentConfig(): Dynamic =
   (new json.Parser {}.parse(read("prop:deploymentConfig")) as Dynamic)
 
@@ -89,16 +90,20 @@ function formatMemoryQuantity(memoryQuantity: Dynamic) =
 function getComponentReplicas(component: String) =
   getDeploymentConfig().components.getProperty(component).replicas
 
-function getComponentContainerK8sCpuQuanity(component: String, container: String)
-= formatCpuQuantity(getDeploymentConfig().components.getProperty(component).containerResourceRequests.getProperty(container).cpu)
-function getComponentContainerK8sMemoryQuanity(component: String, container: String)
-= formatMemoryQuantity(getDeploymentConfig().components.getProperty(component).containerResourceRequests.getProperty(container).memory)
+function getComponentContainerK8sCpuQuantity(component: String, container: String) =
+  formatCpuQuantity(
+    getDeploymentConfig().components.getProperty(component).containerResourceRequests.getProperty(container).cpu
+  )
 
+function getComponentContainerK8sMemoryQuantity(component: String, container: String) =
+  formatMemoryQuantity(
+    getDeploymentConfig().components.getProperty(component).containerResourceRequests.getProperty(container).memory
+  )
 
-function getConfig(key: String) = getDeploymentConfig().settings.getProperty(key)
+function getConfig(key: String)         = getDeploymentConfig().settings.getProperty(key)
 function getOptionalConfig(key: String) = getDeploymentConfig().settings.getPropertyOrNull(key)
 
-function getSecret(key: String) = getDeploymentConfig().secrets.getProperty(key)
+function getSecret(key: String)         = getDeploymentConfig().secrets.getProperty(key)
 function getOptionalSecret(key: String) = getDeploymentConfig().secrets.getPropertyOrNull(key)
 
 function getImagePullSecretName() = read?("prop:imagePullSecretName")
