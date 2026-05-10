@@ -17,7 +17,10 @@ abstract class InfraResourceClaim {
   resourceName: String
   resourceType: String
   resourceVersion: String? = "v1"
-  function loadResource(): Resource = (new json.Parser {}.parse(read("file:./_tangram_os_ir_\(resourceName).json")) as Dynamic).toTyped(Resource)
+  // The platform injects each provisioned resource as an external property named
+  // `tangram_os_ir_<resourceName>` containing its JSON serialisation. This avoids
+  // any reliance on cwd or the manifest directory layout at evaluation time.
+  function loadResource(): Resource = (new json.Parser {}.parse(read("prop:tangram_os_ir_\(resourceName)")) as Dynamic).toTyped(Resource)
 }
 
 class PostgresqlDatabaseClaim extends InfraResourceClaim {
