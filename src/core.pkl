@@ -99,14 +99,43 @@ class BodyField extends ResourceNameExtractor {
   index: Int?
 }
 
+/// Extracts from a response body field (dot-separated path). Useful when a resource's
+/// identifier or name is server-assigned and only known after the upstream service
+/// has responded (e.g. mlflow's `createExperiment` returns `experiment_id`).
+class ResponseField extends ResourceNameExtractor {
+  type: String = "ResponseField"
+  path: String
+}
+
 // ---------------------------------------------------------------------------
 // OpenAPI mapping — binds an action to one HTTP operationId.
 // ---------------------------------------------------------------------------
 class OpenApiMapping {
   operationId: String
-  /// How to extract the resource name from the request.
-  /// When omitted, the platform derives it from path parameters in URL order.
+  /// How to extract the resource name from the request. When omitted, the platform
+  /// derives it from path parameters in URL order. May also be omitted when
+  /// `resourceId` is provided — the platform resolves the name via the ID lookup.
   resourceName: List<ResourceNameExtractor>?
+  /// How to extract an opaque resource identifier from the request (or response).
+  /// Used for APIs that identify resources by server-assigned IDs rather than by
+  /// hierarchical name (e.g. mlflow's `experiment_id`, `run_id`). The platform
+  /// resolves the ID against its resource registry to get the actual resource.
+  resourceId: ResourceNameExtractor?
+  /// For Rename / Update actions, where the new name comes from. Single value
+  /// (the resource's name after rename), not a list of segments.
+  newName: ResourceNameExtractor?
+  /// Escape hatch — raw Jinja template for the resource name. Required when the
+  /// template needs function calls the typed extractors can't express:
+  /// `getNameById(...)`, `evaluateLater(...)`, `ifEmpty(...)`. When set, takes
+  /// precedence over `resourceName` (the typed form is ignored).
+  /// Example: "[{{getNameById(requestBody.experiment_id)}}, {{requestBody.run_name}}]"
+  resourceNameTemplate: String?
+  /// Escape hatch — raw Jinja template for the resource ID. Takes precedence over
+  /// `resourceId` when set.
+  resourceIdTemplate: String?
+  /// Escape hatch — raw Jinja template for the new name on Rename/Update. Takes
+  /// precedence over `newName` when set.
+  newNameTemplate: String?
 }
 
 // ---------------------------------------------------------------------------
