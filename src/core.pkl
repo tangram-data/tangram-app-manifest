@@ -67,10 +67,18 @@ Effect: _EffectConstants = new _EffectConstants {}
 // Used in OpenApiMapping.resourceName and ResourcePrivilegeRequirement.resourceName
 // to identify which parts of an HTTP request form the resource name.
 // ---------------------------------------------------------------------------
-abstract class ResourceNameExtractor {}
+/// Discriminated union of extractors that identify where a resource's name segments
+/// come from in an HTTP request. The `type` property is emitted in the JSON output and
+/// the platform uses it to disambiguate variants — PKL's JSON renderer doesn't carry
+/// class identity, so without an explicit discriminator a `PathParam` and a `QueryParam`
+/// would both serialise as `{"name":"x"}` and the runtime couldn't tell them apart.
+abstract class ResourceNameExtractor {
+  type: String
+}
 
 /// Extracts from a URL path parameter (OpenAPI `in: path`).
 class PathParam extends ResourceNameExtractor {
+  type: String = "PathParam"
   name: String
 }
 
@@ -79,12 +87,14 @@ class PathParam extends ResourceNameExtractor {
 /// operation declares a path param and a query param with the same name (legal per
 /// the OpenAPI spec — parameter uniqueness is the pair `(name, in)`).
 class QueryParam extends ResourceNameExtractor {
+  type: String = "QueryParam"
   name: String
 }
 
 /// Extracts from a request body field (dot-separated path).
 /// `index` is only needed when the field is an array.
 class BodyField extends ResourceNameExtractor {
+  type: String = "BodyField"
   path: String
   index: Int?
 }
