@@ -1,5 +1,9 @@
 module ai.tangram.os
 
+// Current manifest schema version. Apps should reference this in app.pkl as:
+//   manifestSpecVersion = tangram.MANIFEST_SPEC_VERSION
+MANIFEST_SPEC_VERSION = "v1"
+
 TANGRAM_OS_GROUP_NAME = "ai.tangram-os"
 
 class AppName {
@@ -65,8 +69,16 @@ Effect: _EffectConstants = new _EffectConstants {}
 // ---------------------------------------------------------------------------
 abstract class ResourceNameExtractor {}
 
-/// Extracts from a URL path parameter.
+/// Extracts from a URL path parameter (OpenAPI `in: path`).
 class PathParam extends ResourceNameExtractor {
+  name: String
+}
+
+/// Extracts from a URL query-string parameter (OpenAPI `in: query`). Distinguished
+/// from `PathParam` so the runtime gateway resolves the correct value even when an
+/// operation declares a path param and a query param with the same name (legal per
+/// the OpenAPI spec — parameter uniqueness is the pair `(name, in)`).
+class QueryParam extends ResourceNameExtractor {
   name: String
 }
 
@@ -136,8 +148,10 @@ class ResourceTypeDefinition {
   versions: List<ResourceTypeVersion>
   superType: ResourceType?
   scopeType: ResourceType?
-  /// Explicit privilege inheritance from parent scope.
-  /// Maps a parent privilege to the list of child privileges it grants.
+  /// (Reserved — not yet enforced by the platform IAM.) Maps a parent-scope privilege
+  /// to the list of child privileges it grants. Will become operative when the IAM
+  /// permission-check query consults this field; until then, declaring it has no
+  /// runtime effect — prefer to omit it on new manifests to avoid drift.
   scopePrivilegePropagation: Map<String, List<String>>?
 }
 
