@@ -1,0 +1,6 @@
+// AgentApps own no resources of their own — tools are declared in
+// `agent/spec.pkl`. This file is required by the manifest layout but
+// stays empty for an agent that doesn't manage resources.
+import "../../../../src/core.pkl" as tangram
+
+resourceTypes: Listing<tangram.ResourceTypeDefinition> = new Listing<tangram.ResourceTypeDefinition> {}
