@@ -1,0 +1,164 @@
+module ai.tangram.os.agent
+
+import "core.pkl" as tangram
+
+// ---------------------------------------------------------------------------
+// Agent app manifest types
+//
+// An AgentApp's `agent/spec.pkl` declares the agent's identity (default LLM,
+// system prompt), the tools it can invoke, and the skills it can activate.
+// Tool *intent* is declared here; tool *bindings* (the concrete backend each
+// tool resolves to) can default in the manifest but are typically chosen at
+// install time via `tangram app install --tool-binding`.
+//
+// Use in `manifests/agent/spec.pkl`:
+//   amends "@tangram-app-manifest/agent.pkl"
+//   defaultLlm     = new AgentLlmRef { provider = "Anthropic"; model = "claude-sonnet-4-6" }
+//   systemPrompt   = "You are ..."
+//   tools          = new Listing<AgentToolDecl> { ... }
+//   skills         = new Listing<AgentSkillDecl> { ... }
+// ---------------------------------------------------------------------------
+
+/// Default LLM (provider + model) the agent runs under. Workspace operators may
+/// override at runtime when `allowCustomLlm = true`.
+class AgentLlmRef {
+  /// Tangram LLM provider name. Supported: Anthropic, OpenAI, Gemini, OpenRouter, Ollama.
+  provider: String
+  /// Provider-specific model identifier (e.g. "claude-sonnet-4-6", "gpt-5").
+  model: String
+}
+
+// ---------------------------------------------------------------------------
+// Tool bindings — where a declared tool runs.
+//
+// Sealed hierarchy: every concrete binding sets the `kind` discriminator so
+// the wire JSON carries a `"kind": "AppAction" | "HttpEndpoint" | "Builtin"`
+// field that the platform decoder matches on. (The platform also field-
+// sniffs for legacy payloads that omit `kind`, so older manifests stay
+// valid.)
+// ---------------------------------------------------------------------------
+
+/// Sealed parent for all binding kinds. Authors should pick one of the
+/// concrete subclasses; this base class isn't meant to be instantiated.
+abstract class AgentToolBinding {
+  kind: String
+}
+
+/// Invoke an action declared by another deployed Tangram app. The runtime
+/// gateway routes the call to the target app under the *caller's* identity
+/// and the called app's per-action IAM applies as a second check.
+///
+/// `app` is `<group>/<name>` (e.g. `com.acme/salesforce-connector`).
+/// `action` is `<resourceType>.<actionName>` (e.g. `leads.create`).
+class AppAction extends AgentToolBinding {
+  kind: String = "AppAction"
+  app: String
+  action: String
+}
+
+/// Invoke an external HTTP endpoint. `auth` (when set) is the name of a
+/// workspace secret whose value the runtime injects as a `Bearer`
+/// Authorization header. For non-Bearer auth shapes, wrap the upstream
+/// behind a Connector app and bind via `AppAction` instead.
+class HttpEndpoint extends AgentToolBinding {
+  kind: String = "HttpEndpoint"
+  /// HTTP method — GET, POST, PUT, PATCH, or DELETE. Bodyless methods
+  /// (GET/DELETE) get their arguments via path-placeholder substitution
+  /// and query string encoding; body-bearing methods get a JSON body.
+  method: String
+  /// Absolute URL. May contain `{name}` placeholders that the runtime
+  /// substitutes from tool arguments before the request fires.
+  url: String
+  /// Optional workspace secret name to resolve into a `Bearer` header.
+  auth: String?
+}
+
+/// Reference a platform-provided built-in tool by name (e.g.
+/// `tangram_query_app_db`). The platform's builtin registry resolves the
+/// name at invocation time; missing builtins fail with a clear error.
+class Builtin extends AgentToolBinding {
+  kind: String = "Builtin"
+  name: String
+}
+
+// ---------------------------------------------------------------------------
+// Tool declarations — manifest declares intent; install picks the binding.
+// ---------------------------------------------------------------------------
+
+/// One manifest-declared tool. The runtime exposes it to the LLM, enforces
+/// `requiredPrivilege` via `IAMService.checkPermissions` before invoking,
+/// and routes through whichever `AgentToolBinding` the install resolved
+/// (CLI `--tool-binding` overrides the manifest `defaultBinding`).
+class AgentToolDecl {
+  /// Stable, lowercase-with-underscores identifier shown to the LLM and used
+  /// as the dispatcher key. Must match `^[a-z][a-z0-9_]*$`.
+  name: String
+  /// One-line human description. Surfaces in the LLM's tool catalog — be
+  /// specific; the LLM picks tools largely off this string.
+  description: String
+  /// When true (default at install time), the runtime gates each invocation
+  /// behind a user confirmation prompt. Set to `false` explicitly for safe
+  /// read-only tools.
+  requiresConfirmation: Boolean?
+  /// `ResourceType:Action` privilege string (e.g. `Lead:Create`) checked
+  /// against the caller via `IAMService.checkPermissions` before each call.
+  requiredPrivilege: String?
+  /// Optional scope template used to build the resource RN for the IAM
+  /// check (e.g. `workspace/{workspace}`). When omitted, the agent's
+  /// source-app deployment FN is used.
+  scope: String?
+  /// Optional reference to an input/output schema fragment (e.g.
+  /// `openapi://#components/schemas/CreateLeadRequest`). Used for LLM-side
+  /// tool description and bind-time signature checks on AppAction bindings.
+  inputSchema: String?
+  outputSchema: String?
+  /// Manifest-supplied fallback binding. Install accepts this silently
+  /// unless the operator overrides with an explicit `--tool-binding`. When
+  /// neither is provided, install fails with a clear error.
+  defaultBinding: AgentToolBinding?
+}
+
+// ---------------------------------------------------------------------------
+// Skill declarations — reference workspace-installed skills.
+// ---------------------------------------------------------------------------
+
+/// Reference to a skill the agent should be able to activate at runtime.
+/// Resolved at install time against the workspace's skill registry — the
+/// skill itself does not have to be packaged inside this manifest. Install
+/// aborts with a clear error if the named skill is missing or its version
+/// doesn't match.
+class AgentSkillDecl {
+  name: String
+  version: String
+}
+
+// ---------------------------------------------------------------------------
+// Top-level agent spec — the shape `manifests/agent/spec.pkl` produces.
+// ---------------------------------------------------------------------------
+
+/// Top-level shape decoded from `manifests/agent/spec.pkl`. An Agent app's
+/// manifest amends this module and sets each field directly at the
+/// top-level — no need to wrap inside an outer `agent { ... }` block.
+defaultLlm: AgentLlmRef = new AgentLlmRef {
+  provider = "Anthropic"
+  model = "claude-sonnet-4-6"
+}
+
+/// Free-form system prompt. Describe the agent's role, the tools it should
+/// reach for, and what it should refuse or escalate. Be specific — generic
+/// prompts produce generic agents.
+systemPrompt: String
+
+/// Whether workspace operators may switch the agent to a different LLM
+/// provider/model at runtime. Defaults to `true` — explicitly set `false`
+/// for agents whose behavior is tightly coupled to a specific model.
+allowCustomLlm: Boolean = true
+
+/// Manifest-declared tools the agent can invoke. Each tool's concrete
+/// backend is decided at install time (or via the optional
+/// `defaultBinding` on the declaration).
+tools: Listing<AgentToolDecl> = new Listing<AgentToolDecl> {}
+
+/// Workspace skills the agent should activate. The runtime resolves each
+/// reference against the workspace skill registry at install time.
+skills: Listing<AgentSkillDecl> = new Listing<AgentSkillDecl> {}
