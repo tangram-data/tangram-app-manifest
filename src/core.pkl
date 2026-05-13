@@ -303,7 +303,11 @@ class ConfigField {
 // ---------------------------------------------------------------------------
 NATIVE_APP_TYPE    = "NativeApp"
 CONNECTOR_APP_TYPE = "ConnectorApp"
-typealias AppType  = "NativeApp"|"ConnectorApp"
+// Agent apps are LLM-driven services declared in `manifests/agent/spec.pkl`
+// (see `agent.pkl`). They have no HTTP service of their own; tools are
+// declared at the manifest level and bound to backends at install time.
+AGENT_APP_TYPE     = "Agent"
+typealias AppType  = "NativeApp"|"ConnectorApp"|"Agent"
 
 // ---------------------------------------------------------------------------
 // Connector auth
