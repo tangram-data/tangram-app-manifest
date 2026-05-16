@@ -390,7 +390,9 @@ abstract class TenantSource {
 /// Tenant id arrives as a query parameter on the OAuth callback URL.
 /// `name` is the parameter name (e.g. `realmId`).
 class CallbackParam extends TenantSource {
-  kind: String = "CallbackParam"
+  // Singleton literal type — author cannot override the discriminator and
+  // mis-route the decoder. (Codex P2 round 8.)
+  kind: "CallbackParam" = "CallbackParam"
   name: String
 }
 
@@ -398,14 +400,14 @@ class CallbackParam extends TenantSource {
 /// minimal dot-path (e.g. `$.team.id`). Use TokenResponseField when the
 /// provider doesn't put the tenant on the callback URL.
 class TokenResponseField extends TenantSource {
-  kind: String = "TokenResponseField"
+  kind: "TokenResponseField" = "TokenResponseField"
   jsonPath: String
 }
 
 /// Tenant id is fetched from a separate /userinfo endpoint after token
 /// exchange. (Not implemented in v1.)
 class UserInfo extends TenantSource {
-  kind: String = "UserInfo"
+  kind: "UserInfo" = "UserInfo"
   url: String
   jsonPath: String
 }
@@ -413,7 +415,7 @@ class UserInfo extends TenantSource {
 /// Tenant id must be supplied as an install-time workspace setting before
 /// OAuth even runs. (Not implemented in v1.)
 class RequiredAtInstall extends TenantSource {
-  kind: String = "RequiredAtInstall"
+  kind: "RequiredAtInstall" = "RequiredAtInstall"
   settingName: String
 }
 
@@ -446,28 +448,40 @@ abstract class ConnectionScope {
 /// Only WorkspaceShared is allowed at install. Use this when the connector
 /// genuinely supports nothing else (Stripe pattern).
 class WorkspaceOnly extends ConnectionScope {
-  kind: String = "WorkspaceOnly"
+  kind: "WorkspaceOnly" = "WorkspaceOnly"
 }
 
 /// Only PerUser is allowed at install. Use this when privacy requires
 /// per-user isolation (Google Drive pattern). v2.
 class PerUserOnly extends ConnectionScope {
-  kind: String = "PerUserOnly"
+  kind: "PerUserOnly" = "PerUserOnly"
 }
 
 /// Only NamedTenant is allowed at install. Use this when the connector
 /// is fundamentally multi-tenant (agency QuickBooks). v2.
 class NamedTenantOnly extends ConnectionScope {
-  kind: String = "NamedTenantOnly"
+  kind: "NamedTenantOnly" = "NamedTenantOnly"
 }
 
 /// Admin picks the mode at install from `allowedAtInstall`. `default` is
 /// pre-selected on the install page. v1 force-selects `WorkspaceShared`
 /// and disables others.
+///
+/// Constraints (Codex P3 round 8):
+///   - `allowedAtInstall` must be non-empty (an install screen with zero
+///     options is unusable).
+///   - `default` must appear in `allowedAtInstall` (otherwise the
+///     pre-selected value isn't selectable).
+/// Both are enforced as PKL constraints AND mirrored in the Tangram
+/// manifest validator (Scala side) — defense in depth in case a manifest
+/// somehow bypasses the PKL evaluator.
 class Either extends ConnectionScope {
-  kind: String = "Either"
+  kind: "Either" = "Either"
   default: ConnectionMode
-  allowedAtInstall: List<ConnectionMode>
+  allowedAtInstall: List<ConnectionMode>(
+    !isEmpty,
+    contains(default)
+  )
 }
 
 // ---------------------------------------------------------------------------
