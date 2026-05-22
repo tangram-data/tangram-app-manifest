@@ -151,6 +151,20 @@ class ResourcePrivilegeRequirement {
 // ---------------------------------------------------------------------------
 // Action
 // ---------------------------------------------------------------------------
+
+/// Inline chat render hint for an action's result. The chat host renders the
+/// result accordingly (a card/picker/… instead of raw text/JSON). Presentation
+/// only — it never affects routing, IAM, or the result data. Omit for plain
+/// text/JSON output.
+class ActionSurface {
+  /// How the chat host renders this action's result inline.
+  kind: "card"|"picker"|"confirm"|"form"|"none"
+  /// Optional title for card-style surfaces.
+  title: String?
+  /// Output fields to display (card). Omit to show all top-level output fields.
+  fields: List<String>?
+}
+
 class Action {
   name: String
   /// Privilege class this action belongs to.
@@ -168,6 +182,8 @@ class Action {
   openApiMapping: OpenApiMapping?
   /// HTTP bindings for multiple operationIds (e.g. native API + Tangram wrapper API).
   openApiMappings: List<OpenApiMapping>?
+  /// Optional inline chat render hint for this action's result.
+  surface: ActionSurface?
 }
 
 // ---------------------------------------------------------------------------
