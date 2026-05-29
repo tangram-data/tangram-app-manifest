@@ -187,6 +187,37 @@ class Action {
 }
 
 // ---------------------------------------------------------------------------
+// ReBAC role declaration
+// ---------------------------------------------------------------------------
+
+/// A named role for the carrying resource type, declaring the privileges
+/// the role grants per-resource-instance under the ReBAC model.
+///
+/// Each ReBAC row in `resource_relations` carries a role name; at check
+/// time the platform resolves the role's `permissions` against the
+/// requested privilege. Roles whose name matches a parent type's role
+/// SHADOW (replace) the parent role — declaring `name = "owner"` here
+/// fully overrides any inherited `owner`.
+///
+/// `permissions` may contain the wildcard `"*"`, which expands at
+/// platform registration time to the full action set declared on this
+/// resource type's `actions` list (including actions inherited via
+/// `superTypeVersion`). Use sparingly — a wildcard role grants every
+/// future action added to the type without further review.
+class Role {
+  /// Role name. Unique within the carrying ResourceTypeVersion. Used as
+  /// the value of `resource_relations.role` for grants.
+  name: String
+
+  /// The privileges this role grants on a resource the principal holds
+  /// this role on. Names must be declared actions of the type (or `"*"`).
+  permissions: List<String>
+
+  /// Human-readable description shown in admin UIs.
+  description: String
+}
+
+// ---------------------------------------------------------------------------
 // Resource type versioning
 // ---------------------------------------------------------------------------
 class ResourceTypeVersion {
@@ -194,6 +225,11 @@ class ResourceTypeVersion {
   served: Boolean
   superTypeVersion: String?
   actions: List<Action>
+  /// ReBAC role declarations for instances of this resource type.
+  /// Roles inherit from the supertype version (if any); a role with the
+  /// same name as an inherited role REPLACES (shadows) it — there is no
+  /// permission union. Omit (or leave empty) to inherit unchanged.
+  presetRoles: List<Role>?
 }
 
 class ResourceTypeDefinition {
@@ -407,7 +443,7 @@ abstract class TenantSource {
 /// `name` is the parameter name (e.g. `realmId`).
 class CallbackParam extends TenantSource {
   // Singleton literal type — author cannot override the discriminator and
-  // mis-route the decoder. (Codex P2 round 8.)
+  // mis-route the decoder.
   kind: "CallbackParam" = "CallbackParam"
   name: String
 }
@@ -483,7 +519,7 @@ class NamedTenantOnly extends ConnectionScope {
 /// pre-selected on the install page. v1 force-selects `WorkspaceShared`
 /// and disables others.
 ///
-/// Constraints (Codex P3 round 8):
+/// Constraints:
 ///   - `allowedAtInstall` must be non-empty (an install screen with zero
 ///     options is unusable).
 ///   - `default` must appear in `allowedAtInstall` (otherwise the
