@@ -91,12 +91,11 @@ class QueryParam extends ResourceNameExtractor {
   name: String
 }
 
-/// Extracts from a request body field (dot-separated path).
-/// `index` is only needed when the field is an array.
+/// Extracts from a request body field. The path is a dot-separated traversal that
+/// may include array indices inline, e.g. `obj.arrayField[0].name`.
 class BodyField extends ResourceNameExtractor {
   type: String = "BodyField"
   path: String
-  index: Int?
 }
 
 /// Extracts from a response body field (dot-separated path). Useful when a resource's
