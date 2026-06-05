@@ -606,6 +606,47 @@ class OAuth2AuthCode {
 }
 
 // ---------------------------------------------------------------------------
+// Observability — declares how a workload's telemetry is collected.
+//
+// The platform attributes every signal to the workspace from the namespace label
+// (which it controls), so manifests never name an index or workspace. `metrics` is a
+// discriminated union keyed on `kind`; an absent `metrics` means none.
+// ---------------------------------------------------------------------------
+abstract class MetricsCollection {
+  /// Discriminator: "otlp" | "prometheus".
+  kind: String
+}
+
+/// Push: the platform injects the OTLP metrics endpoint env into the target containers.
+class OtlpMetrics extends MetricsCollection {
+  kind: String = "otlp"
+}
+
+/// Pull: the platform scrapes the workload's Prometheus endpoint and converts it to OTLP.
+class PrometheusMetrics extends MetricsCollection {
+  kind: String = "prometheus"
+  /// Container port exposing the metrics endpoint.
+  port: Int
+  /// HTTP path for the metrics endpoint.
+  path: String = "/metrics"
+  /// Scrape scheme.
+  scheme: "http"|"https" = "http"
+  /// Scrape interval, e.g. "30s".
+  interval: String = "30s"
+  /// Optional cap on samples per scrape to bound cardinality.
+  sampleLimit: Int?
+}
+
+class ComponentObservability {
+  /// Distributed tracing: "otlp" injects the OTLP trace endpoint env; "none" disables it.
+  traces: "otlp"|"none" = "none"
+  /// Metrics collection modality (absent = none).
+  metrics: MetricsCollection?
+  /// Container names that emit telemetry / receive OTLP env. Defaults to all non-init containers.
+  targetContainers: List<String>?
+}
+
+// ---------------------------------------------------------------------------
 // Helm deployment types — used in deployment/helm_charts.pkl.
 //
 // These are plain PKL data classes (not annotations). The platform reads
@@ -632,6 +673,10 @@ class HelmChart {
   fullName: String
   version: String
   components: List<HelmComponent>
+  /// Chart-level telemetry. Drives the chart values that expose metrics/traces and
+  /// registers a scrape target; declared at the chart level because the install path
+  /// renders values + `helm upgrade --install` and does not read per-component metadata.
+  observability: ComponentObservability?
 }
 
 // ---------------------------------------------------------------------------

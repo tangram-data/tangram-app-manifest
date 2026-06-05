@@ -1,5 +1,6 @@
 module ai.tangram.os
 import "pkl:json"
+import "core.pkl" as tangram
 
 typealias CloudProvider = "Local"|"AWS"|"Azure"|"Scaleway"|"GCP"
 
@@ -53,6 +54,8 @@ class AppComponentMeta extends Annotation {
   maxReplica: Int?
   recommendedReplica: Int? = 1
   optional: Boolean? = false
+  /// Per-component telemetry collection (absent = inherit platform defaults / none).
+  observability: tangram.ComponentObservability?
 }
 
 class AppContainerSpec {
