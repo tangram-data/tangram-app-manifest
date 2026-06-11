@@ -58,9 +58,13 @@ class AppComponentMeta extends Annotation {
   observability: tangram.ComponentObservability?
 }
 
+class SecretValue {
+  value: String
+}
+
 class AppContainerSpec {
   ports: List<Int>
-  variables: Map<String, String>
+  variables: Map<String, String|SecretValue>
   files: List<ContainerFile>
   command: List<String>
   args: List<String>?
