@@ -29,17 +29,73 @@ typealias UIComponentKind = "declarative"|"sandboxed"
 /// Surfaces a component may render on.
 typealias UIComponentSurface = "chat"|"dashboard"|"app-page"
 
-/// One published UI component. Artifact paths (`spec`, `entry`) are relative to
-/// the `manifests/` directory and must stay inside it — absolute paths and `..`
-/// traversal are rejected at indexing time.
+/// Semantic-layer binding (preferred; governed, dialect-portable).
+/// `semanticQuery` may carry `{{…}}` templates resolved server-side at render.
+class SemanticBinding {
+  fixed type: String = "semantic"
+  semanticModels: Listing<String>
+  semanticQuery: Dynamic
+}
+
+/// Parameterized SQL bound to a `sqlEngineId` (escape hatch). `params` values
+/// are template strings or `{ from = "<input>" }` references; they bind as SQL
+/// parameters at the facade, never string-concatenated.
+class SqlBinding {
+  fixed type: String = "sql"
+  sqlEngineId: String(!isEmpty)?
+  sql: String(!isEmpty)
+  params: Mapping<String, Any>?
+}
+
+/// An app action invoked via the perform gateway with IAM + confirmation.
+/// `action` address shape: `<group>/<name>#<ResourceType>.<action>`.
+class ActionBinding {
+  fixed type: String = "action"
+  action: String(!isEmpty)
+  requiresConfirmation: Boolean?
+}
+
+/// How a sandboxed component gets data or causes effects.
+typealias UIComponentBinding = SemanticBinding|SqlBinding|ActionBinding
+
+/// An event the component may emit to the host; `payload` is a JSON Schema.
+class UIComponentOutput {
+  name: String(!isEmpty)
+  payload: Dynamic?
+}
+
+/// A sandboxed component's render contract: what the in-frame SDK may call
+/// (`query`/`action`), what inputs it takes, and what it emits. Never declares
+/// `bundle` or `view` — the platform fills `bundle.ref` from the compiled `entry`.
+class UIComponentContract {
+  /// Human-readable title; overrides the component name in the catalog.
+  title: String(!isEmpty)?
+
+  /// One-line summary of what the component shows; drives agent discovery.
+  /// Takes precedence over the manifest entry's `description`.
+  description: String(!isEmpty)?
+
+  /// JSON Schema object describing render input parameters.
+  inputs: Dynamic?
+
+  /// Named data/effect bindings callable from the in-frame SDK.
+  bindings: Mapping<String, UIComponentBinding>?
+
+  /// Events the component may emit via the in-frame SDK (`emit`).
+  outputs: Listing<UIComponentOutput>?
+}
+
+/// One published UI component. Artifact paths (`spec` as a path, `entry`) are
+/// relative to the `manifests/` directory and must stay inside it — absolute
+/// paths and `..` traversal are rejected at indexing time.
 class AppUIComponentSpec {
   /// Component name; catalogued as `{group}/{app}/{name}` (no cross-app collisions).
   name: String(!isEmpty)
 
-  /// Authoring tier. `declarative` requires `spec` and forbids `entry`;
-  /// `sandboxed` requires `entry` and may carry `spec` (contract JSON).
+  /// Authoring tier. `declarative` requires a `spec` path and forbids `entry`;
+  /// `sandboxed` requires `entry` and may carry `spec` (contract).
   kind: UIComponentKind(
-    this != "declarative" || (spec != null && entry == null),
+    this != "declarative" || (spec is String && entry == null),
     this != "sandboxed" || entry != null
   )
 
@@ -52,13 +108,10 @@ class AppUIComponentSpec {
   surfaces: Listing<UIComponentSurface>
 
   /// Declarative: path to the full component JSON artifact, e.g.
-  /// "ui/components/top-accounts.json". Sandboxed (optional): path to a
-  /// contract JSON declaring `inputs` (JSON Schema), `bindings` (named
-  /// semantic/sql/action map), `outputs` (name + payload schema) and
-  /// optionally `title`/`description` — never `bundle` or `view`; the platform
-  /// fills `bundle.ref` from the compiled `entry`. Contracts can be authored in
-  /// PKL by amending `component-contract.pkl` and rendering to JSON.
-  spec: String(!isEmpty)?
+  /// "ui/components/top-accounts.json". Sandboxed (optional): the render
+  /// contract, either inline as a typed [UIComponentContract] or as a path to
+  /// an equivalent contract JSON.
+  spec: (String(!isEmpty)|UIComponentContract)?
 
   /// Sandboxed only: path to the TSX/JSX source entry, transformed to a bundle
   /// at publish.

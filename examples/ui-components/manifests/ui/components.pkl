@@ -13,9 +13,40 @@ components {
   new AppUIComponentSpec {
     name = "churn-explorer"
     kind = "sandboxed"
-    description = "Interactive monthly churn trend with CSV export"
     entry = "ui/components/churn-explorer.tsx"
-    spec = "ui/components/churn-explorer.contract.json"
+    spec = new UIComponentContract {
+      title = "Churn explorer"
+      description = "Interactive monthly churn trend with CSV export"
+      inputs {
+        type = "object"
+        properties {}
+      }
+      bindings {
+        ["churn_series"] = new SqlBinding {
+          sqlEngineId = "warehouse"
+          sql = "SELECT month, churned FROM sales.churn WHERE month >= :since ORDER BY month"
+          params {
+            ["since"] = new Dynamic { from = "period" }
+          }
+        }
+        ["export_csv"] = new ActionBinding {
+          action = "sales/crm#Churn.Export"
+          requiresConfirmation = false
+        }
+      }
+      outputs {
+        new UIComponentOutput {
+          name = "select"
+          payload {
+            type = "object"
+            required { "month" }
+            properties {
+              ["month"] = new Dynamic { type = "string" }
+            }
+          }
+        }
+      }
+    }
     surfaces { "chat"; "dashboard"; "app-page" }
   }
 }
