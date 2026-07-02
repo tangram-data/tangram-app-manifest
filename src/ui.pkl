@@ -43,6 +43,11 @@ class AppUIComponentSpec {
     this != "sandboxed" || entry != null
   )
 
+  /// One-line summary of what the component shows. Drives agent discovery
+  /// (intent matching in `tangram_list_components`); used as a fallback when
+  /// the `spec` artifact carries no `description` of its own.
+  description: String(!isEmpty)?
+
   /// Where the component may render.
   surfaces: Listing<UIComponentSurface>
 
@@ -50,8 +55,9 @@ class AppUIComponentSpec {
   /// "ui/components/top-accounts.json". Sandboxed (optional): path to a
   /// contract JSON declaring `inputs` (JSON Schema), `bindings` (named
   /// semantic/sql/action map), `outputs` (name + payload schema) and
-  /// optionally `title` — never `bundle` or `view`; the platform fills
-  /// `bundle.ref` from the compiled `entry`.
+  /// optionally `title`/`description` — never `bundle` or `view`; the platform
+  /// fills `bundle.ref` from the compiled `entry`. Contracts can be authored in
+  /// PKL by amending `component-contract.pkl` and rendering to JSON.
   spec: String(!isEmpty)?
 
   /// Sandboxed only: path to the TSX/JSX source entry, transformed to a bundle

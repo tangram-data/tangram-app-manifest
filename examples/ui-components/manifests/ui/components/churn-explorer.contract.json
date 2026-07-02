@@ -1,12 +1,20 @@
 {
   "title": "Churn explorer",
-  "inputs": { "type": "object", "properties": {} },
+  "description": "Interactive monthly churn trend with CSV export",
+  "inputs": {
+    "type": "object",
+    "properties": {}
+  },
   "bindings": {
     "churn_series": {
       "type": "sql",
       "sqlEngineId": "warehouse",
       "sql": "SELECT month, churned FROM sales.churn WHERE month >= :since ORDER BY month",
-      "params": { "since": { "from": "period" } }
+      "params": {
+        "since": {
+          "from": "period"
+        }
+      }
     },
     "export_csv": {
       "type": "action",
@@ -19,8 +27,14 @@
       "name": "select",
       "payload": {
         "type": "object",
-        "required": ["month"],
-        "properties": { "month": { "type": "string" } }
+        "required": [
+          "month"
+        ],
+        "properties": {
+          "month": {
+            "type": "string"
+          }
+        }
       }
     }
   ]

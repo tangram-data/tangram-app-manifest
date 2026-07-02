@@ -6,12 +6,14 @@ components {
   new AppUIComponentSpec {
     name = "top-accounts"
     kind = "declarative"
+    description = "Top accounts by revenue for the selected period"
     spec = "ui/components/top-accounts.json"
     surfaces { "chat"; "dashboard"; "app-page" }
   }
   new AppUIComponentSpec {
     name = "churn-explorer"
     kind = "sandboxed"
+    description = "Interactive monthly churn trend with CSV export"
     entry = "ui/components/churn-explorer.tsx"
     spec = "ui/components/churn-explorer.contract.json"
     surfaces { "chat"; "dashboard"; "app-page" }

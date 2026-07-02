@@ -1,0 +1,39 @@
+// PKL source for `churn-explorer.contract.json`; the manifest references the
+// rendered JSON. Regenerate with:
+//   pkl eval -f json -o churn-explorer.contract.json churn-explorer.contract.pkl
+amends "../../../../../src/component-contract.pkl"
+
+title = "Churn explorer"
+description = "Interactive monthly churn trend with CSV export"
+
+inputs {
+  type = "object"
+  properties {}
+}
+
+bindings {
+  ["churn_series"] = new SqlBinding {
+    sqlEngineId = "warehouse"
+    sql = "SELECT month, churned FROM sales.churn WHERE month >= :since ORDER BY month"
+    params {
+      ["since"] = new Dynamic { from = "period" }
+    }
+  }
+  ["export_csv"] = new ActionBinding {
+    action = "sales/crm#Churn.Export"
+    requiresConfirmation = false
+  }
+}
+
+outputs {
+  new OutputSpec {
+    name = "select"
+    payload {
+      type = "object"
+      required { "month" }
+      properties {
+        ["month"] = new Dynamic { type = "string" }
+      }
+    }
+  }
+}
