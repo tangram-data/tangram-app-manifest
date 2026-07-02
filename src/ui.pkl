@@ -36,17 +36,22 @@ class AppUIComponentSpec {
   /// Component name; catalogued as `{group}/{app}/{name}` (no cross-app collisions).
   name: String(!isEmpty)
 
-  /// Authoring tier. `declarative` requires `spec`; `sandboxed` requires `entry`.
+  /// Authoring tier. `declarative` requires `spec` and forbids `entry`;
+  /// `sandboxed` requires `entry` and may carry `spec` (contract JSON).
   kind: UIComponentKind(
-    this != "declarative" || spec != null,
+    this != "declarative" || (spec != null && entry == null),
     this != "sandboxed" || entry != null
   )
 
   /// Where the component may render.
   surfaces: Listing<UIComponentSurface>
 
-  /// Declarative only: path to the component JSON artifact, e.g.
-  /// "ui/components/top-accounts.json".
+  /// Declarative: path to the full component JSON artifact, e.g.
+  /// "ui/components/top-accounts.json". Sandboxed (optional): path to a
+  /// contract JSON declaring `inputs` (JSON Schema), `bindings` (named
+  /// semantic/sql/action map), `outputs` (name + payload schema) and
+  /// optionally `title` — never `bundle` or `view`; the platform fills
+  /// `bundle.ref` from the compiled `entry`.
   spec: String(!isEmpty)?
 
   /// Sandboxed only: path to the TSX/JSX source entry, transformed to a bundle

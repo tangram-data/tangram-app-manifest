@@ -9,4 +9,11 @@ components {
     spec = "ui/components/top-accounts.json"
     surfaces { "chat"; "dashboard"; "app-page" }
   }
+  new AppUIComponentSpec {
+    name = "churn-explorer"
+    kind = "sandboxed"
+    entry = "ui/components/churn-explorer.tsx"
+    spec = "ui/components/churn-explorer.contract.json"
+    surfaces { "chat"; "dashboard"; "app-page" }
+  }
 }

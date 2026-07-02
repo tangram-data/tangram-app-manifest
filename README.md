@@ -23,8 +23,20 @@ components {
     spec = "ui/components/top-accounts.json"
     surfaces { "chat"; "dashboard"; "app-page" }
   }
+  new AppUIComponentSpec {
+    name = "churn-explorer"
+    kind = "sandboxed"
+    entry = "ui/components/churn-explorer.tsx"                  // compiled to a bundle at publish
+    spec = "ui/components/churn-explorer.contract.json"         // optional data contract
+    surfaces { "chat"; "dashboard"; "app-page" }
+  }
 }
 ```
+For `kind = "sandboxed"`, `entry` is the TSX/JSX source and the optional `spec`
+is a contract JSON declaring `inputs`, named `bindings` (semantic/sql/action),
+`outputs`, and optionally `title` — never `bundle` or `view` (the platform fills
+`bundle.ref` from the compiled entry).
+
 `./gradlew evalUiComponentsExample` renders the example the way the platform loader does.
 
 # Reference:
