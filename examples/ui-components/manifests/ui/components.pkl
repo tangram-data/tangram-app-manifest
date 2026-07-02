@@ -1,0 +1,12 @@
+// Example `manifests/ui/components.pkl`. Real app packages depend on the
+// released package and amend "@tangram-app-manifest/ui.pkl" instead.
+amends "../../../../src/ui.pkl"
+
+components {
+  new AppUIComponentSpec {
+    name = "top-accounts"
+    kind = "declarative"
+    spec = "ui/components/top-accounts.json"
+    surfaces { "chat"; "dashboard"; "app-page" }
+  }
+}

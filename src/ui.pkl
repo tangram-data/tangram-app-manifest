@@ -1,0 +1,58 @@
+module ai.tangram.os.ui
+
+// ---------------------------------------------------------------------------
+// App-published UI components
+//
+// An app publishes reusable UI components to the App Hub catalog by shipping
+// `manifests/ui/components.pkl` in its package. The platform evaluates the
+// `components` expression of that file and indexes each entry under the
+// namespaced catalog name `{group}/{app}/{name}`. Declarative components are
+// indexed at registration; sandboxed components are catalogued once the
+// publish-time bundle transform lands.
+//
+// Use in `manifests/ui/components.pkl`:
+//   amends "@tangram-app-manifest/ui.pkl"
+//   components {
+//     new AppUIComponentSpec {
+//       name = "top-accounts"
+//       kind = "declarative"
+//       spec = "ui/components/top-accounts.json"
+//       surfaces { "chat"; "dashboard"; "app-page" }
+//     }
+//   }
+// ---------------------------------------------------------------------------
+
+/// Authoring tier: `declarative` is a JSON view spec rendered by the trusted
+/// frontend renderer; `sandboxed` is app-authored source run in a sandboxed iframe.
+typealias UIComponentKind = "declarative"|"sandboxed"
+
+/// Surfaces a component may render on.
+typealias UIComponentSurface = "chat"|"dashboard"|"app-page"
+
+/// One published UI component. Artifact paths (`spec`, `entry`) are relative to
+/// the `manifests/` directory and must stay inside it — absolute paths and `..`
+/// traversal are rejected at indexing time.
+class AppUIComponentSpec {
+  /// Component name; catalogued as `{group}/{app}/{name}` (no cross-app collisions).
+  name: String(!isEmpty)
+
+  /// Authoring tier. `declarative` requires `spec`; `sandboxed` requires `entry`.
+  kind: UIComponentKind(
+    this != "declarative" || spec != null,
+    this != "sandboxed" || entry != null
+  )
+
+  /// Where the component may render.
+  surfaces: Listing<UIComponentSurface>
+
+  /// Declarative only: path to the component JSON artifact, e.g.
+  /// "ui/components/top-accounts.json".
+  spec: String(!isEmpty)?
+
+  /// Sandboxed only: path to the TSX/JSX source entry, transformed to a bundle
+  /// at publish.
+  entry: String(!isEmpty)?
+}
+
+/// The UI components this app publishes.
+components: Listing<AppUIComponentSpec> = new Listing<AppUIComponentSpec> {}

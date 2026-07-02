@@ -25,4 +25,13 @@ pkl {
       }
     }
   }
+  evaluators {
+    // Renders the example `ui/components.pkl` the same way the platform loader
+    // does (evaluate the `components` expression to JSON); fails on schema drift.
+    register('evalUiComponentsExample') {
+      sourceModules = [file('examples/ui-components/manifests/ui/components.pkl')]
+      expression = 'new JsonRenderer { omitNullProperties = false }.renderValue(components)'
+      outputFile = file('build/examples/ui-components.json')
+    }
+  }
 }
