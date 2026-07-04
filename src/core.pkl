@@ -212,7 +212,9 @@ class Action {
   /// apply.
   sqlMapping: SqlMapping?(
     this == null || (openApiMapping == null && openApiMappings == null),
-    this == null || (skipAuth != true && skipAudit != true),
+    // Absent, not merely false: the fields have no meaning for SQL actions,
+    // so carrying them at all is drift waiting to be misread.
+    this == null || (skipAuth == null && skipAudit == null),
     this == null || additionalPrivileges == null
   )
   /// Optional inline chat render hint for this action's result.
