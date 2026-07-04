@@ -1,0 +1,229 @@
+module ai.tangram.os.apppackage
+
+// ---------------------------------------------------------------------------
+// Built-app packages (packaging plan §3.2/§3.3)
+//
+// A workspace-built app exports as a portable package: a canonical directory
+// tree with `package.json` at the root, the database schema as a squashed
+// create-from-empty change list in `schema/changes.json`, and one directory
+// per embedded component (`component.json` + `source.json` + `src/…`). The
+// tangram-os exporter emits that tree as JSON; THIS module is its typed
+// schema — the validation/authoring form, never a second format. `validate`
+// parses the tree's JSON files into these classes so drift between exporter
+// and vocabulary fails loudly.
+//
+// What is deliberately reused, not reinvented: infra claims come from
+// `infra.pkl` (the same PostgresqlDatabaseClaim/StorageBucketClaim manifest
+// service apps declare); `declare_resource_type` carries the tangram schema
+// registry's own declaration shape (resource-types design §3.1) — the
+// manifest form IS the declaration form, no third shape.
+// ---------------------------------------------------------------------------
+
+import "infra.pkl"
+
+/// The `package.json` at the tree root.
+manifest: AppPackageManifest
+
+/// The `schema/changes.json` beside it (null for database-less apps).
+schemaChanges: SchemaChangeFile?
+
+class AppPackageManifest {
+  /// Package format version the exporter wrote.
+  format: "tangram-app-package/1" = "tangram-app-package/1"
+
+  app: PackagedApp
+
+  /// Execution backend marker the installer and action router key on (plan
+  /// §3.3): `platform` means SQL recipes and derived CRUD run inside
+  /// tangram-os — there is no app service, and claim secrets stay in platform
+  /// custody. Service/OpenAPI apps use the existing manifests instead.
+  implementation: "platform" = "platform"
+
+  /// The app's owned database, as the SAME claim vocabulary manifest service
+  /// apps use. Satisfied from the Tier-1 database-per-app pool on the shared
+  /// workspace data server by default; a `configInput` placement hint keeps
+  /// the dedicated-instance escape hatch. Null when the app owns no database.
+  database: infra.PostgresqlDatabaseClaim?
+
+  /// Present iff `database` is: the squashed change list's fingerprint
+  /// (same formula as the registry ledger), verified at install and used as
+  /// the upgrade lineage base (P3 — package v2 replays only what follows).
+  schema: PackagedSchema?
+
+  /// Workspace-authored components embedded in the tree, one directory each.
+  components: Listing<PackagedComponentEntry>
+
+  /// Hub-owned components the app's pages reference: references, not content —
+  /// the target instance resolves them from its own catalog at install.
+  externalComponents: Listing<String>
+
+  /// Reserved: bucket-storage claim once the platform records storage use
+  /// durably (content is never exported either way).
+  storage: infra.StorageBucketClaim?
+
+  /// Reserved for app-declared preset roles (resource-types design R3,
+  /// `declare_role`).
+  roles: Listing<Dynamic>?
+}
+
+class PackagedApp {
+  /// Default install name (workspace-local per decision D1; the installer may
+  /// rename on collision — every address inside the package is relative to
+  /// whatever local name wins).
+  name: String(!isEmpty)
+
+  title: String(!isEmpty)
+}
+
+class PackagedSchema {
+  checksum: String(!isEmpty)
+}
+
+class PackagedComponentEntry {
+  name: String(!isEmpty)
+
+  /// `sandboxed` entries carry `source.json` + `src/…` (retained authoring
+  /// source; the bundle is recompiled at install against the target's
+  /// dependency catalog). `declarative` entries are `component.json` only.
+  kind: "declarative"|"sandboxed"
+}
+
+// ---------------------------------------------------------------------------
+// `schema/changes.json` — the squashed change list
+//
+// Typed mirror of the tangram schema registry's SchemaChange codec,
+// discriminated on `op`. A fresh export carries only creates/declares (the
+// squash is derived from the current model, never history); the full
+// vocabulary is modelled because UPGRADE packages (P3) append whatever the
+// app's evolution needed, drops included.
+// ---------------------------------------------------------------------------
+
+class SchemaChangeFile {
+  changes: Listing<SchemaChange>
+  checksum: String(!isEmpty)
+}
+
+typealias SchemaChange =
+  CreateTable|AddColumn|AddIndex|DropTable|DropColumn|DeclareResourceType|DropResourceType
+
+/// Closed column-type set (registry `ColumnType`): generated DDL stays
+/// deterministic and dialect-safe.
+typealias ColumnType =
+  "text"|"integer"|"bigint"|"boolean"|"double"|"numeric"|"timestamptz"|"date"|"jsonb"|"uuid"
+
+class ColumnSpec {
+  name: String(!isEmpty)
+  type: ColumnType
+  nullable: Boolean = true
+}
+
+class TableSpec {
+  name: String(!isEmpty)
+  columns: Listing<ColumnSpec>(!isEmpty)
+  primaryKey: Listing<String>
+}
+
+class IndexSpec {
+  name: String(!isEmpty)
+  table: String(!isEmpty)
+  columns: Listing<String>(!isEmpty)
+  unique: Boolean = false
+}
+
+class CreateTable {
+  fixed op: String = "create_table"
+  table: TableSpec
+}
+
+class AddColumn {
+  fixed op: String = "add_column"
+  table: String(!isEmpty)
+  column: ColumnSpec
+}
+
+class AddIndex {
+  fixed op: String = "add_index"
+  index: IndexSpec
+}
+
+class DropTable {
+  fixed op: String = "drop_table"
+  table: String(!isEmpty)
+}
+
+class DropColumn {
+  fixed op: String = "drop_column"
+  table: String(!isEmpty)
+  column: String(!isEmpty)
+}
+
+class DropResourceType {
+  fixed op: String = "drop_resource_type"
+  name: String(!isEmpty)
+}
+
+/// Agent-declared resource type over a backing table (resource-types design
+/// §3.1) — the registry declaration shape verbatim.
+class DeclareResourceType {
+  fixed op: String = "declare_resource_type"
+  resourceType: ResourceTypeSpec
+}
+
+class ResourceTypeSpec {
+  name: String(!isEmpty)
+  doc: String?
+  table: String(!isEmpty)
+  /// Params identifying an instance — powers audit now, row-level IAM later.
+  instanceKey: Listing<String>
+  actions: Listing<ResourceActionSpec>
+  /// Generated CRUD actions ("Create"|"List"|"Update"|"Delete") the type opts
+  /// back into after shadowing its table.
+  includeCrud: Listing<String>
+}
+
+typealias ActionEffect = "Stateless"|"Reversible"|"Irreversible"
+
+class ResourceActionSpec {
+  name: String(!isEmpty)
+  doc: String?
+  effect: ActionEffect
+  /// Well-known (Read/Create/Write/Delete/…) or custom privilege string;
+  /// absent derives from the action name, defaulting to Write.
+  privilege: String?
+  /// Absent lets the shared confirmation policy decide from effect+privilege.
+  requiresConfirmation: Boolean?
+  implementation: SqlImplementation
+}
+
+/// One parameterized DML statement executed by the platform under the
+/// viewer's identity with a per-type IAM check (resource-types R2). Reserved
+/// `:_actor`/`:_now` params are platform-bound; everything else must be
+/// declared here.
+class SqlImplementation {
+  fixed kind: String = "sql"
+  statement: String(!isEmpty)
+  params: Mapping<String, ActionParamSpec>
+}
+
+class ActionParamSpec {
+  type: ColumnType
+}
+
+// ---------------------------------------------------------------------------
+// `components/<name>/source.json` — a sandboxed component's build metadata
+// (the files themselves live beside it under `src/`).
+// ---------------------------------------------------------------------------
+
+class ComponentSourceMeta {
+  /// Entry file, relative within `src/`.
+  entry: String(!isEmpty)
+
+  /// Declared dependencies (name → major version); the installing instance
+  /// validates them against ITS dependency catalog and fails the install with
+  /// a clear report when it cannot satisfy them (decision D2).
+  dependencies: Mapping<String, String>
+
+  /// What compiled the exported bundle on the source instance (build record) —
+  /// explains "same source, different bundle" across instances.
+  toolchain: String?
+}

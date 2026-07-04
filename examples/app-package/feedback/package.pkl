@@ -1,0 +1,77 @@
+// Example built-app package manifest (packaging plan §3.2): what the
+// tangram-os exporter emits as `package.json` + `schema/changes.json` for a
+// "feedback" app — one table, one declared resource type with a SQL-recipe
+// action, one sandboxed component. Real packages depend on the released
+// package and amend "@tangram-app-manifest/app-package.pkl" instead.
+amends "../../../src/app-package.pkl"
+
+import "../../../src/infra.pkl"
+
+manifest {
+  app {
+    name = "feedback"
+    title = "Feedback"
+  }
+  database = new infra.PostgresqlDatabaseClaim {
+    resourceName = "app-database"
+  }
+  schema {
+    checksum = "6dcd4ce23d88e2ee9568ba546c007c63d9131c1b"
+  }
+  components {
+    new PackagedComponentEntry {
+      name = "note-form"
+      kind = "sandboxed"
+    }
+  }
+  externalComponents {}
+  storage = null
+  roles = null
+}
+
+schemaChanges {
+  changes {
+    new CreateTable {
+      table {
+        name = "notes"
+        columns {
+          new ColumnSpec { name = "id"; type = "bigint"; nullable = false }
+          new ColumnSpec { name = "note"; type = "text" }
+          new ColumnSpec { name = "done"; type = "boolean" }
+        }
+        primaryKey { "id" }
+      }
+    }
+    new AddIndex {
+      index {
+        name = "notes_done_idx"
+        table = "notes"
+        columns { "done" }
+      }
+    }
+    new DeclareResourceType {
+      resourceType {
+        name = "Note"
+        doc = "A feedback note"
+        table = "notes"
+        instanceKey { "id" }
+        actions {
+          new ResourceActionSpec {
+            name = "Approve"
+            doc = "Mark a note done"
+            effect = "Reversible"
+            requiresConfirmation = false
+            implementation {
+              statement = "update notes set done = true, approved_by = :_actor, approved_at = :_now where id = :id"
+              params {
+                ["id"] = new ActionParamSpec { type = "bigint" }
+              }
+            }
+          }
+        }
+        includeCrud { "Create"; "List" }
+      }
+    }
+  }
+  checksum = "6dcd4ce23d88e2ee9568ba546c007c63d9131c1b"
+}
