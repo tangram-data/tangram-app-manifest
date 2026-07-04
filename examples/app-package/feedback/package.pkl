@@ -1,5 +1,5 @@
 // Example built-app package manifest (packaging plan §3.2): what the
-// tangram-os exporter emits as `package.json` + `schema/changes.json` for a
+// tangram-os exporter emits as `package.json` for a
 // "feedback" app — one table, one declared resource type with a SQL-recipe
 // action, one sandboxed component. Declared types are ordinary
 // core.ResourceTypeDefinitions whose actions carry a sqlMapping — the same
@@ -19,7 +19,8 @@ manifest {
     resourceName = "app-database"
   }
   schema {
-    checksum = "3bc9fbeb0d8eab162527f55562effa4b18596af2"
+    migrations = 1
+    checksum = "cfadd32e9db1dd9168afb1809778dcbb9ade26bfe11ed76141e0d82654a9373b"
   }
   resourceTypeDefinitions {
     new core.ResourceTypeDefinition {
@@ -60,28 +61,3 @@ manifest {
   roles = null
 }
 
-schemaChanges {
-  changes {
-    new CreateTable {
-      table {
-        name = "notes"
-        columns {
-          new ColumnSpec { name = "id"; type = "bigint"; nullable = false }
-          new ColumnSpec { name = "note"; type = "text" }
-          new ColumnSpec { name = "done"; type = "boolean" }
-          new ColumnSpec { name = "approved_by"; type = "text" }
-          new ColumnSpec { name = "approved_at"; type = "timestamptz" }
-        }
-        primaryKey { "id" }
-      }
-    }
-    new AddIndex {
-      index {
-        name = "notes_done_idx"
-        table = "notes"
-        columns { "done" }
-      }
-    }
-  }
-  checksum = "3bc9fbeb0d8eab162527f55562effa4b18596af2"
-}

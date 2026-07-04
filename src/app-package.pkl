@@ -4,9 +4,10 @@ module ai.tangram.os.apppackage
 // Built-app packages (packaging plan §3.2/§3.3)
 //
 // A workspace-built app exports as a portable package: a canonical directory
-// tree with `package.json` at the root, the database schema as a squashed
-// create-from-empty change list in `schema/changes.json`, and one directory
-// per embedded component (`component.json` + `source.json` + `src/…`). The
+// tree with `package.json` at the root, the database schema as Flyway-style
+// versioned SQL files under `migrations/` (typed history renders as generated
+// DDL, raw migrations travel verbatim), and one directory per embedded
+// component (`component.json` + `source.json` + `src/…`). The
 // tangram-os exporter emits that tree as JSON; THIS module is its typed
 // schema — the validation/authoring form, never a second format.
 //
@@ -26,9 +27,6 @@ import "infra.pkl"
 /// The `package.json` at the tree root.
 manifest: AppPackageManifest
 
-/// The `schema/changes.json` beside it (null for database-less apps).
-schemaChanges: SchemaChangeFile?
-
 class AppPackageManifest {
   /// Package format version the exporter wrote.
   format: "tangram-app-package/1" = "tangram-app-package/1"
@@ -47,9 +45,10 @@ class AppPackageManifest {
   /// the dedicated-instance escape hatch. Null when the app owns no database.
   database: infra.PostgresqlDatabaseClaim?
 
-  /// Present iff `database` is: the squashed change list's fingerprint
-  /// (same formula as the registry ledger), verified at install and used as
-  /// the upgrade lineage base (P3 — package v2 replays only what follows).
+  /// Present iff `database` is: how many `migrations/V{n}__migration.sql`
+  /// files the tree carries and their content fingerprint — verified at
+  /// install and used as the upgrade lineage base (P3: package v2 replays
+  /// only the files that follow).
   schema: PackagedSchema?
 
   /// Declared resource types — SQL-backed `core.ResourceTypeDefinition`s
@@ -84,6 +83,9 @@ class PackagedApp {
 }
 
 class PackagedSchema {
+  /// Number of migration files under `migrations/`, replayed in order.
+  migrations: Int(this > 0)
+  /// Fingerprint over the migration file contents, in order.
   checksum: String(!isEmpty)
 }
 
@@ -94,71 +96,6 @@ class PackagedComponentEntry {
   /// source; the bundle is recompiled at install against the target's
   /// dependency catalog). `declarative` entries are `component.json` only.
   kind: "declarative"|"sandboxed"
-}
-
-// ---------------------------------------------------------------------------
-// `schema/changes.json` — the squashed change list
-//
-// Typed mirror of the tangram schema registry's SchemaChange codec,
-// discriminated on `op`, covering the STRUCTURAL ops (tables, columns,
-// indexes) — resource types travel as `resourceTypeDefinitions` in the
-// manifest, not in the change list. A fresh export carries only creates (the
-// squash is derived from the current model, never history); the full
-// structural vocabulary is modelled because UPGRADE packages (P3) append
-// whatever the app's evolution needed, drops included.
-// ---------------------------------------------------------------------------
-
-class SchemaChangeFile {
-  changes: Listing<SchemaChange>
-  checksum: String(!isEmpty)
-}
-
-typealias SchemaChange = CreateTable|AddColumn|AddIndex|DropTable|DropColumn
-
-class ColumnSpec {
-  name: String(!isEmpty)
-  type: core.SqlColumnType
-  nullable: Boolean = true
-}
-
-class TableSpec {
-  name: String(!isEmpty)
-  columns: Listing<ColumnSpec>(!isEmpty)
-  primaryKey: Listing<String>
-}
-
-class IndexSpec {
-  name: String(!isEmpty)
-  table: String(!isEmpty)
-  columns: Listing<String>(!isEmpty)
-  unique: Boolean = false
-}
-
-class CreateTable {
-  fixed op: String = "create_table"
-  table: TableSpec
-}
-
-class AddColumn {
-  fixed op: String = "add_column"
-  table: String(!isEmpty)
-  column: ColumnSpec
-}
-
-class AddIndex {
-  fixed op: String = "add_index"
-  index: IndexSpec
-}
-
-class DropTable {
-  fixed op: String = "drop_table"
-  table: String(!isEmpty)
-}
-
-class DropColumn {
-  fixed op: String = "drop_column"
-  table: String(!isEmpty)
-  column: String(!isEmpty)
 }
 
 // ---------------------------------------------------------------------------
