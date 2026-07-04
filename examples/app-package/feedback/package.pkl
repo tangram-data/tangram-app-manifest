@@ -16,7 +16,7 @@ manifest {
     resourceName = "app-database"
   }
   schema {
-    checksum = "6dcd4ce23d88e2ee9568ba546c007c63d9131c1b"
+    checksum = "68f2db33228a5d8b2dc35e3f9b2b43b907515d5"
   }
   components {
     new PackagedComponentEntry {
@@ -38,6 +38,8 @@ schemaChanges {
           new ColumnSpec { name = "id"; type = "bigint"; nullable = false }
           new ColumnSpec { name = "note"; type = "text" }
           new ColumnSpec { name = "done"; type = "boolean" }
+          new ColumnSpec { name = "approved_by"; type = "text" }
+          new ColumnSpec { name = "approved_at"; type = "timestamptz" }
         }
         primaryKey { "id" }
       }
@@ -73,5 +75,5 @@ schemaChanges {
       }
     }
   }
-  checksum = "6dcd4ce23d88e2ee9568ba546c007c63d9131c1b"
+  checksum = "68f2db33228a5d8b2dc35e3f9b2b43b907515d5"
 }

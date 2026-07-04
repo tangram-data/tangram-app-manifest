@@ -169,16 +169,19 @@ class DeclareResourceType {
   resourceType: ResourceTypeSpec
 }
 
+/// Generated CRUD vocabulary a declared type may opt back into.
+typealias CrudAction = "Create"|"List"|"Update"|"Delete"
+
 class ResourceTypeSpec {
   name: String(!isEmpty)
   doc: String?
   table: String(!isEmpty)
   /// Params identifying an instance — powers audit now, row-level IAM later.
-  instanceKey: Listing<String>
-  actions: Listing<ResourceActionSpec>
-  /// Generated CRUD actions ("Create"|"List"|"Update"|"Delete") the type opts
-  /// back into after shadowing its table.
-  includeCrud: Listing<String>
+  /// Defaults mirror the registry codec: absent decodes as empty.
+  instanceKey: Listing<String> = new Listing {}
+  actions: Listing<ResourceActionSpec> = new Listing {}
+  /// Generated CRUD actions the type opts back into after shadowing its table.
+  includeCrud: Listing<CrudAction> = new Listing {}
 }
 
 typealias ActionEffect = "Stateless"|"Reversible"|"Irreversible"
@@ -202,7 +205,8 @@ class ResourceActionSpec {
 class SqlImplementation {
   fixed kind: String = "sql"
   statement: String(!isEmpty)
-  params: Mapping<String, ActionParamSpec>
+  /// Default mirrors the registry codec: absent decodes as empty.
+  params: Mapping<String, ActionParamSpec> = new Mapping {}
 }
 
 class ActionParamSpec {
