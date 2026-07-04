@@ -138,6 +138,30 @@ class OpenApiMapping {
 }
 
 // ---------------------------------------------------------------------------
+// SQL mapping — binds an action to one platform-executed DML statement
+// (built apps / packaging plan §3.3). The statement runs inside tangram-os
+// under the viewer's identity with a per-type IAM check and mandatory audit
+// (resource-types design R2): values bind as SQL parameters (never
+// concatenated), every `:name` must be declared in `params`, and the reserved
+// `:_actor`/`:_now` params are platform-bound — callers can never supply them.
+// ---------------------------------------------------------------------------
+
+/// Closed column-type set for platform-executed SQL: keeps generated DDL and
+/// param binding deterministic and dialect-safe (registry `ColumnType`).
+typealias SqlColumnType =
+  "text"|"integer"|"bigint"|"boolean"|"double"|"numeric"|"timestamptz"|"date"|"jsonb"|"uuid"
+
+class SqlActionParam {
+  type: SqlColumnType
+}
+
+class SqlMapping {
+  statement: String(!isEmpty)
+  /// Declared `:name` params (defaults mirror the registry codec: absent = none).
+  params: Mapping<String, SqlActionParam> = new Mapping {}
+}
+
+// ---------------------------------------------------------------------------
 // Additional privilege check — cross-resource authorization required on an action.
 // ---------------------------------------------------------------------------
 class ResourcePrivilegeRequirement {
@@ -181,6 +205,16 @@ class Action {
   openApiMapping: OpenApiMapping?
   /// HTTP bindings for multiple operationIds (e.g. native API + Tangram wrapper API).
   openApiMappings: List<OpenApiMapping>?
+  /// SQL binding for a platform-executed action (built apps): mutually
+  /// exclusive with the openApi mappings. SQL-backed actions are always
+  /// authorized (per-type IAM) and audited — skipAuth/skipAudit cannot opt
+  /// out, and HTTP-shaped extras (additionalPrivileges with extractors) don't
+  /// apply.
+  sqlMapping: SqlMapping?(
+    this == null || (openApiMapping == null && openApiMappings == null),
+    this == null || (skipAuth != true && skipAudit != true),
+    this == null || additionalPrivileges == null
+  )
   /// Optional inline chat render hint for this action's result.
   surface: ActionSurface?
 }
@@ -243,6 +277,24 @@ class ResourceTypeDefinition {
   /// permission-check query consults this field; until then, declaring it has no
   /// runtime effect — prefer to omit it on new manifests to avoid drift.
   scopePrivilegePropagation: Map<String, List<String>>?
+
+  /// Backing table for a SQL-backed (platform-executed) type — built apps
+  /// only. When set: exactly one served version (the schema registry the
+  /// installer replays into has no multi-version semantics — anything else
+  /// would be silently ignored, so it is refused), and every action carries a
+  /// sqlMapping.
+  sqlTable: String?(
+    this == null || versions.length == 1,
+    this == null || versions.every((v) -> v.actions.every((a) -> a.sqlMapping != null))
+  )
+
+  /// Params identifying an instance of a SQL-backed type — powers invocation
+  /// audit now, row-level IAM later (resource-types design §4.1).
+  instanceKey: Listing<String>?
+
+  /// Generated CRUD actions a SQL-backed type opts back into after shadowing
+  /// its backing table.
+  includeCrud: Listing<"Create"|"List"|"Update"|"Delete">?
 }
 
 // ---------------------------------------------------------------------------

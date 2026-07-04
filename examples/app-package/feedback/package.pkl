@@ -1,10 +1,13 @@
 // Example built-app package manifest (packaging plan §3.2): what the
 // tangram-os exporter emits as `package.json` + `schema/changes.json` for a
 // "feedback" app — one table, one declared resource type with a SQL-recipe
-// action, one sandboxed component. Real packages depend on the released
+// action, one sandboxed component. Declared types are ordinary
+// core.ResourceTypeDefinitions whose actions carry a sqlMapping — the same
+// vocabulary manifest service apps use. Real packages depend on the released
 // package and amend "@tangram-app-manifest/app-package.pkl" instead.
 amends "../../../src/app-package.pkl"
 
+import "../../../src/core.pkl"
 import "../../../src/infra.pkl"
 
 manifest {
@@ -16,7 +19,35 @@ manifest {
     resourceName = "app-database"
   }
   schema {
-    checksum = "68f2db33228a5d8b2dc35e3f9b2b43b907515d5"
+    checksum = "3bc9fbeb0d8eab162527f55562effa4b18596af2"
+  }
+  resourceTypeDefinitions {
+    new core.ResourceTypeDefinition {
+      name = "Note"
+      doc = "A feedback note"
+      sqlTable = "notes"
+      instanceKey { "id" }
+      includeCrud { "Create"; "List" }
+      activeVersion = "v1"
+      versions = List(new core.ResourceTypeVersion {
+        version = "v1"
+        served = true
+        actions = List(new core.Action {
+          name = "Approve"
+          doc = "Mark a note done"
+          privilege = "Approve"
+          effect = core.Effect.Reversible
+          idempotent = false
+          requiresConfirmation = false
+          sqlMapping = new core.SqlMapping {
+            statement = "update notes set done = true, approved_by = :_actor, approved_at = :_now where id = :id"
+            params {
+              ["id"] = new core.SqlActionParam { type = "bigint" }
+            }
+          }
+        })
+      })
+    }
   }
   components {
     new PackagedComponentEntry {
@@ -51,29 +82,6 @@ schemaChanges {
         columns { "done" }
       }
     }
-    new DeclareResourceType {
-      resourceType {
-        name = "Note"
-        doc = "A feedback note"
-        table = "notes"
-        instanceKey { "id" }
-        actions {
-          new ResourceActionSpec {
-            name = "Approve"
-            doc = "Mark a note done"
-            effect = "Reversible"
-            requiresConfirmation = false
-            implementation {
-              statement = "update notes set done = true, approved_by = :_actor, approved_at = :_now where id = :id"
-              params {
-                ["id"] = new ActionParamSpec { type = "bigint" }
-              }
-            }
-          }
-        }
-        includeCrud { "Create"; "List" }
-      }
-    }
   }
-  checksum = "68f2db33228a5d8b2dc35e3f9b2b43b907515d5"
+  checksum = "3bc9fbeb0d8eab162527f55562effa4b18596af2"
 }

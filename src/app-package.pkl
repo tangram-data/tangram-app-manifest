@@ -8,17 +8,19 @@ module ai.tangram.os.apppackage
 // create-from-empty change list in `schema/changes.json`, and one directory
 // per embedded component (`component.json` + `source.json` + `src/…`). The
 // tangram-os exporter emits that tree as JSON; THIS module is its typed
-// schema — the validation/authoring form, never a second format. `validate`
-// parses the tree's JSON files into these classes so drift between exporter
-// and vocabulary fails loudly.
+// schema — the validation/authoring form, never a second format.
 //
-// What is deliberately reused, not reinvented: infra claims come from
-// `infra.pkl` (the same PostgresqlDatabaseClaim/StorageBucketClaim manifest
-// service apps declare); `declare_resource_type` carries the tangram schema
-// registry's own declaration shape (resource-types design §3.1) — the
-// manifest form IS the declaration form, no third shape.
+// One resource-type vocabulary: declared types travel as ordinary
+// `core.ResourceTypeDefinition`s whose actions carry a `sqlMapping` instead
+// of an `openApiMapping` — the same class manifest service apps use, with
+// `sqlTable`/`instanceKey`/`includeCrud` carrying the data coupling. The
+// installer synthesizes registry declarations from them; the exporter is the
+// R1 compiler bridge run in reverse. Infra claims likewise come from
+// `infra.pkl` — the same PostgresqlDatabaseClaim/StorageBucketClaim service
+// apps declare.
 // ---------------------------------------------------------------------------
 
+import "core.pkl"
 import "infra.pkl"
 
 /// The `package.json` at the tree root.
@@ -49,6 +51,12 @@ class AppPackageManifest {
   /// (same formula as the registry ledger), verified at install and used as
   /// the upgrade lineage base (P3 — package v2 replays only what follows).
   schema: PackagedSchema?
+
+  /// Declared resource types — SQL-backed `core.ResourceTypeDefinition`s
+  /// (`sqlTable` set, every action a `sqlMapping`, one served version). The
+  /// installer replays them into the target's schema registry through the
+  /// governed declaration lane.
+  resourceTypeDefinitions: Listing<core.ResourceTypeDefinition(sqlTable != null)>
 
   /// Workspace-authored components embedded in the tree, one directory each.
   components: Listing<PackagedComponentEntry>
@@ -92,10 +100,12 @@ class PackagedComponentEntry {
 // `schema/changes.json` — the squashed change list
 //
 // Typed mirror of the tangram schema registry's SchemaChange codec,
-// discriminated on `op`. A fresh export carries only creates/declares (the
+// discriminated on `op`, covering the STRUCTURAL ops (tables, columns,
+// indexes) — resource types travel as `resourceTypeDefinitions` in the
+// manifest, not in the change list. A fresh export carries only creates (the
 // squash is derived from the current model, never history); the full
-// vocabulary is modelled because UPGRADE packages (P3) append whatever the
-// app's evolution needed, drops included.
+// structural vocabulary is modelled because UPGRADE packages (P3) append
+// whatever the app's evolution needed, drops included.
 // ---------------------------------------------------------------------------
 
 class SchemaChangeFile {
@@ -103,17 +113,11 @@ class SchemaChangeFile {
   checksum: String(!isEmpty)
 }
 
-typealias SchemaChange =
-  CreateTable|AddColumn|AddIndex|DropTable|DropColumn|DeclareResourceType|DropResourceType
-
-/// Closed column-type set (registry `ColumnType`): generated DDL stays
-/// deterministic and dialect-safe.
-typealias ColumnType =
-  "text"|"integer"|"bigint"|"boolean"|"double"|"numeric"|"timestamptz"|"date"|"jsonb"|"uuid"
+typealias SchemaChange = CreateTable|AddColumn|AddIndex|DropTable|DropColumn
 
 class ColumnSpec {
   name: String(!isEmpty)
-  type: ColumnType
+  type: core.SqlColumnType
   nullable: Boolean = true
 }
 
@@ -155,62 +159,6 @@ class DropColumn {
   fixed op: String = "drop_column"
   table: String(!isEmpty)
   column: String(!isEmpty)
-}
-
-class DropResourceType {
-  fixed op: String = "drop_resource_type"
-  name: String(!isEmpty)
-}
-
-/// Agent-declared resource type over a backing table (resource-types design
-/// §3.1) — the registry declaration shape verbatim.
-class DeclareResourceType {
-  fixed op: String = "declare_resource_type"
-  resourceType: ResourceTypeSpec
-}
-
-/// Generated CRUD vocabulary a declared type may opt back into.
-typealias CrudAction = "Create"|"List"|"Update"|"Delete"
-
-class ResourceTypeSpec {
-  name: String(!isEmpty)
-  doc: String?
-  table: String(!isEmpty)
-  /// Params identifying an instance — powers audit now, row-level IAM later.
-  /// Defaults mirror the registry codec: absent decodes as empty.
-  instanceKey: Listing<String> = new Listing {}
-  actions: Listing<ResourceActionSpec> = new Listing {}
-  /// Generated CRUD actions the type opts back into after shadowing its table.
-  includeCrud: Listing<CrudAction> = new Listing {}
-}
-
-typealias ActionEffect = "Stateless"|"Reversible"|"Irreversible"
-
-class ResourceActionSpec {
-  name: String(!isEmpty)
-  doc: String?
-  effect: ActionEffect
-  /// Well-known (Read/Create/Write/Delete/…) or custom privilege string;
-  /// absent derives from the action name, defaulting to Write.
-  privilege: String?
-  /// Absent lets the shared confirmation policy decide from effect+privilege.
-  requiresConfirmation: Boolean?
-  implementation: SqlImplementation
-}
-
-/// One parameterized DML statement executed by the platform under the
-/// viewer's identity with a per-type IAM check (resource-types R2). Reserved
-/// `:_actor`/`:_now` params are platform-bound; everything else must be
-/// declared here.
-class SqlImplementation {
-  fixed kind: String = "sql"
-  statement: String(!isEmpty)
-  /// Default mirrors the registry codec: absent decodes as empty.
-  params: Mapping<String, ActionParamSpec> = new Mapping {}
-}
-
-class ActionParamSpec {
-  type: ColumnType
 }
 
 // ---------------------------------------------------------------------------
