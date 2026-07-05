@@ -46,6 +46,18 @@ manifest {
               ["id"] = new core.SqlActionParam { type = "bigint" }
             }
           }
+        }, new core.Action {
+          name = "Notify"
+          doc = "Ping the note's owner via the app backend"
+          effect = core.Effect.Reversible
+          idempotent = false
+          requiresConfirmation = false
+          handlerMapping = new core.HandlerMapping {
+            handler = "notes.notify"
+            params {
+              ["id"] = new core.SqlActionParam { type = "bigint" }
+            }
+          }
         })
       })
     }

@@ -161,6 +161,16 @@ class SqlMapping {
   params: Mapping<String, SqlActionParam> = new Mapping {}
 }
 
+/// Backend-handler binding for a platform-executed action (backend-runtime
+/// design §3.1): `handler` names a function exported by the app's backend
+/// source as `module.function`; `params` is the whole caller-facing input
+/// contract, validated by the platform before dispatch exactly like a SQL
+/// recipe's.
+class HandlerMapping {
+  handler: String(matches(Regex(#"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)+$"#)))
+  params: Mapping<String, SqlActionParam> = new Mapping {}
+}
+
 // ---------------------------------------------------------------------------
 // Additional privilege check — cross-resource authorization required on an action.
 // ---------------------------------------------------------------------------
@@ -214,6 +224,15 @@ class Action {
     this == null || (openApiMapping == null && openApiMappings == null),
     // Absent, not merely false: the fields have no meaning for SQL actions,
     // so carrying them at all is drift waiting to be misread.
+    this == null || (skipAuth == null && skipAudit == null),
+    this == null || additionalPrivileges == null
+  )
+  /// Backend-handler binding for a platform-executed action (built apps with
+  /// a managed backend runtime): mutually exclusive with the openApi mappings
+  /// AND sqlMapping, and always authorized/audited like sqlMapping —
+  /// skipAuth/skipAudit/additionalPrivileges must be absent.
+  handlerMapping: HandlerMapping?(
+    this == null || (openApiMapping == null && openApiMappings == null && sqlMapping == null),
     this == null || (skipAuth == null && skipAudit == null),
     this == null || additionalPrivileges == null
   )
@@ -284,10 +303,10 @@ class ResourceTypeDefinition {
   /// only. When set: exactly one served version (the schema registry the
   /// installer replays into has no multi-version semantics — anything else
   /// would be silently ignored, so it is refused), and every action carries a
-  /// sqlMapping.
+  /// platform-executed mapping (sqlMapping or handlerMapping).
   sqlTable: String?(
     this == null || versions.length == 1,
-    this == null || versions.every((v) -> v.actions.every((a) -> a.sqlMapping != null))
+    this == null || versions.every((v) -> v.actions.every((a) -> a.sqlMapping != null || a.handlerMapping != null))
   )
 
   /// Params identifying an instance of a SQL-backed type — powers invocation
@@ -722,6 +741,19 @@ class HelmComponent {
   containers: List<ContainerMeta>
 }
 
+/// RBAC for a custom resource introduced by a chart's operator (via its CRDs). The platform grants the
+/// app's component service account these permissions in the app namespace so the app can manage the
+/// operator's custom resources (e.g. a StarRocksCluster). Declared here so the deployment path
+/// generates the Role rule from the manifest instead of hard-coding per-operator RBAC.
+class CustomResourceRbac {
+  /// API group of the custom resource, e.g. "starrocks.com".
+  apiGroup: String
+  /// Resource names (plural), including subresources, e.g. "starrocksclusters", "starrocksclusters/status".
+  resources: List<String>
+  /// Allowed verbs. Defaults to the full set a workload-managing app typically needs.
+  verbs: List<String> = List("create", "get", "list", "watch", "update", "delete", "patch")
+}
+
 class HelmChart {
   repo: String
   fullName: String
@@ -731,6 +763,9 @@ class HelmChart {
   /// registers a scrape target; declared at the chart level because the install path
   /// renders values + `helm upgrade --install` and does not read per-component metadata.
   observability: ComponentObservability?
+  /// Custom-resource RBAC for the CRs the chart's operator reconciles. The platform adds these as
+  /// rules on the app component Role so the app can create/manage those CRs in its namespace.
+  crds: List<CustomResourceRbac>?
 }
 
 // ---------------------------------------------------------------------------
