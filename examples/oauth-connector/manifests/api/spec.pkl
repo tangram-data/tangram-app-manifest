@@ -1,11 +1,11 @@
 module ai.tangram.os.examples.oauthconnector
 
-import "../../../../src/core.pkl" as tangram
+import "../../../../src/connector.pkl" as connector
 import "../../../../src/oauth.pkl" as oauthTypes
 
-auth = new tangram.ConnectorAuth {
+auth = new connector.ConnectorAuth {
   httpHeaders = Map(
-    "Authorization", new tangram.Template {
+    "Authorization", new connector.HeaderTemplate {
       template = "Bearer {{oauth.accessToken}}"
     }
   )
@@ -29,7 +29,7 @@ oauth = new oauthTypes.OAuth2AuthCode {
   tenant = new oauthTypes.CallbackParam {
     name = "tenantId"
   }
-  connectionScope = new oauthTypes.Either {
+  connectionScope = new oauthTypes.SelectableScope {
     default = "PerUser"
     allowedAtInstall = List("PerUser", "WorkspaceShared")
   }
@@ -60,7 +60,7 @@ connectionScopes = List(
   new oauthTypes.WorkspaceOnly {},
   new oauthTypes.PerUserOnly {},
   new oauthTypes.NamedTenantOnly {},
-  new oauthTypes.Either {
+  new oauthTypes.SelectableScope {
     default = "NamedTenant"
     allowedAtInstall = List("NamedTenant", "WorkspaceShared")
   }

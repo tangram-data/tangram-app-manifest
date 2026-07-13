@@ -1,7 +1,5 @@
 module ai.tangram.os.agent
 
-import "core.pkl" as tangram
-
 // ---------------------------------------------------------------------------
 // Agent app manifest types
 //

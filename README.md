@@ -1,9 +1,10 @@
-# Example usage:
-```
-import "package://github.com/tangram-data/tangram-app-manifest/releases/download/1.0.0/tangram-app-manifest@1.0.0#/core.pkl" as core
+# Example usage
+
+```pkl
+import "@tangram-app-manifest/manifest.pkl" as manifest
 
 secrets = List(
-  new core.ConfigField {
+  new manifest.ConfigField {
     name = "token"
     required = true
     description = "Databricks PAT token of a user who has admin permissions of the target databricks workspace"
@@ -11,20 +12,37 @@ secrets = List(
 )
 ```
 
+## Modules
+
+- `manifest.pkl` — app identity, app types, and shared configuration fields
+- `resource-types.pkl` — resources, actions, mappings, roles, and privileges
+- `integration.pkl` — integration interfaces and implementations
+- `connector.pkl` — request authentication headers
+- `oauth.pkl` — OAuth connection lifecycle and scopes
+- `deployment.pkl` — deployment, telemetry, component, and Helm schemas
+- `deployment-runtime.pkl` — injected deployment context and runtime helpers
+- `ui.pkl` — UI components and proxy URI patterns
+- `agent.pkl` — agent model, tool, and skill declarations
+- `infra.pkl` — infrastructure claims and injected resource access
+- `app-package.pkl` — workspace-built app package schema
+
+`core.pkl` was removed in `2.0.0`; consumers must import the owning modules
+directly.
+
 # OAuth-backed connectors
 
 OAuth declarations live in the standalone `oauth.pkl` module. Connector
-request-authentication templates remain in `core.pkl` because API-key and
-OAuth-backed connectors share them:
+request-authentication templates live in `connector.pkl` because API-key and
+OAuth-backed connectors share them.
 
 ```pkl
-import "@tangram-app-manifest/core.pkl" as tangram
+import "@tangram-app-manifest/connector.pkl" as connector
 import "@tangram-app-manifest/oauth.pkl" as oauthTypes
 
-auth = new tangram.ConnectorAuth {
+auth = new connector.ConnectorAuth {
   httpHeaders = Map(
     "Authorization",
-    new tangram.Template { template = "Bearer {{oauth.accessToken}}" }
+    new connector.HeaderTemplate { template = "Bearer {{oauth.accessToken}}" }
   )
 }
 
@@ -39,7 +57,7 @@ oauth = new oauthTypes.OAuth2AuthCode {
 }
 ```
 
-# Publishing UI components:
+# Publishing UI components
 An app publishes reusable UI components by shipping `manifests/ui/components.pkl`
 (amends `ui.pkl`; see `examples/ui-components/`):
 ```
@@ -68,5 +86,5 @@ is a contract JSON declaring `inputs`, named `bindings` (semantic/sql/action),
 
 `./gradlew evalUiComponentsExample` renders the example the way the platform loader does.
 
-# Reference:
+# Reference
 [pkl-lang: Package Import](https://pkl-lang.org/main/current/language-reference/index.html#import-clause)

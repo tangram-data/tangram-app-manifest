@@ -6,7 +6,7 @@ module ai.tangram.os.oauth
 //
 // Usage in `manifests/api/spec.pkl` for an OAuth-backed connector:
 //
-//   import "@tangram-app-manifest/core.pkl" as tangram
+//   import "@tangram-app-manifest/connector.pkl" as connector
 //   import "@tangram-app-manifest/oauth.pkl" as oauthTypes
 //
 //   oauth = new oauthTypes.OAuth2AuthCode {
@@ -19,9 +19,9 @@ module ai.tangram.os.oauth
 //     callbackPath       = "/api/core/v1/connector-oauth/callback/com.intuit/quickbooks"
 //     tenant             = new oauthTypes.CallbackParam { name = "realmId" }
 //   }
-//   auth = new tangram.ConnectorAuth {
+//   auth = new connector.ConnectorAuth {
 //     httpHeaders = Map(
-//       "Authorization", new tangram.Template { template = "Bearer {{oauth.accessToken}}" }
+//       "Authorization", new connector.HeaderTemplate { template = "Bearer {{oauth.accessToken}}" }
 //     )
 //   }
 // ---------------------------------------------------------------------------
@@ -149,7 +149,7 @@ class NamedTenantOnly extends ConnectionScope {
 /// Both are enforced as PKL constraints AND mirrored in the Tangram
 /// manifest validator (Scala side) — defense in depth in case a manifest
 /// somehow bypasses the PKL evaluator.
-class Either extends ConnectionScope {
+class SelectableScope extends ConnectionScope {
   kind: "Either" = "Either"
   default: ConnectionMode
   allowedAtInstall: List<ConnectionMode>(

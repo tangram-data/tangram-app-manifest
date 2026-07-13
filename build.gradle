@@ -2,6 +2,8 @@ plugins {
   id "org.pkl-lang" version "0.28.2"
 }
 
+import groovy.json.JsonSlurper
+
 def projectDirs = file("src")
 def outputDir = file("build")
 
@@ -43,12 +45,66 @@ pkl {
       outputFile = file('build/examples/app-package.json')
     }
     // Renders a representative OAuth-backed connector declaration. This
-    // verifies that core connector auth and the standalone OAuth vocabulary
+    // verifies that connector auth and the standalone OAuth vocabulary
     // compose into the JSON shape consumed by the platform manifest loader.
     register('evalOAuthConnectorExample') {
       sourceModules = [file('examples/oauth-connector/manifests/api/spec.pkl')]
       expression = 'new JsonRenderer { omitNullProperties = false }.renderValue(Map("auth", auth, "oauth", oauth, "oauthWithDefaults", oauthWithDefaults, "tenantSources", tenantSources, "connectionScopes", connectionScopes))'
       outputFile = file('build/examples/oauth-connector.json')
+    }
+    // Renders one representative value from every domain moved out of the
+    // former core.pkl module. Null properties remain visible so removing or
+    // defaulting a nullable field cannot pass as an equivalent contract.
+    register('evalContractFixture') {
+      sourceModules = [file('examples/contract-fixture/fixture.pkl')]
+      expression = 'new JsonRenderer { omitNullProperties = false }.renderValue(fixture)'
+      outputFile = file('build/examples/contract-fixture.json')
+    }
+    // Renders the same values through the published 1.1.3 package, where the
+    // declarations still lived in core.pkl. This makes expected.json's
+    // provenance reproducible instead of relying on an undocumented worktree.
+    register('evalPreRefactorContractFixture') {
+      sourceModules = [file('examples/contract-fixture/pre-2.0.pkl')]
+      expression = 'new JsonRenderer { omitNullProperties = false }.renderValue(fixture)'
+      outputFile = file('build/examples/contract-fixture-pre-2.0.json')
+    }
+  }
+}
+
+tasks.register('verifyContractFixture') {
+  dependsOn tasks.named('evalContractFixture'), tasks.named('evalPreRefactorContractFixture')
+  inputs.file(file('examples/contract-fixture/expected.json'))
+  inputs.file(file('build/examples/contract-fixture.json'))
+  inputs.file(file('build/examples/contract-fixture-pre-2.0.json'))
+
+  doLast {
+    def parser = new JsonSlurper()
+    def expected = parser.parse(file('examples/contract-fixture/expected.json'))
+    def preRefactor = parser.parse(file('build/examples/contract-fixture-pre-2.0.json'))
+    def actual = parser.parse(file('build/examples/contract-fixture.json'))
+    if (preRefactor != expected) {
+      throw new GradleException(
+        'expected.json does not match the published 1.1.3 fixture. ' +
+        'Run updateContractFixtureSnapshot only when intentionally rebuilding its provenance.'
+      )
+    }
+    if (actual != expected) {
+      throw new GradleException(
+        'Contract fixture JSON differs from the pre-refactor snapshot. ' +
+        'Review the rendered diff before accepting schema drift.'
+      )
+    }
+  }
+}
+
+tasks.register('updateContractFixtureSnapshot') {
+  dependsOn tasks.named('evalPreRefactorContractFixture')
+
+  doLast {
+    copy {
+      from file('build/examples/contract-fixture-pre-2.0.json')
+      into file('examples/contract-fixture')
+      rename { 'expected.json' }
     }
   }
 }

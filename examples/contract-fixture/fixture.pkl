@@ -1,0 +1,286 @@
+// Contract fixture for the module refactor (docs/module-refactor-plan.md
+// Phase 1): instantiates one representative value of every class whose
+// serialized shape must survive the core.pkl split. The rendered JSON is
+// checked against expected.json — any diff is contract drift.
+module ai.tangram.os.examples.contractfixture
+
+import "../../src/manifest.pkl" as manifest
+import "../../src/resource-types.pkl" as resources
+import "../../src/integration.pkl" as integration
+import "../../src/connector.pkl" as connector
+import "../../src/ui.pkl" as ui
+import "../../src/deployment.pkl" as deployment
+
+// --- resource types / actions / IAM -----------------------------------------
+
+local openApiAction = new resources.Action {
+  name = "Rename"
+  privilege = resources.Privilege.Write
+  effect = resources.Effect.Reversible
+  idempotent = true
+  doc = "Rename a record"
+  skipAuth = false
+  skipAudit = false
+  requiresConfirmation = true
+  additionalPrivileges = List(new resources.ResourcePrivilegeRequirement {
+    resourceType = "Workspace"
+    privilege = resources.Privilege.Describe
+    resourceName = List(new resources.PathParam { name = "workspace" })
+  })
+  openApiMapping = new resources.OpenApiMapping {
+    operationId = "renameRecord"
+    resourceName = List(
+      new resources.PathParam { name = "recordId" },
+      new resources.QueryParam { name = "revision" },
+      new resources.BodyField { path = "record.meta[0].name" },
+      new resources.ResponseField { path = "record.id" }
+    )
+    resourceId = new resources.BodyField { path = "record.id" }
+    newName = new resources.BodyField { path = "record.newName" }
+    resourceNameTemplate = "[{{getNameById(requestBody.record.id)}}]"
+    resourceIdTemplate = "{{requestBody.record.id}}"
+    newNameTemplate = "{{requestBody.record.newName}}"
+  }
+  surface = new resources.ActionSurface {
+    kind = "card"
+    title = "Record"
+    fields = List("id", "name")
+  }
+}
+
+local multiMappingAction = new resources.Action {
+  name = "List"
+  privilege = resources.Privilege.Read
+  effect = resources.Effect.Stateless
+  idempotent = true
+  doc = "List records"
+  openApiMappings = List(
+    new resources.OpenApiMapping { operationId = "listRecordsNative" },
+    new resources.OpenApiMapping { operationId = "listRecordsWrapper" }
+  )
+}
+
+local sqlAction = new resources.Action {
+  name = "Approve"
+  privilege = "Approve"
+  effect = resources.Effect.Reversible
+  idempotent = false
+  doc = "Approve a note"
+  requiresConfirmation = false
+  sqlMapping = new resources.SqlMapping {
+    statement = "update notes set done = true where id = :id"
+    params {
+      ["id"] = new resources.SqlActionParam { type = "bigint" }
+    }
+  }
+}
+
+local handlerAction = new resources.Action {
+  name = "Notify"
+  effect = resources.Effect.Irreversible
+  idempotent = false
+  doc = "Notify the owner"
+  handlerMapping = new resources.HandlerMapping {
+    handler = "notes.notify"
+    params {
+      ["id"] = new resources.SqlActionParam { type = "bigint" }
+    }
+  }
+}
+
+local serviceTypeDefinition = new resources.ResourceTypeDefinition {
+  name = "Record"
+  doc = "A record resource"
+  activeVersion = "v2"
+  superType = resources.DATASET_TYPE
+  scopeType = resources.WORKSPACE_TYPE
+  scopePrivilegePropagation = Map("Admin", List("Read", "Write"))
+  versions = List(
+    new resources.ResourceTypeVersion {
+      version = "v1"
+      served = false
+      actions = List(multiMappingAction)
+    },
+    new resources.ResourceTypeVersion {
+      version = "v2"
+      served = true
+      superTypeVersion = "v1"
+      actions = List(openApiAction, multiMappingAction)
+      presetRoles = List(new resources.Role {
+        name = "owner"
+        permissions = List("*")
+        description = "Full control of the record"
+      })
+    }
+  )
+}
+
+local sqlBackedTypeDefinition = new resources.ResourceTypeDefinition {
+  name = "Note"
+  doc = "A SQL-backed note"
+  activeVersion = "v1"
+  sqlTable = "notes"
+  instanceKey { "id" }
+  includeCrud { "Create"; "List" }
+  versions = List(new resources.ResourceTypeVersion {
+    version = "v1"
+    served = true
+    actions = List(sqlAction, handlerAction)
+  })
+}
+
+// --- integration -------------------------------------------------------------
+
+local integrationImpl = new integration.IntegrationImplementation {
+  interface = integration.SQL_QUERYABLE
+  implementationSpec = new Dynamic { endpoint = "http://sql.example" }
+  implementationType = "http"
+  version = "v1"
+}
+
+local queryableSpec = new integration.TangramSQLQueryableSpec {
+  sqlCommandPrivilegeMapping = Map("SELECT", List("Read"))
+}
+
+// --- connector auth / settings ----------------------------------------------
+
+local connectorAuth = new connector.ConnectorAuth {
+  httpHeaders = Map(
+    "Authorization", new connector.HeaderTemplate { template = "Bearer {{oauth.accessToken}}" }
+  )
+}
+
+local configField = new manifest.ConfigField {
+  name = "apiBase"
+  description = "Upstream API base URL"
+  required = true
+  default = "https://api.example.com"
+  example = "https://api.example.com"
+}
+
+// --- observability / helm ----------------------------------------------------
+
+local otlpObservability = new deployment.ComponentObservability {
+  traces = "otlp"
+  metrics = new deployment.OtlpMetrics {}
+  targetContainers = List("server")
+}
+
+local prometheusObservability = new deployment.ComponentObservability {
+  metrics = new deployment.PrometheusMetrics {
+    port = 9090
+    path = "/custom/metrics"
+    scheme = "https"
+    interval = "15s"
+    sampleLimit = 5000
+  }
+}
+
+local helmChart = new deployment.HelmChart {
+  repo = "https://charts.example.com"
+  fullName = "example/starrocks"
+  version = "1.2.3"
+  components = List(new deployment.HelmComponent {
+    name = "fe"
+    apiServiceComponent = true
+    recommendedReplica = 1
+    maxReplica = 3
+    optional = false
+    initContainers = List(new deployment.ContainerMeta {
+      name = "init"
+      image = "example/init:1"
+      description = "Init container"
+    })
+    containers = List(new deployment.ContainerMeta {
+      name = "fe"
+      image = "example/fe:1"
+    })
+  })
+  observability = otlpObservability
+  crds = List(new deployment.CustomResourceRbac {
+    apiGroup = "starrocks.com"
+    resources = List("starrocksclusters", "starrocksclusters/status")
+  })
+}
+
+// --- ui / manifest identity ---------------------------------------------------
+
+local uriPattern = new ui.UriPattern { pattern = "/app/*" }
+
+local identity = new Dynamic {
+  specVersion = manifest.MANIFEST_SPEC_VERSION
+  groupName = manifest.TANGRAM_OS_GROUP_NAME
+  coreApp = manifest.TANGRAM_OS_CORE_APP
+  appTypes = List(manifest.NATIVE_APP_TYPE, manifest.CONNECTOR_APP_TYPE, manifest.AGENT_APP_TYPE)
+  superTypes = List(
+    resources.WORKSPACE_TYPE, resources.DATASET_TYPE, resources.CATALOG_TYPE,
+    resources.STORAGE_TYPE, resources.DATABASE_TYPE, resources.COMPUTE_TYPE,
+    resources.SQL_ENGINE_TYPE, resources.WORKFLOW_TYPE, resources.DASHBOARD_TYPE
+  )
+  integrationApps = List(integration.TANGRAM_SQL_APP, integration.DATA_CATALOG_APP)
+  interfaces = List(integration.SPARK_IO, integration.SQL_QUERYABLE, integration.SCHEMA_UPDATOR)
+}
+
+// --- custom component deployment ----------------------------------------------
+
+local componentSpec = new deployment.AppComponentSpec {
+  service = new deployment.AppComponentServiceSpec {
+    port = 80
+    targetPort = 8080
+    protocol = "TCP"
+  }
+  initContainers = List(new deployment.AppContainerSpec {
+    ports = List()
+    variables = Map("MODE", "init")
+    files = List()
+    command = List("sh", "-c", "init")
+  })
+  containers = List(new deployment.AppContainerSpec {
+    ports = List(8080)
+    variables = Map(
+      "API_KEY", new deployment.SecretValue { value = "secret-ref" },
+      "LOG_LEVEL", "info"
+    )
+    files = List(new deployment.ContainerFile {
+      name = "config"
+      path = "/etc/app/config.yaml"
+      isSensitive = true
+      content = "key: value"
+    })
+    command = List("server")
+    args = List("--port", "8080")
+  })
+}
+
+local containerMeta = new deployment.ContainerMeta {
+  name = "server"
+  image = "example/server:1"
+  description = "Main container"
+}
+
+local deploymentContext = new deployment.DeploymentContext {
+  id = "dep-1"
+  tangramOSPublicUrl = "https://os.example.com"
+  workspace = "ws-1"
+  k8sNamespace = "app-ns"
+  cloudProvider = "AWS"
+}
+
+// --- rendered contract ----------------------------------------------------------
+
+fixture = new Dynamic {
+  identity_ = identity
+  serviceTypeDefinition_ = serviceTypeDefinition
+  sqlBackedTypeDefinition_ = sqlBackedTypeDefinition
+  integrationImpl_ = integrationImpl
+  queryableSpec_ = queryableSpec
+  connectorAuth_ = connectorAuth
+  configField_ = configField
+  otlpObservability_ = otlpObservability
+  prometheusObservability_ = prometheusObservability
+  helmChart_ = helmChart
+  uriPattern_ = uriPattern
+  componentSpec_ = componentSpec
+  containerMeta_ = containerMeta
+  deploymentContext_ = deploymentContext
+}

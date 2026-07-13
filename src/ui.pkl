@@ -26,7 +26,16 @@ module ai.tangram.os.ui
 /// frontend renderer; `sandboxed` is app-authored source run in a sandboxed iframe.
 typealias UIComponentKind = "declarative"|"sandboxed"
 
-/// Surfaces a component may render on.
+/// Surfaces on which the host is allowed to render a component:
+///
+/// - `chat`: inside an AI conversation, either inline or in the chat side panel.
+/// - `dashboard`: as a reusable tile in a persisted dashboard grid.
+/// - `app-page`: on a page within an app, typically as part of an application
+///   screen or workflow.
+///
+/// This is an allowlist: the runtime rejects a component on an undeclared
+/// surface. Declaring multiple surfaces does not automatically adapt its layout;
+/// authors should ensure the component is suitable for every declared host.
 typealias UIComponentSurface = "chat"|"dashboard"|"app-page"
 
 /// Semantic-layer binding (preferred; governed, dialect-portable).
@@ -120,3 +129,8 @@ class AppUIComponentSpec {
 
 /// The UI components this app publishes.
 components: Listing<AppUIComponentSpec> = new Listing<AppUIComponentSpec> {}
+
+/// URL pattern for proxy-mode apps — defines which paths Tangram forwards.
+class UriPattern {
+  pattern: String
+}

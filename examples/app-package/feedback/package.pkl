@@ -2,12 +2,12 @@
 // tangram-os exporter emits as `package.json` for a
 // "feedback" app — one table, one declared resource type with a SQL-recipe
 // action, one sandboxed component. Declared types are ordinary
-// core.ResourceTypeDefinitions whose actions carry a sqlMapping — the same
+// resources.ResourceTypeDefinitions whose actions carry a sqlMapping — the same
 // vocabulary manifest service apps use. Real packages depend on the released
 // package and amend "@tangram-app-manifest/app-package.pkl" instead.
 amends "../../../src/app-package.pkl"
 
-import "../../../src/core.pkl"
+import "../../../src/resource-types.pkl" as resources
 import "../../../src/infra.pkl"
 
 manifest {
@@ -23,39 +23,39 @@ manifest {
     checksum = "cfadd32e9db1dd9168afb1809778dcbb9ade26bfe11ed76141e0d82654a9373b"
   }
   resourceTypeDefinitions {
-    new core.ResourceTypeDefinition {
+    new resources.ResourceTypeDefinition {
       name = "Note"
       doc = "A feedback note"
       sqlTable = "notes"
       instanceKey { "id" }
       includeCrud { "Create"; "List" }
       activeVersion = "v1"
-      versions = List(new core.ResourceTypeVersion {
+      versions = List(new resources.ResourceTypeVersion {
         version = "v1"
         served = true
-        actions = List(new core.Action {
+        actions = List(new resources.Action {
           name = "Approve"
           doc = "Mark a note done"
           privilege = "Approve"
-          effect = core.Effect.Reversible
+          effect = resources.Effect.Reversible
           idempotent = false
           requiresConfirmation = false
-          sqlMapping = new core.SqlMapping {
+          sqlMapping = new resources.SqlMapping {
             statement = "update notes set done = true, approved_by = :_actor, approved_at = :_now where id = :id"
             params {
-              ["id"] = new core.SqlActionParam { type = "bigint" }
+              ["id"] = new resources.SqlActionParam { type = "bigint" }
             }
           }
-        }, new core.Action {
+        }, new resources.Action {
           name = "Notify"
           doc = "Ping the note's owner via the app backend"
-          effect = core.Effect.Reversible
+          effect = resources.Effect.Reversible
           idempotent = false
           requiresConfirmation = false
-          handlerMapping = new core.HandlerMapping {
+          handlerMapping = new resources.HandlerMapping {
             handler = "notes.notify"
             params {
-              ["id"] = new core.SqlActionParam { type = "bigint" }
+              ["id"] = new resources.SqlActionParam { type = "bigint" }
             }
           }
         })
@@ -72,4 +72,3 @@ manifest {
   storage = null
   roles = null
 }
-

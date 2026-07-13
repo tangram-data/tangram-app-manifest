@@ -1,0 +1,48 @@
+module ai.tangram.os.integration
+
+import "manifest.pkl" as manifest
+
+class AppIntegrationInterface {
+  app: manifest.AppName
+  name: String
+  version: String
+}
+
+class IntegrationImplementation {
+  interface: AppIntegrationInterface
+  implementationSpec: Dynamic
+  implementationType: String?
+  version: String?
+}
+
+TANGRAM_SQL_APP = new manifest.AppName {
+  group = manifest.TANGRAM_OS_GROUP_NAME
+  name = "sql"
+}
+
+DATA_CATALOG_APP = new manifest.AppName {
+  group = manifest.TANGRAM_OS_GROUP_NAME
+  name = "data-catalog"
+}
+
+SPARK_IO = new AppIntegrationInterface {
+  app = DATA_CATALOG_APP
+  name = "spark-io"
+  version = "v1"
+}
+
+SQL_QUERYABLE = new AppIntegrationInterface {
+  app = TANGRAM_SQL_APP
+  name = "queryable"
+  version = "v1"
+}
+
+SCHEMA_UPDATOR = new AppIntegrationInterface {
+  app = DATA_CATALOG_APP
+  name = "schema-update-executor"
+  version = "v1"
+}
+
+class TangramSQLQueryableSpec {
+  sqlCommandPrivilegeMapping: Map<String, List<String>>
+}

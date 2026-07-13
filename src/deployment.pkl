@@ -1,6 +1,4 @@
-module ai.tangram.os
-import "pkl:json"
-import "core.pkl" as tangram
+module ai.tangram.os.deployment
 
 typealias CloudProvider = "Local"|"AWS"|"Azure"|"Scaleway"|"GCP"
 
@@ -12,20 +10,54 @@ class DeploymentContext {
   cloudProvider: CloudProvider
 }
 
-context = new DeploymentContext {
-  id             = read("prop:tangram_app_deployment_id")
-  tangramOSPublicUrl = read("prop:tangram_os_public_url")
-  workspace      = read("prop:tangram_app_deployment_workspace")
-  k8sNamespace   = read("prop:tangram_app_deployment_k8s_namespace")
-  cloudProvider  = read("prop:tangram_os_cloud_provider") as CloudProvider
+// ---------------------------------------------------------------------------
+// Telemetry collection
+//
+// The platform attributes every signal to the workspace from the namespace
+// label it controls, so manifests never name an index or workspace.
+// ---------------------------------------------------------------------------
+abstract class MetricsCollection {
+  kind: String
+}
+
+/// Push: inject the platform OTLP metrics endpoint into target containers.
+class OtlpMetrics extends MetricsCollection {
+  kind: String = "otlp"
+}
+
+/// Pull: scrape a workload's Prometheus endpoint and convert it to OTLP.
+class PrometheusMetrics extends MetricsCollection {
+  kind: String = "prometheus"
+  port: Int
+  path: String = "/metrics"
+  scheme: "http"|"https" = "http"
+  interval: String = "30s"
+  sampleLimit: Int?
+}
+
+class ComponentObservability {
+  /// Distributed tracing: "otlp" injects the OTLP trace endpoint env.
+  traces: "otlp"|"none" = "none"
+  metrics: MetricsCollection?
+  /// Defaults to all non-init containers when omitted.
+  targetContainers: List<String>?
+}
+
+// ---------------------------------------------------------------------------
+// Shared deployment metadata
+// ---------------------------------------------------------------------------
+class ContainerMeta {
+  name: String
+  image: String
+  description: String?
 }
 
 // ---------------------------------------------------------------------------
 // Custom Kubernetes deployment types
 //
-// Used by deployment/components.pkl (non-Helm apps).
-// AppComponentMeta is a PKL annotation — attach it to each component variable
-// so the platform can discover component metadata without evaluating the full module.
+// Used by deployment/components.pkl (non-Helm apps). AppComponentMeta is a
+// PKL annotation so the platform can discover metadata without evaluating the
+// full component specification.
 // ---------------------------------------------------------------------------
 class ContainerFile {
   name: String
@@ -40,22 +72,16 @@ class AppComponentServiceSpec {
   protocol: String
 }
 
-class AppContainerMeta {
-  name: String
-  image: String
-  description: String?
-}
-
 class AppComponentMeta extends Annotation {
   name: String
-  initContainers: List<AppContainerMeta>?
-  containers: List<AppContainerMeta>
+  initContainers: List<ContainerMeta>?
+  containers: List<ContainerMeta>
   apiServiceComponent: Boolean? = false
   maxReplica: Int?
   recommendedReplica: Int? = 1
   optional: Boolean? = false
-  /// Per-component telemetry collection (absent = inherit platform defaults / none).
-  observability: tangram.ComponentObservability?
+  /// Per-component telemetry collection (absent = platform default / none).
+  observability: ComponentObservability?
 }
 
 class SecretValue {
@@ -77,40 +103,32 @@ class AppComponentSpec {
 }
 
 // ---------------------------------------------------------------------------
-// Runtime configuration helpers
+// Helm deployment metadata
 //
-// All values are injected by the platform at deploy time via PKL properties.
+// These are plain data classes, not annotations. The platform evaluates the
+// `charts` expression and JSON-decodes it into HelmChartMeta.
 // ---------------------------------------------------------------------------
-function getDeploymentConfig(): Dynamic =
-  (new json.Parser {}.parse(read("prop:deploymentConfig")) as Dynamic)
+class HelmComponent {
+  name: String
+  apiServiceComponent: Boolean?
+  recommendedReplica: Int?
+  maxReplica: Int?
+  optional: Boolean?
+  initContainers: List<ContainerMeta>?
+  containers: List<ContainerMeta>
+}
 
-function formatCpuQuantity(cpuQuantity: Dynamic) =
-  if (cpuQuantity.unit == "Milli")
-    "\(cpuQuantity.quantity)m"
-  else "\(cpuQuantity.quantity)"
+class CustomResourceRbac {
+  apiGroup: String
+  resources: List<String>
+  verbs: List<String> = List("create", "get", "list", "watch", "update", "delete", "patch")
+}
 
-function formatMemoryQuantity(memoryQuantity: Dynamic) =
-  if (memoryQuantity.unit == "Bytes")
-    "\(memoryQuantity.quantity)"
-  else "\(memoryQuantity.quantity)\(memoryQuantity.unit)"
-
-function getComponentReplicas(component: String) =
-  getDeploymentConfig().components.getProperty(component).replicas
-
-function getComponentContainerK8sCpuQuantity(component: String, container: String) =
-  formatCpuQuantity(
-    getDeploymentConfig().components.getProperty(component).containerResourceRequests.getProperty(container).cpu
-  )
-
-function getComponentContainerK8sMemoryQuantity(component: String, container: String) =
-  formatMemoryQuantity(
-    getDeploymentConfig().components.getProperty(component).containerResourceRequests.getProperty(container).memory
-  )
-
-function getConfig(key: String)         = getDeploymentConfig().settings.getProperty(key)
-function getOptionalConfig(key: String) = getDeploymentConfig().settings.getPropertyOrNull(key)
-
-function getSecret(key: String)         = getDeploymentConfig().secrets.getProperty(key)
-function getOptionalSecret(key: String) = getDeploymentConfig().secrets.getPropertyOrNull(key)
-
-function getImagePullSecretName() = read?("prop:imagePullSecretName")
+class HelmChart {
+  repo: String
+  fullName: String
+  version: String
+  components: List<HelmComponent>
+  observability: ComponentObservability?
+  crds: List<CustomResourceRbac>?
+}

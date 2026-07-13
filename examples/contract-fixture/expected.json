@@ -1,0 +1,554 @@
+{
+  "componentSpec_": {
+    "containers": [
+      {
+        "args": [
+          "--port",
+          "8080"
+        ],
+        "command": [
+          "server"
+        ],
+        "files": [
+          {
+            "content": "key: value",
+            "isSensitive": true,
+            "name": "config",
+            "path": "/etc/app/config.yaml"
+          }
+        ],
+        "ports": [
+          8080
+        ],
+        "variables": {
+          "API_KEY": {
+            "value": "secret-ref"
+          },
+          "LOG_LEVEL": "info"
+        }
+      }
+    ],
+    "initContainers": [
+      {
+        "args": null,
+        "command": [
+          "sh",
+          "-c",
+          "init"
+        ],
+        "files": [],
+        "ports": [],
+        "variables": {
+          "MODE": "init"
+        }
+      }
+    ],
+    "service": {
+      "port": 80,
+      "protocol": "TCP",
+      "targetPort": 8080
+    }
+  },
+  "configField_": {
+    "default": "https://api.example.com",
+    "description": "Upstream API base URL",
+    "example": "https://api.example.com",
+    "name": "apiBase",
+    "required": true
+  },
+  "connectorAuth_": {
+    "httpHeaders": {
+      "Authorization": {
+        "template": "Bearer {{oauth.accessToken}}"
+      }
+    }
+  },
+  "containerMeta_": {
+    "description": "Main container",
+    "image": "example/server:1",
+    "name": "server"
+  },
+  "deploymentContext_": {
+    "cloudProvider": "AWS",
+    "id": "dep-1",
+    "k8sNamespace": "app-ns",
+    "tangramOSPublicUrl": "https://os.example.com",
+    "workspace": "ws-1"
+  },
+  "helmChart_": {
+    "components": [
+      {
+        "apiServiceComponent": true,
+        "containers": [
+          {
+            "description": null,
+            "image": "example/fe:1",
+            "name": "fe"
+          }
+        ],
+        "initContainers": [
+          {
+            "description": "Init container",
+            "image": "example/init:1",
+            "name": "init"
+          }
+        ],
+        "maxReplica": 3,
+        "name": "fe",
+        "optional": false,
+        "recommendedReplica": 1
+      }
+    ],
+    "crds": [
+      {
+        "apiGroup": "starrocks.com",
+        "resources": [
+          "starrocksclusters",
+          "starrocksclusters/status"
+        ],
+        "verbs": [
+          "create",
+          "get",
+          "list",
+          "watch",
+          "update",
+          "delete",
+          "patch"
+        ]
+      }
+    ],
+    "fullName": "example/starrocks",
+    "observability": {
+      "metrics": {
+        "kind": "otlp"
+      },
+      "targetContainers": [
+        "server"
+      ],
+      "traces": "otlp"
+    },
+    "repo": "https://charts.example.com",
+    "version": "1.2.3"
+  },
+  "identity_": {
+    "appTypes": [
+      "NativeApp",
+      "ConnectorApp",
+      "Agent"
+    ],
+    "coreApp": {
+      "group": "ai.tangram-os",
+      "name": "core"
+    },
+    "groupName": "ai.tangram-os",
+    "integrationApps": [
+      {
+        "group": "ai.tangram-os",
+        "name": "sql"
+      },
+      {
+        "group": "ai.tangram-os",
+        "name": "data-catalog"
+      }
+    ],
+    "interfaces": [
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "data-catalog"
+        },
+        "name": "spark-io",
+        "version": "v1"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "sql"
+        },
+        "name": "queryable",
+        "version": "v1"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "data-catalog"
+        },
+        "name": "schema-update-executor",
+        "version": "v1"
+      }
+    ],
+    "specVersion": "v1",
+    "superTypes": [
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Workspace"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Dataset"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "DataCatalog"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Storage"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Database"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Compute"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "SQLEngine"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Workflow"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Dashboard"
+      }
+    ]
+  },
+  "integrationImpl_": {
+    "implementationSpec": {
+      "endpoint": "http://sql.example"
+    },
+    "implementationType": "http",
+    "interface": {
+      "app": {
+        "group": "ai.tangram-os",
+        "name": "sql"
+      },
+      "name": "queryable",
+      "version": "v1"
+    },
+    "version": "v1"
+  },
+  "otlpObservability_": {
+    "metrics": {
+      "kind": "otlp"
+    },
+    "targetContainers": [
+      "server"
+    ],
+    "traces": "otlp"
+  },
+  "prometheusObservability_": {
+    "metrics": {
+      "interval": "15s",
+      "kind": "prometheus",
+      "path": "/custom/metrics",
+      "port": 9090,
+      "sampleLimit": 5000,
+      "scheme": "https"
+    },
+    "targetContainers": null,
+    "traces": "none"
+  },
+  "queryableSpec_": {
+    "sqlCommandPrivilegeMapping": {
+      "SELECT": [
+        "Read"
+      ]
+    }
+  },
+  "serviceTypeDefinition_": {
+    "activeVersion": "v2",
+    "doc": "A record resource",
+    "includeCrud": null,
+    "instanceKey": null,
+    "name": "Record",
+    "scopePrivilegePropagation": {
+      "Admin": [
+        "Read",
+        "Write"
+      ]
+    },
+    "scopeType": {
+      "app": {
+        "group": "ai.tangram-os",
+        "name": "core"
+      },
+      "name": "Workspace"
+    },
+    "sqlTable": null,
+    "superType": {
+      "app": {
+        "group": "ai.tangram-os",
+        "name": "core"
+      },
+      "name": "Dataset"
+    },
+    "versions": [
+      {
+        "actions": [
+          {
+            "additionalPrivileges": null,
+            "doc": "List records",
+            "effect": "Stateless",
+            "handlerMapping": null,
+            "idempotent": true,
+            "name": "List",
+            "openApiMapping": null,
+            "openApiMappings": [
+              {
+                "newName": null,
+                "newNameTemplate": null,
+                "operationId": "listRecordsNative",
+                "resourceId": null,
+                "resourceIdTemplate": null,
+                "resourceName": null,
+                "resourceNameTemplate": null
+              },
+              {
+                "newName": null,
+                "newNameTemplate": null,
+                "operationId": "listRecordsWrapper",
+                "resourceId": null,
+                "resourceIdTemplate": null,
+                "resourceName": null,
+                "resourceNameTemplate": null
+              }
+            ],
+            "privilege": "Read",
+            "requiresConfirmation": null,
+            "skipAudit": null,
+            "skipAuth": null,
+            "sqlMapping": null,
+            "surface": null
+          }
+        ],
+        "presetRoles": null,
+        "served": false,
+        "superTypeVersion": null,
+        "version": "v1"
+      },
+      {
+        "actions": [
+          {
+            "additionalPrivileges": [
+              {
+                "privilege": "Describe",
+                "resourceName": [
+                  {
+                    "name": "workspace",
+                    "type": "PathParam"
+                  }
+                ],
+                "resourceType": "Workspace"
+              }
+            ],
+            "doc": "Rename a record",
+            "effect": "Reversible",
+            "handlerMapping": null,
+            "idempotent": true,
+            "name": "Rename",
+            "openApiMapping": {
+              "newName": {
+                "path": "record.newName",
+                "type": "BodyField"
+              },
+              "newNameTemplate": "{{requestBody.record.newName}}",
+              "operationId": "renameRecord",
+              "resourceId": {
+                "path": "record.id",
+                "type": "BodyField"
+              },
+              "resourceIdTemplate": "{{requestBody.record.id}}",
+              "resourceName": [
+                {
+                  "name": "recordId",
+                  "type": "PathParam"
+                },
+                {
+                  "name": "revision",
+                  "type": "QueryParam"
+                },
+                {
+                  "path": "record.meta[0].name",
+                  "type": "BodyField"
+                },
+                {
+                  "path": "record.id",
+                  "type": "ResponseField"
+                }
+              ],
+              "resourceNameTemplate": "[{{getNameById(requestBody.record.id)}}]"
+            },
+            "openApiMappings": null,
+            "privilege": "Write",
+            "requiresConfirmation": true,
+            "skipAudit": false,
+            "skipAuth": false,
+            "sqlMapping": null,
+            "surface": {
+              "fields": [
+                "id",
+                "name"
+              ],
+              "kind": "card",
+              "title": "Record"
+            }
+          },
+          {
+            "additionalPrivileges": null,
+            "doc": "List records",
+            "effect": "Stateless",
+            "handlerMapping": null,
+            "idempotent": true,
+            "name": "List",
+            "openApiMapping": null,
+            "openApiMappings": [
+              {
+                "newName": null,
+                "newNameTemplate": null,
+                "operationId": "listRecordsNative",
+                "resourceId": null,
+                "resourceIdTemplate": null,
+                "resourceName": null,
+                "resourceNameTemplate": null
+              },
+              {
+                "newName": null,
+                "newNameTemplate": null,
+                "operationId": "listRecordsWrapper",
+                "resourceId": null,
+                "resourceIdTemplate": null,
+                "resourceName": null,
+                "resourceNameTemplate": null
+              }
+            ],
+            "privilege": "Read",
+            "requiresConfirmation": null,
+            "skipAudit": null,
+            "skipAuth": null,
+            "sqlMapping": null,
+            "surface": null
+          }
+        ],
+        "presetRoles": [
+          {
+            "description": "Full control of the record",
+            "name": "owner",
+            "permissions": [
+              "*"
+            ]
+          }
+        ],
+        "served": true,
+        "superTypeVersion": "v1",
+        "version": "v2"
+      }
+    ]
+  },
+  "sqlBackedTypeDefinition_": {
+    "activeVersion": "v1",
+    "doc": "A SQL-backed note",
+    "includeCrud": [
+      "Create",
+      "List"
+    ],
+    "instanceKey": [
+      "id"
+    ],
+    "name": "Note",
+    "scopePrivilegePropagation": null,
+    "scopeType": null,
+    "sqlTable": "notes",
+    "superType": null,
+    "versions": [
+      {
+        "actions": [
+          {
+            "additionalPrivileges": null,
+            "doc": "Approve a note",
+            "effect": "Reversible",
+            "handlerMapping": null,
+            "idempotent": false,
+            "name": "Approve",
+            "openApiMapping": null,
+            "openApiMappings": null,
+            "privilege": "Approve",
+            "requiresConfirmation": false,
+            "skipAudit": null,
+            "skipAuth": null,
+            "sqlMapping": {
+              "params": {
+                "id": {
+                  "type": "bigint"
+                }
+              },
+              "statement": "update notes set done = true where id = :id"
+            },
+            "surface": null
+          },
+          {
+            "additionalPrivileges": null,
+            "doc": "Notify the owner",
+            "effect": "Irreversible",
+            "handlerMapping": {
+              "handler": "notes.notify",
+              "params": {
+                "id": {
+                  "type": "bigint"
+                }
+              }
+            },
+            "idempotent": false,
+            "name": "Notify",
+            "openApiMapping": null,
+            "openApiMappings": null,
+            "privilege": null,
+            "requiresConfirmation": null,
+            "skipAudit": null,
+            "skipAuth": null,
+            "sqlMapping": null,
+            "surface": null
+          }
+        ],
+        "presetRoles": null,
+        "served": true,
+        "superTypeVersion": null,
+        "version": "v1"
+      }
+    ]
+  },
+  "uriPattern_": {
+    "pattern": "/app/*"
+  }
+}
