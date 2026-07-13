@@ -10,6 +10,35 @@ secrets = List(
   }
 )
 ```
+
+# OAuth-backed connectors
+
+OAuth declarations live in the standalone `oauth.pkl` module. Connector
+request-authentication templates remain in `core.pkl` because API-key and
+OAuth-backed connectors share them:
+
+```pkl
+import "@tangram-app-manifest/core.pkl" as tangram
+import "@tangram-app-manifest/oauth.pkl" as oauthTypes
+
+auth = new tangram.ConnectorAuth {
+  httpHeaders = Map(
+    "Authorization",
+    new tangram.Template { template = "Bearer {{oauth.accessToken}}" }
+  )
+}
+
+oauth = new oauthTypes.OAuth2AuthCode {
+  authorizationUrl = "https://provider.example.com/oauth/authorize"
+  tokenUrl = "https://provider.example.com/oauth/token"
+  scopes = List("records.read")
+  clientIdSecret = "providerClientId"
+  clientSecretSecret = "providerClientSecret"
+  callbackPath = "/api/core/v1/connector-oauth/callback/com.example/records"
+  connectionScope = new oauthTypes.WorkspaceOnly {}
+}
+```
+
 # Publishing UI components:
 An app publishes reusable UI components by shipping `manifests/ui/components.pkl`
 (amends `ui.pkl`; see `examples/ui-components/`):

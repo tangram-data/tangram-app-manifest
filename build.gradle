@@ -42,5 +42,13 @@ pkl {
       expression = 'new JsonRenderer { omitNullProperties = false }.renderValue(manifest)'
       outputFile = file('build/examples/app-package.json')
     }
+    // Renders a representative OAuth-backed connector declaration. This
+    // verifies that core connector auth and the standalone OAuth vocabulary
+    // compose into the JSON shape consumed by the platform manifest loader.
+    register('evalOAuthConnectorExample') {
+      sourceModules = [file('examples/oauth-connector/manifests/api/spec.pkl')]
+      expression = 'new JsonRenderer { omitNullProperties = false }.renderValue(Map("auth", auth, "oauth", oauth, "oauthWithDefaults", oauthWithDefaults, "tenantSources", tenantSources, "connectionScopes", connectionScopes))'
+      outputFile = file('build/examples/oauth-connector.json')
+    }
   }
 }
