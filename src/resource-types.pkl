@@ -166,18 +166,74 @@ class ResourcePrivilegeRequirement {
 // Action
 // ---------------------------------------------------------------------------
 
-/// Inline chat render hint for an action's result. The chat host renders the
-/// result accordingly (a card/picker/… instead of raw text/JSON). Presentation
-/// only — it never affects routing, IAM, or the result data. Omit for plain
-/// text/JSON output.
+/// Legacy source-compatible surface bag. Deprecated: new manifests should use
+/// the concrete variants below. It remains in ActionPresentation during the
+/// migration window so existing `new ActionSurface { ... }` declarations keep
+/// evaluating; its JSON shape is identical to the corresponding typed variant.
 class ActionSurface {
-  /// How the chat host renders this action's result inline.
   kind: "card"|"picker"|"confirm"|"form"|"none"
-  /// Optional title for card-style surfaces.
   title: String?
-  /// Output fields to display (card). Omit to show all top-level output fields.
   fields: List<String>?
 }
+
+/// Typed presentation variants. Fixed discriminators keep the existing JSON
+/// wire shape while making new declarations precise.
+class CardSurface {
+  fixed kind: "card" = "card"
+  title: String?
+  fields: List<String>?
+}
+
+class PickerSurface {
+  fixed kind: "picker" = "picker"
+  title: String?
+  fields: List<String>?
+}
+
+class ConfirmSurface {
+  fixed kind: "confirm" = "confirm"
+  title: String?
+  fields: List<String>?
+}
+
+class FormSurface {
+  fixed kind: "form" = "form"
+  title: String?
+  fields: List<String>?
+}
+
+class NoneSurface {
+  fixed kind: "none" = "none"
+}
+
+/// Source for one component input. Sources are deliberately selection-only:
+/// no templates, functions, wildcards, or transforms.
+abstract class ComponentInputSource {
+  source: String
+}
+
+class FromArg extends ComponentInputSource {
+  source: "arg" = "arg"
+  /// Path segments within the generated LLM-facing argument object, e.g.
+  /// List("parameters", "id").
+  path: List<String>(length > 0, every((segment) -> !segment.isEmpty))
+}
+
+class Literal extends ComponentInputSource {
+  source: "literal" = "literal"
+  value: Any
+}
+
+class ComponentSurface {
+  fixed kind: "component" = "component"
+  /// Manifest-local component name; the platform resolves it within this app.
+  component: String(!isEmpty)
+  displayMode: "panel"|"inline" = "panel"
+  inputs: Mapping<String, ComponentInputSource> = new Mapping {}
+}
+
+typealias ActionPresentation =
+  ActionSurface|CardSurface|PickerSurface|ConfirmSurface|FormSurface|NoneSurface|ComponentSurface
 
 class Action {
   name: String
@@ -218,7 +274,7 @@ class Action {
     this == null || additionalPrivileges == null
   )
   /// Optional inline chat render hint for this action's result.
-  surface: ActionSurface?
+  surface: ActionPresentation?
 }
 
 // ---------------------------------------------------------------------------

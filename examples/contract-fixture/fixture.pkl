@@ -41,8 +41,7 @@ local openApiAction = new resources.Action {
     resourceIdTemplate = "{{requestBody.record.id}}"
     newNameTemplate = "{{requestBody.record.newName}}"
   }
-  surface = new resources.ActionSurface {
-    kind = "card"
+  surface = new resources.CardSurface {
     title = "Record"
     fields = List("id", "name")
   }
