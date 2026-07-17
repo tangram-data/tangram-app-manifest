@@ -35,10 +35,14 @@ Privilege: _PrivilegeConstants = new _PrivilegeConstants {}
 //   Reversible   — mutates state; prior state restorable; audit always recorded
 //   Irreversible — mutates state; cannot be undone; AI requires confirmation; audit always recorded
 // ---------------------------------------------------------------------------
+/// Closed effect set — the platform decodes `Action.effect` into a closed enum,
+/// so any other string fails at install; the schema rejects it at authoring time.
+typealias ActionEffect = "Stateless"|"Reversible"|"Irreversible"
+
 class _EffectConstants {
-  Stateless:    String = "Stateless"
-  Reversible:   String = "Reversible"
-  Irreversible: String = "Irreversible"
+  Stateless:    ActionEffect = "Stateless"
+  Reversible:   ActionEffect = "Reversible"
+  Irreversible: ActionEffect = "Irreversible"
 }
 Effect: _EffectConstants = new _EffectConstants {}
 
@@ -225,7 +229,7 @@ class Action {
   /// Defaults to the action name when it matches a well-known privilege.
   privilege: String?
   /// Characterises the action's effect: Stateless, Reversible, or Irreversible.
-  effect: String
+  effect: ActionEffect
   idempotent: Boolean
   doc: String
   skipAuth: Boolean?

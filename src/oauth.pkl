@@ -162,17 +162,18 @@ class SelectableScope extends ConnectionScope {
 // OAuth2 authorization-code-flow declaration.
 // ---------------------------------------------------------------------------
 class OAuth2AuthCode {
-  /// Provider's authorize endpoint (https only).
-  authorizationUrl: String
+  /// Provider's authorize endpoint (https only — enforced here and by the
+  /// platform validator).
+  authorizationUrl: String(startsWith("https://"))
 
   /// Provider's token endpoint (https only). Used for the initial
   /// authorization_code exchange AND for refresh_token grants.
-  tokenUrl: String
+  tokenUrl: String(startsWith("https://"))
 
   /// Provider's revocation endpoint. When set, disconnect calls it
   /// best-effort before clearing local tokens — so consent doesn't linger
   /// upstream after the workspace removes the connection.
-  revocationUrl: String?
+  revocationUrl: String(startsWith("https://"))?
 
   /// Scopes requested at authorize time. The platform compares this list
   /// against the granted scopes on each connection load and flags
@@ -185,7 +186,8 @@ class OAuth2AuthCode {
   clientIdSecret: String
 
   /// Name of the GLOBAL system secret holding the OAuth client_secret.
-  clientSecretSecret: String
+  /// Must differ from clientIdSecret.
+  clientSecretSecret: String(this != clientIdSecret)
 
   /// Path Tangram serves the callback on AND sends as redirect_uri to the
   /// provider. The platform validator enforces the canonical shape
@@ -219,7 +221,7 @@ class OAuth2AuthCode {
   /// cushions clock skew between Tangram and the provider; 5 min routinely
   /// loses to skew and forces a 401-driven retry on the proxy hot path.
   /// Must be in (0, 3600).
-  refreshWindowSeconds: Int = 600
+  refreshWindowSeconds: Int(this > 0, this < 3600) = 600
 
   /// Which connection modes the connector author supports. The current
   /// runtime can start WorkspaceShared and PerUser connections; NamedTenant

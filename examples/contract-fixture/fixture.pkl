@@ -128,6 +128,31 @@ local sqlBackedTypeDefinition = new resources.ResourceTypeDefinition {
   })
 }
 
+// --- action presentations ----------------------------------------------------
+// One value per variant (Card is covered on openApiAction above): any change
+// to a discriminator or field name is contract drift.
+
+local presentations = List(
+  new resources.PickerPresentation {
+    title = "Pick a record"
+    fields = List("id", "name")
+  },
+  new resources.ConfirmPresentation {
+    title = "Confirm rename"
+  },
+  new resources.FormPresentation {
+    fields = List("name", "revision")
+  },
+  new resources.ComponentPresentation {
+    component = "mail-viewer"
+    preferredDisplayMode = "inline"
+    inputs {
+      ["messageId"] = new resources.FromArg { path = List("parameters", "id") }
+      ["mode"] = new resources.Literal { value = "read-only" }
+    }
+  }
+)
+
 // --- integration -------------------------------------------------------------
 
 local integrationImpl = new integration.IntegrationImplementation {
@@ -270,6 +295,7 @@ local deploymentContext = new deployment.DeploymentContext {
 fixture = new Dynamic {
   identity_ = identity
   serviceTypeDefinition_ = serviceTypeDefinition
+  presentations_ = presentations
   sqlBackedTypeDefinition_ = sqlBackedTypeDefinition
   integrationImpl_ = integrationImpl
   queryableSpec_ = queryableSpec

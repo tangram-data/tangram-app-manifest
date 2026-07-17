@@ -302,6 +302,47 @@
     "instanceKey": null,
     "includeCrud": null
   },
+  "presentations_": [
+    {
+      "kind": "picker",
+      "title": "Pick a record",
+      "fields": [
+        "id",
+        "name"
+      ]
+    },
+    {
+      "kind": "confirm",
+      "title": "Confirm rename",
+      "fields": null
+    },
+    {
+      "kind": "form",
+      "title": null,
+      "fields": [
+        "name",
+        "revision"
+      ]
+    },
+    {
+      "kind": "component",
+      "component": "mail-viewer",
+      "preferredDisplayMode": "inline",
+      "inputs": {
+        "messageId": {
+          "source": "arg",
+          "path": [
+            "parameters",
+            "id"
+          ]
+        },
+        "mode": {
+          "source": "literal",
+          "value": "read-only"
+        }
+      }
+    }
+  ],
   "sqlBackedTypeDefinition_": {
     "name": "Note",
     "doc": "A SQL-backed note",

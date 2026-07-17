@@ -86,5 +86,31 @@ is a contract JSON declaring `inputs`, named `bindings` (semantic/sql/action),
 
 `./gradlew evalUiComponentsExample` renders the example the way the platform loader does.
 
+# Releasing
+
+Releases are cut by pushing a tag named `tangram-app-manifest@<version>`;
+CI (`.github/workflows/release.yaml`) runs `./gradlew createPackage` and
+uploads the package to the matching GitHub release. Before tagging:
+
+1. `./gradlew verifyContractFixture evalUiComponentsExample evalAppPackageExample evalOAuthConnectorExample`
+2. If the contract fixture diff is intentional schema drift, regenerate with
+   `./gradlew updateContractFixtureSnapshot` and review the diff in the commit.
+3. Bump the major version for any change to a serialized field name, a
+   discriminator value, or a removed/renamed module — consumers pin exact
+   versions.
+
+Consumers depend on the released package via:
+
+```pkl
+dependencies {
+  ["tangram-app-manifest"] {
+    uri = "package://pkg.pkl-lang.org/github.com/tangram-data/tangram-app-manifest/tangram-app-manifest@<version>"
+  }
+}
+```
+
+After publishing, re-run `pkl project resolve` in each consuming repo so
+`PklProject.deps.json` records the published artifact's checksum.
+
 # Reference
 [pkl-lang: Package Import](https://pkl-lang.org/main/current/language-reference/index.html#import-clause)
