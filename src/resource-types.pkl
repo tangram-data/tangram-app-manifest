@@ -166,74 +166,58 @@ class ResourcePrivilegeRequirement {
 // Action
 // ---------------------------------------------------------------------------
 
-/// Legacy source-compatible surface bag. Deprecated: new manifests should use
-/// the concrete variants below. It remains in ActionPresentation during the
-/// migration window so existing `new ActionSurface { ... }` declarations keep
-/// evaluating; its JSON shape is identical to the corresponding typed variant.
-class ActionSurface {
-  kind: "card"|"picker"|"confirm"|"form"|"none"
-  title: String?
-  fields: List<String>?
-}
+/// Typed action-result presentation. `kind` is persisted as the wire
+/// discriminator; concrete subclasses fix it to one supported renderer.
+abstract class ActionPresentation
 
-/// Typed presentation variants. Fixed discriminators keep the existing JSON
-/// wire shape while making new declarations precise.
-class CardSurface {
+class CardPresentation extends ActionPresentation {
   fixed kind: "card" = "card"
   title: String?
   fields: List<String>?
 }
 
-class PickerSurface {
+class PickerPresentation extends ActionPresentation {
   fixed kind: "picker" = "picker"
   title: String?
   fields: List<String>?
 }
 
-class ConfirmSurface {
+class ConfirmPresentation extends ActionPresentation {
   fixed kind: "confirm" = "confirm"
   title: String?
   fields: List<String>?
 }
 
-class FormSurface {
+class FormPresentation extends ActionPresentation {
   fixed kind: "form" = "form"
   title: String?
   fields: List<String>?
 }
 
-class NoneSurface {
-  fixed kind: "none" = "none"
-}
-
 /// Source for one component input. Sources are deliberately selection-only:
 /// no templates, functions, wildcards, or transforms.
-abstract class ComponentInputSource {
-  source: String
-}
+abstract class PresentationInputSource
 
-class FromArg extends ComponentInputSource {
-  source: "arg" = "arg"
+class FromArg extends PresentationInputSource {
+  fixed source: "arg" = "arg"
   /// Path segments within the generated LLM-facing argument object, e.g.
   /// List("parameters", "id").
   path: List<String>(length > 0, every((segment) -> !segment.isEmpty))
 }
 
-class Literal extends ComponentInputSource {
-  source: "literal" = "literal"
+class Literal extends PresentationInputSource {
+  fixed source: "literal" = "literal"
   value: Any
 }
 
-class ComponentSurface {
+class ComponentPresentation extends ActionPresentation {
   fixed kind: "component" = "component"
   /// Manifest-local component name; the platform resolves it within this app.
   component: String(!isEmpty)
-  displayMode: "panel"|"inline" = "panel"
-  inputs: Mapping<String, ComponentInputSource> = new Mapping {}
+  /// Placement preference only; host policy may override it.
+  preferredDisplayMode: "panel"|"inline" = "panel"
+  inputs: Mapping<String, PresentationInputSource> = new Mapping {}
 }
-
-typealias ActionPresentation =
-  ActionSurface|CardSurface|PickerSurface|ConfirmSurface|FormSurface|NoneSurface|ComponentSurface
 
 class Action {
   name: String
@@ -273,8 +257,8 @@ class Action {
     this == null || (skipAuth == null && skipAudit == null),
     this == null || additionalPrivileges == null
   )
-  /// Optional inline chat render hint for this action's result.
-  surface: ActionPresentation?
+  /// Optional typed presentation for this action's result.
+  presentation: ActionPresentation?
 }
 
 // ---------------------------------------------------------------------------

@@ -127,7 +127,7 @@ Imports `manifest.pkl` and owns the resource, action, and IAM vocabulary:
 - `SqlMapping`
 - `HandlerMapping`
 - `ResourcePrivilegeRequirement`
-- `ActionSurface`
+- `ActionPresentation`
 - `Action`
 - `Role`
 - `ResourceTypeVersion`
@@ -285,12 +285,11 @@ Before moving declarations:
 3. Store canonical snapshots or a comparison script.
 4. Include defaults, null handling, constraints, and every discriminator.
 
-The checked-in `examples/contract-fixture/pre-2.0.pkl` imports the published
-`1.1.3` package and is the reproducible source of `expected.json`. Both it and
-the refactored fixture render with `omitNullProperties = false`; Gradle's
-`verifyContractFixture` compares all three values. Run
-`updateContractFixtureSnapshot` only when intentionally regenerating the
-snapshot from `1.1.3`.
+The checked-in `examples/contract-fixture/fixture.pkl` is the source of
+`expected.json` and renders with `omitNullProperties = false`. Gradle's
+`verifyContractFixture` compares the current render with that snapshot. Run
+`updateContractFixtureSnapshot` only when intentionally accepting contract
+drift, including a major-version break.
 
 Fixtures should cover:
 
