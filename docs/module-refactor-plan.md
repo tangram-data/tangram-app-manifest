@@ -2,10 +2,11 @@
 
 ## Status
 
-Implementation in progress for `tangram-app-manifest@2.0.0`. The package
-module split, reproducible contract fixtures, loader annotation discovery, and
-CLI templates are implemented locally; external consumers still need to move
-to the published package.
+Historical: the `2.0.0` module split described here is complete. Later
+sections mentioning `app-package.pkl` or the `NativeApp`/`ConnectorApp` type
+constants predate the unification release, which removed both in favor of the
+`App`/`Connector`/`Agent` types (see `docs/app-manifest-unification-design.md`
+in the tangram repo).
 
 This plan deliberately does not preserve source compatibility with
 `@tangram-app-manifest/core.pkl`. Consumers will migrate to explicit,

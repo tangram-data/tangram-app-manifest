@@ -95,8 +95,10 @@ class UIComponentContract {
 /// relative to the `manifests/ui/` directory and must stay inside it — absolute
 /// paths and `..` traversal are rejected at indexing time.
 class AppUIComponentSpec {
-  /// Component name; catalogued as `{group}/{app}/{name}` (no cross-app collisions).
-  name: String(!isEmpty)
+  /// Component name; catalogued as `{group}/{app}/{name}` (no cross-app
+  /// collisions). A lowercase slug: it is also the component's source
+  /// directory name under `components/`, so path-unsafe names are rejected.
+  name: String(matches(Regex(#"[a-z0-9]([-a-z0-9]*[a-z0-9])?"#)))
 
   /// Authoring tier. `declarative` requires a `spec` path and forbids `entry`;
   /// `sandboxed` requires an `entry` of the form
@@ -107,7 +109,8 @@ class AppUIComponentSpec {
     this != "declarative" || (spec is String && entry == null),
     this != "sandboxed" ||
       (entry != null && entry.startsWith("components/\(name)/") &&
-        !entry.substring("components/\(name)/".length, entry.length).contains("/"))
+        let (file = entry.substring("components/\(name)/".length, entry.length))
+          !file.isEmpty && !file.contains("/"))
   )
 
   /// One-line summary of what the component shows. Drives agent discovery

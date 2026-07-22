@@ -14,20 +14,23 @@ secrets = List(
 
 ## Modules
 
-- `manifest.pkl` — app identity, app types, and shared configuration fields
+- `manifest.pkl` — app identity, the `App`/`Connector`/`Agent` types, and shared configuration fields
 - `resource-types.pkl` — resources, actions, mappings, roles, and privileges
 - `integration.pkl` — integration interfaces and implementations
 - `connector.pkl` — request authentication headers
 - `oauth.pkl` — OAuth connection lifecycle and scopes
-- `deployment.pkl` — deployment, telemetry, component, and Helm schemas
+- `api.pkl` — the producer-agnostic `ServiceBackend` API binding
+- `deployment.pkl` — deployment, telemetry, component, source-artifact, and Helm schemas
 - `deployment-runtime.pkl` — injected deployment context and runtime helpers
 - `ui.pkl` — UI components and proxy URI patterns
 - `agent.pkl` — agent model, tool, and skill declarations
 - `infra.pkl` — infrastructure claims and injected resource access
-- `app-package.pkl` — workspace-built app package schema
 
 `core.pkl` was removed in `2.0.0`; consumers must import the owning modules
-directly.
+directly. The unification release removed `app-package.pkl` (the built-app
+package vocabulary) together with the `NativeApp`/`ConnectorApp`/`PlatformApp`
+application types — every application is an `App`, `Connector`, or `Agent`
+(see `docs/app-manifest-unification-design.md` in the tangram repo).
 
 # OAuth-backed connectors
 
@@ -67,23 +70,28 @@ components: Listing<ui.AppUIComponentSpec> = new Listing {
   new ui.AppUIComponentSpec {
     name = "top-accounts"
     kind = "declarative"
-    spec = "components/top-accounts.json"
+    spec = "components/top-accounts/top-accounts.json"
     surfaces { "chat"; "dashboard"; "app-page" }
   }
   new ui.AppUIComponentSpec {
     name = "churn-explorer"
     kind = "sandboxed"
-    entry = "components/churn-explorer.tsx"                  // compiled to a bundle at publish
-    spec = "components/churn-explorer.contract.json"         // optional data contract
+    // `components/<component-name>/<entry-file>`; compiled to a bundle at publish
+    entry = "components/churn-explorer/churn-explorer.tsx"
+    spec = "components/churn-explorer/churn-explorer.contract.json" // optional data contract
     surfaces { "chat"; "dashboard"; "app-page" }
   }
 }
 ```
 For `kind = "sandboxed"`, `entry` is the TSX/JSX source and the optional `spec`
-is a contract JSON declaring `inputs`, named `bindings` (semantic/sql/action),
+is a contract JSON declaring `inputs`, named data `bindings` (semantic/sql),
 `outputs`, and optionally `title` — never `bundle` or `view` (the platform fills
-`bundle.ref` from the compiled entry). Artifact paths in `ui/spec.pkl` are
-relative to the containing `manifests/ui/` directory.
+`bundle.ref` from the compiled entry). Actions are not bindings: sandboxed
+source invokes its own application's actions through the governed
+`window.tangram.performAction({ resourceType; action }, args)` SDK call.
+Artifact paths in `ui/spec.pkl` are relative to the containing `manifests/ui/`
+directory, and a sandboxed component's entry must live in its own
+`components/<component-name>/` directory.
 
 `./gradlew evalUiComponentsExample` renders the example the way the platform loader does.
 
@@ -93,7 +101,7 @@ Releases are cut by pushing a tag named `tangram-app-manifest@<version>`;
 CI (`.github/workflows/release.yaml`) runs `./gradlew createPackage` and
 uploads the package to the matching GitHub release. Before tagging:
 
-1. `./gradlew verifyContractFixture evalUiComponentsExample evalAppPackageExample evalOAuthConnectorExample`
+1. `./gradlew verifyContractFixture evalUiComponentsExample evalOAuthConnectorExample`
 2. If the contract fixture diff is intentional schema drift, regenerate with
    `./gradlew updateContractFixtureSnapshot` and review the diff in the commit.
 3. Bump the major version for any change to a serialized field name, a

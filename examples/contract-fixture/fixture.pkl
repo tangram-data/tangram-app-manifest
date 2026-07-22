@@ -300,6 +300,31 @@ local componentMeta = new deployment.AppComponentMeta {
   recommendedReplica = 2
 }
 
+// Runtime spec paired with componentMeta: position zero is the synthesized
+// source container, position one the explicit `server` sidecar; the backend
+// below binds to this component's Service name and Service port.
+local sourceComponentSpec = new deployment.AppComponentSpec {
+  service = new deployment.AppComponentServiceSpec {
+    port = 8080
+    targetPort = 8080
+    protocol = "TCP"
+  }
+  containers = List(
+    new deployment.AppContainerSpec {
+      ports = List(8080)
+      variables = Map("LOG_LEVEL", "info")
+      files = List()
+      command = List()
+    },
+    new deployment.AppContainerSpec {
+      ports = List(9100)
+      variables = Map("MODE", "sidecar")
+      files = List()
+      command = List()
+    }
+  )
+}
+
 local serviceBackend = new api.ServiceBackend {
   serviceName = "orders-api"
   port = 8080
@@ -331,6 +356,7 @@ fixture = new Dynamic {
   componentSpec_ = componentSpec
   containerMeta_ = containerMeta
   componentMeta_ = componentMeta
+  sourceComponentSpec_ = sourceComponentSpec
   serviceBackend_ = serviceBackend
   deploymentContext_ = deploymentContext
 }

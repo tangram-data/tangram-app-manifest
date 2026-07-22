@@ -613,6 +613,38 @@
     "optional": false,
     "observability": null
   },
+  "sourceComponentSpec_": {
+    "service": {
+      "port": 8080,
+      "targetPort": 8080,
+      "protocol": "TCP"
+    },
+    "initContainers": null,
+    "containers": [
+      {
+        "ports": [
+          8080
+        ],
+        "variables": {
+          "LOG_LEVEL": "info"
+        },
+        "files": [],
+        "command": [],
+        "args": null
+      },
+      {
+        "ports": [
+          9100
+        ],
+        "variables": {
+          "MODE": "sidecar"
+        },
+        "files": [],
+        "command": [],
+        "args": null
+      }
+    ]
+  },
   "serviceBackend_": {
     "serviceName": "orders-api",
     "port": 8080
