@@ -35,15 +35,6 @@ pkl {
       expression = 'new JsonRenderer { omitNullProperties = false }.renderValue(components)'
       outputFile = file('build/examples/ui-components.json')
     }
-    // Renders the example built-app package manifest (the package.json shape
-    // the tangram-os exporter emits); fails on app-package.pkl schema drift.
-    // The schema itself travels as migrations/V{n}__migration.sql files
-    // beside it — plain SQL, nothing to render.
-    register('evalAppPackageExample') {
-      sourceModules = [file('examples/app-package/feedback/package.pkl')]
-      expression = 'new JsonRenderer { omitNullProperties = false }.renderValue(manifest)'
-      outputFile = file('build/examples/app-package.json')
-    }
     // Renders a representative OAuth-backed connector declaration. This
     // verifies that connector auth and the standalone OAuth vocabulary
     // compose into the JSON shape consumed by the platform manifest loader.

@@ -29,10 +29,14 @@ class ConfigField {
   example: String?
 }
 
-NATIVE_APP_TYPE    = "NativeApp"
-CONNECTOR_APP_TYPE = "ConnectorApp"
-// Agent apps are LLM-driven services declared in `manifests/agent/spec.pkl`
-// (see `agent.pkl`). They have no HTTP service of their own; tools are
-// declared at the manifest level and bound to backends at install time.
-AGENT_APP_TYPE     = "Agent"
-typealias AppType  = "NativeApp"|"ConnectorApp"|"Agent"
+// The three public application types. `App` is any user-facing application,
+// whatever mix of components, Helm releases, and dependency claims it deploys.
+// `Connector` integrates a remote system and owns connector endpoint/auth/
+// credential semantics. `Agent` is an instruction/model/skill-driven runtime
+// declared in `manifests/agent/spec.pkl` (see `agent.pkl`).
+// The removed `NativeApp`, `ConnectorApp`, and `PlatformApp` values are
+// rejected; there is no deployment-mode taxonomy in application identity.
+APP_TYPE       = "App"
+CONNECTOR_TYPE = "Connector"
+AGENT_TYPE     = "Agent"
+typealias AppType = "App"|"Connector"|"Agent"

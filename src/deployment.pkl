@@ -48,7 +48,8 @@ class ComponentObservability {
 // ---------------------------------------------------------------------------
 class ContainerMeta {
   name: String
-  image: String
+  /// Immutable `repository@sha256:...` reference; mutable tags are rejected.
+  image: String(contains("@sha256:"))
   description: String?
 }
 
@@ -72,11 +73,37 @@ class AppComponentServiceSpec {
   protocol: String
 }
 
+/// Closed set of source runtimes. Each identifier maps in platform
+/// configuration to an immutable builder/base-image recipe; adding a value is
+/// a platform capability release.
+typealias SourceRuntime = "python-3.12"
+
+/// A component's single source-built primary container. Every field must be a
+/// schema-time constant literal — no settings, secrets, dependency outputs, or
+/// deployment context. By convention the complete source tree lives under
+/// `deployment/source/<component-name>/`; `sourceDir` (relative to
+/// `deployment/`, package-local) overrides that for monorepo layouts.
+class SourceArtifact {
+  /// Name of the synthesized primary container (position zero in the
+  /// normalized container sequence). Unique within the component.
+  containerName: String(!isEmpty)
+  runtime: SourceRuntime
+  /// Interpreted by the runtime contract; for `python-3.12` a dotted module
+  /// name resolved under the source `src/` tree, launched as `python -m <entry>`.
+  entry: String(!isEmpty)
+  /// Relative to the source directory; `python-3.12` requires a `uv.lock`.
+  lockfile: String(!isEmpty)
+  sourceDir: String(!isEmpty)?
+}
+
 class AppComponentMeta extends Annotation {
-  name: String
+  /// Also the component's Kubernetes Service name, so it must be a DNS-1035 label.
+  name: String(matches(Regex(#"[a-z]([-a-z0-9]{0,61}[a-z0-9])?"#)))
   initContainers: List<ContainerMeta>?
   containers: List<ContainerMeta>
-  apiServiceComponent: Boolean? = false
+  /// When present, Tangram builds this source into the component's primary
+  /// container; `containers` then describe prebuilt sidecars.
+  sourceArtifact: SourceArtifact?
   maxReplica: Int?
   recommendedReplica: Int? = 1
   optional: Boolean? = false
@@ -110,12 +137,22 @@ class AppComponentSpec {
 // ---------------------------------------------------------------------------
 class HelmComponent {
   name: String
-  apiServiceComponent: Boolean?
   recommendedReplica: Int?
   maxReplica: Int?
   optional: Boolean?
   initContainers: List<ContainerMeta>?
   containers: List<ContainerMeta>
+}
+
+/// Static request for high-impact Helm capabilities. The request is not
+/// permission: registration records it, installation preflight compares it
+/// with target policy, the approval artifact shows it, and rendered output
+/// may not exceed it — an unrequested hook, CRD, or cluster-scoped kind is a
+/// hard planning failure.
+class HelmRequestedCapabilities {
+  hooks: Boolean = false
+  crds: Boolean = false
+  clusterScopedKinds: Set<String> = Set()
 }
 
 class CustomResourceRbac {
@@ -128,6 +165,7 @@ class HelmChart {
   repo: String
   fullName: String
   version: String
+  requestedCapabilities: HelmRequestedCapabilities = new HelmRequestedCapabilities {}
   components: List<HelmComponent>
   observability: ComponentObservability?
   crds: List<CustomResourceRbac>?

@@ -10,6 +10,7 @@ import "../../src/integration.pkl" as integration
 import "../../src/connector.pkl" as connector
 import "../../src/ui.pkl" as ui
 import "../../src/deployment.pkl" as deployment
+import "../../src/api.pkl" as api
 
 // --- resource types / actions / IAM -----------------------------------------
 
@@ -204,20 +205,24 @@ local helmChart = new deployment.HelmChart {
   repo = "https://charts.example.com"
   fullName = "example/starrocks"
   version = "1.2.3"
+  requestedCapabilities = new deployment.HelmRequestedCapabilities {
+    hooks = true
+    crds = true
+    clusterScopedKinds = Set("ClusterRole")
+  }
   components = List(new deployment.HelmComponent {
     name = "fe"
-    apiServiceComponent = true
     recommendedReplica = 1
     maxReplica = 3
     optional = false
     initContainers = List(new deployment.ContainerMeta {
       name = "init"
-      image = "example/init:1"
+      image = "example/init@sha256:1111111111111111111111111111111111111111111111111111111111111111"
       description = "Init container"
     })
     containers = List(new deployment.ContainerMeta {
       name = "fe"
-      image = "example/fe:1"
+      image = "example/fe@sha256:2222222222222222222222222222222222222222222222222222222222222222"
     })
   })
   observability = otlpObservability
@@ -235,7 +240,7 @@ local identity = new Dynamic {
   specVersion = manifest.MANIFEST_SPEC_VERSION
   groupName = manifest.TANGRAM_OS_GROUP_NAME
   coreApp = manifest.TANGRAM_OS_CORE_APP
-  appTypes = List(manifest.NATIVE_APP_TYPE, manifest.CONNECTOR_APP_TYPE, manifest.AGENT_APP_TYPE)
+  appTypes = List(manifest.APP_TYPE, manifest.CONNECTOR_TYPE, manifest.AGENT_TYPE)
   superTypes = List(
     resources.WORKSPACE_TYPE, resources.DATASET_TYPE, resources.CATALOG_TYPE,
     resources.STORAGE_TYPE, resources.DATABASE_TYPE, resources.COMPUTE_TYPE,
@@ -278,8 +283,26 @@ local componentSpec = new deployment.AppComponentSpec {
 
 local containerMeta = new deployment.ContainerMeta {
   name = "server"
-  image = "example/server:1"
+  image = "example/server@sha256:3333333333333333333333333333333333333333333333333333333333333333"
   description = "Main container"
+}
+
+local componentMeta = new deployment.AppComponentMeta {
+  name = "orders-api"
+  sourceArtifact = new deployment.SourceArtifact {
+    containerName = "api"
+    runtime = "python-3.12"
+    entry = "orders_api.main"
+    lockfile = "uv.lock"
+    sourceDir = "source/orders-api"
+  }
+  containers = List(containerMeta)
+  recommendedReplica = 2
+}
+
+local serviceBackend = new api.ServiceBackend {
+  serviceName = "orders-api"
+  port = 8080
 }
 
 local deploymentContext = new deployment.DeploymentContext {
@@ -307,5 +330,7 @@ fixture = new Dynamic {
   uriPattern_ = uriPattern
   componentSpec_ = componentSpec
   containerMeta_ = containerMeta
+  componentMeta_ = componentMeta
+  serviceBackend_ = serviceBackend
   deploymentContext_ = deploymentContext
 }

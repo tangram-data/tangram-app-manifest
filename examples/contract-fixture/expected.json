@@ -7,8 +7,8 @@
       "name": "core"
     },
     "appTypes": [
-      "NativeApp",
-      "ConnectorApp",
+      "App",
+      "Connector",
       "Agent"
     ],
     "superTypes": [
@@ -476,24 +476,30 @@
     "repo": "https://charts.example.com",
     "fullName": "example/starrocks",
     "version": "1.2.3",
+    "requestedCapabilities": {
+      "hooks": true,
+      "crds": true,
+      "clusterScopedKinds": [
+        "ClusterRole"
+      ]
+    },
     "components": [
       {
         "name": "fe",
-        "apiServiceComponent": true,
         "recommendedReplica": 1,
         "maxReplica": 3,
         "optional": false,
         "initContainers": [
           {
             "name": "init",
-            "image": "example/init:1",
+            "image": "example/init@sha256:1111111111111111111111111111111111111111111111111111111111111111",
             "description": "Init container"
           }
         ],
         "containers": [
           {
             "name": "fe",
-            "image": "example/fe:1",
+            "image": "example/fe@sha256:2222222222222222222222222222222222222222222222222222222222222222",
             "description": null
           }
         ]
@@ -582,8 +588,34 @@
   },
   "containerMeta_": {
     "name": "server",
-    "image": "example/server:1",
+    "image": "example/server@sha256:3333333333333333333333333333333333333333333333333333333333333333",
     "description": "Main container"
+  },
+  "componentMeta_": {
+    "name": "orders-api",
+    "initContainers": null,
+    "containers": [
+      {
+        "name": "server",
+        "image": "example/server@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "description": "Main container"
+      }
+    ],
+    "sourceArtifact": {
+      "containerName": "api",
+      "runtime": "python-3.12",
+      "entry": "orders_api.main",
+      "lockfile": "uv.lock",
+      "sourceDir": "source/orders-api"
+    },
+    "maxReplica": null,
+    "recommendedReplica": 2,
+    "optional": false,
+    "observability": null
+  },
+  "serviceBackend_": {
+    "serviceName": "orders-api",
+    "port": 8080
   },
   "deploymentContext_": {
     "id": "dep-1",

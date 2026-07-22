@@ -16,7 +16,7 @@ module ai.tangram.os.ui
 //     new ui.AppUIComponentSpec {
 //       name = "top-accounts"
 //       kind = "declarative"
-//       spec = "components/top-accounts.json"
+//       spec = "components/top-accounts/top-accounts.json"
 //       surfaces { "chat"; "dashboard"; "app-page" }
 //     }
 //   }
@@ -56,16 +56,13 @@ class SqlBinding {
   params: Mapping<String, Any>?
 }
 
-/// An app action invoked via the perform gateway with IAM + confirmation.
-/// `action` address shape: `<group>/<name>#<ResourceType>.<action>`.
-class ActionBinding {
-  fixed type: String = "action"
-  action: String(!isEmpty)
-  requiresConfirmation: Boolean?
-}
-
-/// How a sandboxed component gets data or causes effects.
-typealias UIComponentBinding = SemanticBinding|SqlBinding|ActionBinding
+/// How a component reads data. Action invocation is not a binding: sandboxed
+/// source calls its own application's actions directly through the governed
+/// `window.tangram.performAction({ resourceType; action }, args)` SDK path,
+/// where the gateway remains authoritative for action existence, argument
+/// validation, IAM, and confirmation. Named action bindings survive only
+/// inside declarative component JSON artifacts as view wiring.
+typealias UIComponentBinding = SemanticBinding|SqlBinding
 
 /// An event the component may emit to the host; `payload` is a JSON Schema.
 class UIComponentOutput {
@@ -102,10 +99,15 @@ class AppUIComponentSpec {
   name: String(!isEmpty)
 
   /// Authoring tier. `declarative` requires a `spec` path and forbids `entry`;
-  /// `sandboxed` requires `entry` and may carry `spec` (contract).
+  /// `sandboxed` requires an `entry` of the form
+  /// `components/<component-name>/<entry-file>` whose directory segment equals
+  /// this component's `name` — only that directory contributes to the
+  /// component's bundle and content hash.
   kind: UIComponentKind(
     this != "declarative" || (spec is String && entry == null),
-    this != "sandboxed" || entry != null
+    this != "sandboxed" ||
+      (entry != null && entry.startsWith("components/\(name)/") &&
+        !entry.substring("components/\(name)/".length, entry.length).contains("/"))
   )
 
   /// One-line summary of what the component shows. Drives agent discovery

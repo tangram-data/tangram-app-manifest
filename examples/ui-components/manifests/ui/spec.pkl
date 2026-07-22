@@ -7,13 +7,13 @@ components: Listing<ui.AppUIComponentSpec> = new Listing {
     name = "top-accounts"
     kind = "declarative"
     description = "Top accounts by revenue for the selected period"
-    spec = "components/top-accounts.json"
+    spec = "components/top-accounts/top-accounts.json"
     surfaces { "chat"; "dashboard"; "app-page" }
   }
   new ui.AppUIComponentSpec {
     name = "churn-explorer"
     kind = "sandboxed"
-    entry = "components/churn-explorer.tsx"
+    entry = "components/churn-explorer/churn-explorer.tsx"
     spec = new ui.UIComponentContract {
       title = "Churn explorer"
       description = "Interactive monthly churn trend with CSV export"
@@ -21,6 +21,8 @@ components: Listing<ui.AppUIComponentSpec> = new Listing {
         type = "object"
         properties {}
       }
+      // Effects go through the governed in-frame SDK, not bindings:
+      //   await window.tangram.performAction({ resourceType: "Churn", action: "Export" })
       bindings {
         ["churn_series"] = new ui.SqlBinding {
           sqlEngineId = "warehouse"
@@ -28,10 +30,6 @@ components: Listing<ui.AppUIComponentSpec> = new Listing {
           params {
             ["since"] = new Dynamic { from = "period" }
           }
-        }
-        ["export_csv"] = new ui.ActionBinding {
-          action = "sales/crm#Churn.Export"
-          requiresConfirmation = false
         }
       }
       outputs {

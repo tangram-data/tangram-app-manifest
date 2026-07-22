@@ -1,0 +1,31 @@
+module ai.tangram.os.api
+
+// ---------------------------------------------------------------------------
+// App API backend binding
+//
+// `manifests/api/spec.pkl` owns the typed association between an App API and
+// the runtime Service implementing it:
+//
+//   import "@tangram-app-manifest/api.pkl" as api
+//   backend: api.ServiceBackend = new api.ServiceBackend {
+//     serviceName = "catalog-service"
+//     port = 9494
+//   }
+//
+// The binding is producer-agnostic: it does not state whether an App component
+// or a Helm chart produced the Service. Tangram derives the public host and
+// URL prefix from application identity and platform policy — there is no
+// authored public host or route.
+// ---------------------------------------------------------------------------
+
+/// The concrete Kubernetes Service inside the App's derived installation
+/// namespace that implements this API. For a Tangram-owned component the
+/// Service name is exactly `AppComponentMeta.name` and the port must equal
+/// `AppComponentServiceSpec.port`; for Helm the rendered chart must contain
+/// exactly one namespaced Service with this name and port.
+class ServiceBackend {
+  /// Namespace-free DNS-1035 Service name.
+  serviceName: String(matches(Regex(#"[a-z]([-a-z0-9]{0,61}[a-z0-9])?"#)))
+  /// The concrete Service port (not the container target port).
+  port: Int(isBetween(1, 65535))
+}

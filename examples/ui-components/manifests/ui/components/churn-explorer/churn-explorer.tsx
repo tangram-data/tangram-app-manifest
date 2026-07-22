@@ -1,6 +1,7 @@
-// Sandboxed component entry. Bindings referenced here are declared in
-// churn-explorer.contract.json; the platform compiles this file to a bundle at
-// publish and auto-mounts the default export.
+// Sandboxed component entry. Data bindings referenced here are declared in the
+// component contract; actions are invoked directly through the governed
+// performAction SDK. The platform compiles this file to a bundle at publish
+// and auto-mounts the default export.
 import { useEffect, useState } from "react";
 
 const tangram = window.tangram;
@@ -33,7 +34,16 @@ export default function ChurnExplorer() {
       {(["7d", "30d", "90d"] as const).map((p) => (
         <button key={p} onClick={() => setPeriod(p)}>{p}</button>
       ))}
-      <button onClick={() => tangram.action("export_csv", { period })}>Export</button>
+      <button
+        onClick={() =>
+          tangram.performAction(
+            { resourceType: "Churn", action: "Export" },
+            { parameters: { period } }
+          )
+        }
+      >
+        Export
+      </button>
       <ul>
         {rows.map((d, i) => (
           <li key={i} onClick={() => tangram.emit("select", { month: String(d.month) })}>
