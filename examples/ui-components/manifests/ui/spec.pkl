@@ -1,20 +1,20 @@
-// Example `manifests/ui/components.pkl`. Real app packages depend on the
-// released package and amend "@tangram-app-manifest/ui.pkl" instead.
-amends "../../../../src/ui.pkl"
+// Example `manifests/ui/spec.pkl`. Real app packages depend on the released
+// package and import "@tangram-app-manifest/ui.pkl" instead.
+import "../../../../src/ui.pkl" as ui
 
-components {
-  new AppUIComponentSpec {
+components: Listing<ui.AppUIComponentSpec> = new Listing {
+  new ui.AppUIComponentSpec {
     name = "top-accounts"
     kind = "declarative"
     description = "Top accounts by revenue for the selected period"
-    spec = "ui/components/top-accounts.json"
+    spec = "components/top-accounts.json"
     surfaces { "chat"; "dashboard"; "app-page" }
   }
-  new AppUIComponentSpec {
+  new ui.AppUIComponentSpec {
     name = "churn-explorer"
     kind = "sandboxed"
-    entry = "ui/components/churn-explorer.tsx"
-    spec = new UIComponentContract {
+    entry = "components/churn-explorer.tsx"
+    spec = new ui.UIComponentContract {
       title = "Churn explorer"
       description = "Interactive monthly churn trend with CSV export"
       inputs {
@@ -22,20 +22,20 @@ components {
         properties {}
       }
       bindings {
-        ["churn_series"] = new SqlBinding {
+        ["churn_series"] = new ui.SqlBinding {
           sqlEngineId = "warehouse"
           sql = "SELECT month, churned FROM sales.churn WHERE month >= :since ORDER BY month"
           params {
             ["since"] = new Dynamic { from = "period" }
           }
         }
-        ["export_csv"] = new ActionBinding {
+        ["export_csv"] = new ui.ActionBinding {
           action = "sales/crm#Churn.Export"
           requiresConfirmation = false
         }
       }
       outputs {
-        new UIComponentOutput {
+        new ui.UIComponentOutput {
           name = "select"
           payload {
             type = "object"

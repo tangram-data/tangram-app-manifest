@@ -3,20 +3,20 @@ module ai.tangram.os.ui
 // ---------------------------------------------------------------------------
 // App-published UI components
 //
-// An app publishes reusable UI components to the App Hub catalog by shipping
-// `manifests/ui/components.pkl` in its package. The platform evaluates the
-// `components` expression of that file and indexes each entry under the
+// An app publishes reusable UI components to the App Hub catalog by declaring
+// `components` in `manifests/ui/spec.pkl`. The platform evaluates that property
+// and indexes each entry under the
 // namespaced catalog name `{group}/{app}/{name}`. Declarative components are
 // indexed at registration; sandboxed components are catalogued once the
 // publish-time bundle transform lands.
 //
-// Use in `manifests/ui/components.pkl`:
-//   amends "@tangram-app-manifest/ui.pkl"
-//   components {
-//     new AppUIComponentSpec {
+// Use in `manifests/ui/spec.pkl`:
+//   import "@tangram-app-manifest/ui.pkl" as ui
+//   components: Listing<ui.AppUIComponentSpec> = new Listing {
+//     new ui.AppUIComponentSpec {
 //       name = "top-accounts"
 //       kind = "declarative"
-//       spec = "ui/components/top-accounts.json"
+//       spec = "components/top-accounts.json"
 //       surfaces { "chat"; "dashboard"; "app-page" }
 //     }
 //   }
@@ -95,7 +95,7 @@ class UIComponentContract {
 }
 
 /// One published UI component. Artifact paths (`spec` as a path, `entry`) are
-/// relative to the `manifests/` directory and must stay inside it — absolute
+/// relative to the `manifests/ui/` directory and must stay inside it — absolute
 /// paths and `..` traversal are rejected at indexing time.
 class AppUIComponentSpec {
   /// Component name; catalogued as `{group}/{app}/{name}` (no cross-app collisions).
@@ -117,7 +117,7 @@ class AppUIComponentSpec {
   surfaces: Listing<UIComponentSurface>
 
   /// Declarative: path to the full component JSON artifact, e.g.
-  /// "ui/components/top-accounts.json". Sandboxed (optional): the render
+  /// "components/top-accounts.json". Sandboxed (optional): the render
   /// contract, either inline as a typed [UIComponentContract] or as a path to
   /// an equivalent contract JSON.
   spec: (String(!isEmpty)|UIComponentContract)?

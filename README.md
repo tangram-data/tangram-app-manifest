@@ -58,23 +58,23 @@ oauth = new oauthTypes.OAuth2AuthCode {
 ```
 
 # Publishing UI components
-An app publishes reusable UI components by shipping `manifests/ui/components.pkl`
-(amends `ui.pkl`; see `examples/ui-components/`):
+An app publishes reusable UI components through the `components` property in
+`manifests/ui/spec.pkl` (see `examples/ui-components/`):
 ```
-amends "@tangram-app-manifest/ui.pkl"
+import "@tangram-app-manifest/ui.pkl" as ui
 
-components {
-  new AppUIComponentSpec {
+components: Listing<ui.AppUIComponentSpec> = new Listing {
+  new ui.AppUIComponentSpec {
     name = "top-accounts"
     kind = "declarative"
-    spec = "ui/components/top-accounts.json"
+    spec = "components/top-accounts.json"
     surfaces { "chat"; "dashboard"; "app-page" }
   }
-  new AppUIComponentSpec {
+  new ui.AppUIComponentSpec {
     name = "churn-explorer"
     kind = "sandboxed"
-    entry = "ui/components/churn-explorer.tsx"                  // compiled to a bundle at publish
-    spec = "ui/components/churn-explorer.contract.json"         // optional data contract
+    entry = "components/churn-explorer.tsx"                  // compiled to a bundle at publish
+    spec = "components/churn-explorer.contract.json"         // optional data contract
     surfaces { "chat"; "dashboard"; "app-page" }
   }
 }
@@ -82,7 +82,8 @@ components {
 For `kind = "sandboxed"`, `entry` is the TSX/JSX source and the optional `spec`
 is a contract JSON declaring `inputs`, named `bindings` (semantic/sql/action),
 `outputs`, and optionally `title` — never `bundle` or `view` (the platform fills
-`bundle.ref` from the compiled entry).
+`bundle.ref` from the compiled entry). Artifact paths in `ui/spec.pkl` are
+relative to the containing `manifests/ui/` directory.
 
 `./gradlew evalUiComponentsExample` renders the example the way the platform loader does.
 
