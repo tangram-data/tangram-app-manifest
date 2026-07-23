@@ -57,10 +57,10 @@ class ComponentObservability {
 // ---------------------------------------------------------------------------
 class ContainerMeta {
   name: String
-  /// Immutable, tagless `repository@sha256:<64-hex-digest>` reference; mutable
-  /// tags (including `repo:tag@sha256:...`) are rejected. A registry port is
-  /// allowed in the host segment.
-  image: String(matches(Regex(#"(?:[^/@]+/)*[^/:@]+@sha256:[0-9a-f]{64}"#)))
+  /// Image reference: `repository[:tag]` or `repository@sha256:<digest>`.
+  /// Tags keep authoring simple; pin a digest when you need the reference to
+  /// be immutable and byte-reproducible across installs.
+  image: String(matches(Regex(#"\S+"#)))
   description: String?
 }
 
