@@ -2,6 +2,14 @@ module ai.tangram.os.resources
 
 import "manifest.pkl" as manifest
 
+/// A resource type's global identity: the owning application plus the
+/// type name. Lives here because the resource vocabulary is its only consumer;
+/// `manifest.pkl` keeps pure application identity.
+class ResourceType {
+  app: manifest.AppName
+  name: String
+}
+
 // ---------------------------------------------------------------------------
 // Privilege constants
 //
@@ -316,8 +324,8 @@ class ResourceTypeDefinition {
   doc: String
   activeVersion: String
   versions: List<ResourceTypeVersion>
-  superType: manifest.ResourceType?
-  scopeType: manifest.ResourceType?
+  superType: ResourceType?
+  scopeType: ResourceType?
   /// (Reserved — not yet enforced by the platform IAM.) Maps a parent-scope privilege
   /// to the list of child privileges it grants. Will become operative when the IAM
   /// permission-check query consults this field; until then, declaring it has no
@@ -346,47 +354,47 @@ class ResourceTypeDefinition {
 // ---------------------------------------------------------------------------
 // Platform super types
 // ---------------------------------------------------------------------------
-WORKSPACE_TYPE = new manifest.ResourceType {
+WORKSPACE_TYPE = new ResourceType {
   app = manifest.TANGRAM_OS_CORE_APP
   name = "Workspace"
 }
 
-DATASET_TYPE = new manifest.ResourceType {
+DATASET_TYPE = new ResourceType {
   app = manifest.TANGRAM_OS_CORE_APP
   name = "Dataset"
 }
 
-CATALOG_TYPE = new manifest.ResourceType {
+CATALOG_TYPE = new ResourceType {
   app = manifest.TANGRAM_OS_CORE_APP
   name = "DataCatalog"
 }
 
-STORAGE_TYPE = new manifest.ResourceType {
+STORAGE_TYPE = new ResourceType {
   app = manifest.TANGRAM_OS_CORE_APP
   name = "Storage"
 }
 
-DATABASE_TYPE = new manifest.ResourceType {
+DATABASE_TYPE = new ResourceType {
   app = manifest.TANGRAM_OS_CORE_APP
   name = "Database"
 }
 
-COMPUTE_TYPE = new manifest.ResourceType {
+COMPUTE_TYPE = new ResourceType {
   app = manifest.TANGRAM_OS_CORE_APP
   name = "Compute"
 }
 
-SQL_ENGINE_TYPE = new manifest.ResourceType {
+SQL_ENGINE_TYPE = new ResourceType {
   app = manifest.TANGRAM_OS_CORE_APP
   name = "SQLEngine"
 }
 
-WORKFLOW_TYPE = new manifest.ResourceType {
+WORKFLOW_TYPE = new ResourceType {
   app = manifest.TANGRAM_OS_CORE_APP
   name = "Workflow"
 }
 
-DASHBOARD_TYPE = new manifest.ResourceType {
+DASHBOARD_TYPE = new ResourceType {
   app = manifest.TANGRAM_OS_CORE_APP
   name = "Dashboard"
 }

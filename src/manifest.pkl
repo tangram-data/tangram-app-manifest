@@ -16,11 +16,6 @@ TANGRAM_OS_CORE_APP = new AppName {
   name = "core"
 }
 
-class ResourceType {
-  app: AppName
-  name: String
-}
-
 class ConfigField {
   name: String
   description: String

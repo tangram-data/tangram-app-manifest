@@ -5,7 +5,7 @@
 module ai.tangram.os.examples.contractfixture
 
 import "../../src/manifest.pkl" as manifest
-import "../../src/resource-types.pkl" as resources
+import "../../src/resources.pkl" as resources
 import "../../src/integration.pkl" as integration
 import "../../src/connector.pkl" as connector
 import "../../src/ui.pkl" as ui

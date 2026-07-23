@@ -15,7 +15,7 @@ secrets = List(
 ## Modules
 
 - `manifest.pkl` — app identity, the `App`/`Connector`/`Agent` types, and shared configuration fields
-- `resource-types.pkl` — resources, actions, mappings, roles, and privileges
+- `resources.pkl` — resource types, actions, mappings, roles, and privileges
 - `integration.pkl` — integration interfaces and implementations
 - `connector.pkl` — request authentication headers
 - `oauth.pkl` — OAuth connection lifecycle and scopes
