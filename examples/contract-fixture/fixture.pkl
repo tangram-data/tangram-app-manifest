@@ -336,6 +336,9 @@ local deploymentContext = new deployment.DeploymentContext {
   workspace = "ws-1"
   k8sNamespace = "app-ns"
   cloudProvider = "AWS"
+  serviceAccountTokenSecret = new deployment.ServiceAccountTokenSecret {
+    name = "app-sa-app-ns"
+  }
 }
 
 // --- rendered contract ----------------------------------------------------------

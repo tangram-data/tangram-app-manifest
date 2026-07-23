@@ -2,12 +2,21 @@ module ai.tangram.os.deployment
 
 typealias CloudProvider = "Local"|"AWS"|"Azure"|"Scaleway"|"GCP"
 
+/// Platform-issued Kubernetes Secret carrying the app service-account token.
+/// Authors reference this typed binding from Helm values instead of deriving
+/// platform Secret names from namespaces or naming conventions.
+class ServiceAccountTokenSecret {
+  name: String
+  tokenKey: String = ".auth_token"
+}
+
 class DeploymentContext {
   id: String
   tangramOSPublicUrl: String
   workspace: String
   k8sNamespace: String
   cloudProvider: CloudProvider
+  serviceAccountTokenSecret: ServiceAccountTokenSecret
 }
 
 // ---------------------------------------------------------------------------

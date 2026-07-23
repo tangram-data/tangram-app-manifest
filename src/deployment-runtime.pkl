@@ -4,12 +4,17 @@ import "pkl:json"
 import "deployment.pkl" as deployment
 
 // Values injected by Tangram when evaluating a deployment implementation.
+// Properties are lazy: a binding's prop is only required when referenced.
 context = new deployment.DeploymentContext {
   id                 = read("prop:tangram_app_deployment_id")
   tangramOSPublicUrl = read("prop:tangram_os_public_url")
   workspace          = read("prop:tangram_app_deployment_workspace")
   k8sNamespace       = read("prop:tangram_app_deployment_k8s_namespace")
   cloudProvider      = read("prop:tangram_os_cloud_provider") as deployment.CloudProvider
+  serviceAccountTokenSecret = new deployment.ServiceAccountTokenSecret {
+    name     = read("prop:tangram_app_sa_token_secret_name")
+    tokenKey = read("prop:tangram_app_sa_token_secret_key")
+  }
 }
 
 function getDeploymentConfig(): Dynamic =

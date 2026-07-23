@@ -654,6 +654,10 @@
     "tangramOSPublicUrl": "https://os.example.com",
     "workspace": "ws-1",
     "k8sNamespace": "app-ns",
-    "cloudProvider": "AWS"
+    "cloudProvider": "AWS",
+    "serviceAccountTokenSecret": {
+      "name": "app-sa-app-ns",
+      "tokenKey": ".auth_token"
+    }
   }
 }
