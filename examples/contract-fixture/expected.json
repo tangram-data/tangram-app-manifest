@@ -369,7 +369,8 @@
               "statement": "update notes set done = true where id = :id",
               "params": {
                 "id": {
-                  "type": "bigint"
+                  "type": "bigint",
+                  "nullable": false
                 }
               }
             },
@@ -393,7 +394,12 @@
               "handler": "notes.notify",
               "params": {
                 "id": {
-                  "type": "bigint"
+                  "type": "bigint",
+                  "nullable": false
+                },
+                "note": {
+                  "type": "text",
+                  "nullable": true
                 }
               }
             },

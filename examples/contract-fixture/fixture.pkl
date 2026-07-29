@@ -84,6 +84,7 @@ local handlerAction = new resources.Action {
     handler = "notes.notify"
     params {
       ["id"] = new resources.SqlActionParam { type = "bigint" }
+      ["note"] = new resources.SqlActionParam { type = "text"; nullable = true }
     }
   }
 }
