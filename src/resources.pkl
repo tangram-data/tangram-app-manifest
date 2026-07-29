@@ -146,6 +146,9 @@ typealias SqlColumnType =
 
 class SqlActionParam {
   type: SqlColumnType
+  /// Optional on the caller side: excluded from the action's required inputs,
+  /// null accepted, bound as SQL NULL when a recipe runs without it.
+  nullable: Boolean = false
 }
 
 class SqlMapping {
