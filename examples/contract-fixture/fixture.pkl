@@ -60,32 +60,16 @@ local multiMappingAction = new resources.Action {
   )
 }
 
-local sqlAction = new resources.Action {
+local approveAction = new resources.Action {
   name = "Approve"
   privilege = "Approve"
-  effect = resources.Effect.Reversible
-  idempotent = false
-  doc = "Approve a note"
-  requiresConfirmation = false
-  sqlMapping = new resources.SqlMapping {
-    statement = "update notes set done = true where id = :id"
-    params {
-      ["id"] = new resources.SqlActionParam { type = "bigint" }
-    }
-  }
-}
-
-local handlerAction = new resources.Action {
-  name = "Notify"
   effect = resources.Effect.Irreversible
   idempotent = false
-  doc = "Notify the owner"
-  handlerMapping = new resources.HandlerMapping {
-    handler = "notes.notify"
-    params {
-      ["id"] = new resources.SqlActionParam { type = "bigint" }
-      ["note"] = new resources.SqlActionParam { type = "text"; nullable = true }
-    }
+  doc = "Approve a note"
+  requiresConfirmation = true
+  openApiMapping = new resources.OpenApiMapping {
+    operationId = "approveNote"
+    resourceId = new resources.PathParam { name = "noteId" }
   }
 }
 
@@ -116,17 +100,19 @@ local serviceTypeDefinition = new resources.ResourceTypeDefinition {
   )
 }
 
-local sqlBackedTypeDefinition = new resources.ResourceTypeDefinition {
+local noteTypeDefinition = new resources.ResourceTypeDefinition {
   name = "Note"
-  doc = "A SQL-backed note"
+  doc = "A note resource"
   activeVersion = "v1"
-  sqlTable = "notes"
-  instanceKey { "id" }
-  includeCrud { "Create"; "List" }
   versions = List(new resources.ResourceTypeVersion {
     version = "v1"
     served = true
-    actions = List(sqlAction, handlerAction)
+    actions = List(approveAction)
+    presetRoles = List(new resources.Role {
+      name = "reviewer"
+      permissions = List("Approve")
+      description = "Can approve notes"
+    })
   })
 }
 
@@ -348,7 +334,7 @@ fixture = new Dynamic {
   identity_ = identity
   serviceTypeDefinition_ = serviceTypeDefinition
   presentations_ = presentations
-  sqlBackedTypeDefinition_ = sqlBackedTypeDefinition
+  noteTypeDefinition_ = noteTypeDefinition
   integrationImpl_ = integrationImpl
   queryableSpec_ = queryableSpec
   connectorAuth_ = connectorAuth

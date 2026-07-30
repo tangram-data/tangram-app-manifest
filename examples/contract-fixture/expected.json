@@ -154,8 +154,6 @@
                 "newNameTemplate": null
               }
             ],
-            "sqlMapping": null,
-            "handlerMapping": null,
             "presentation": null
           }
         ],
@@ -220,8 +218,6 @@
               "newNameTemplate": "{{requestBody.record.newName}}"
             },
             "openApiMappings": null,
-            "sqlMapping": null,
-            "handlerMapping": null,
             "presentation": {
               "kind": "card",
               "title": "Record",
@@ -262,8 +258,6 @@
                 "newNameTemplate": null
               }
             ],
-            "sqlMapping": null,
-            "handlerMapping": null,
             "presentation": null
           }
         ],
@@ -297,10 +291,7 @@
         "Read",
         "Write"
       ]
-    },
-    "sqlTable": null,
-    "instanceKey": null,
-    "includeCrud": null
+    }
   },
   "presentations_": [
     {
@@ -343,9 +334,9 @@
       }
     }
   ],
-  "sqlBackedTypeDefinition_": {
+  "noteTypeDefinition_": {
     "name": "Note",
-    "doc": "A SQL-backed note",
+    "doc": "A note resource",
     "activeVersion": "v1",
     "versions": [
       {
@@ -356,70 +347,43 @@
           {
             "name": "Approve",
             "privilege": "Approve",
-            "effect": "Reversible",
+            "effect": "Irreversible",
             "idempotent": false,
             "doc": "Approve a note",
             "skipAuth": null,
             "skipAudit": null,
-            "requiresConfirmation": false,
+            "requiresConfirmation": true,
             "additionalPrivileges": null,
-            "openApiMapping": null,
-            "openApiMappings": null,
-            "sqlMapping": {
-              "statement": "update notes set done = true where id = :id",
-              "params": {
-                "id": {
-                  "type": "bigint",
-                  "nullable": false
-                }
-              }
+            "openApiMapping": {
+              "operationId": "approveNote",
+              "resourceName": null,
+              "resourceId": {
+                "type": "PathParam",
+                "name": "noteId"
+              },
+              "newName": null,
+              "resourceNameTemplate": null,
+              "resourceIdTemplate": null,
+              "newNameTemplate": null
             },
-            "handlerMapping": null,
-            "presentation": null
-          },
-          {
-            "name": "Notify",
-            "privilege": null,
-            "effect": "Irreversible",
-            "idempotent": false,
-            "doc": "Notify the owner",
-            "skipAuth": null,
-            "skipAudit": null,
-            "requiresConfirmation": null,
-            "additionalPrivileges": null,
-            "openApiMapping": null,
             "openApiMappings": null,
-            "sqlMapping": null,
-            "handlerMapping": {
-              "handler": "notes.notify",
-              "params": {
-                "id": {
-                  "type": "bigint",
-                  "nullable": false
-                },
-                "note": {
-                  "type": "text",
-                  "nullable": true
-                }
-              }
-            },
             "presentation": null
           }
         ],
-        "presetRoles": null
+        "presetRoles": [
+          {
+            "name": "reviewer",
+            "permissions": [
+              "Approve"
+            ],
+            "description": "Can approve notes"
+          }
+        ]
       }
     ],
     "superType": null,
     "scopeType": null,
-    "scopePrivilegePropagation": null,
-    "sqlTable": "notes",
-    "instanceKey": [
-      "id"
-    ],
-    "includeCrud": [
-      "Create",
-      "List"
-    ]
+    "scopePrivilegePropagation": null
   },
   "integrationImpl_": {
     "interface": {
