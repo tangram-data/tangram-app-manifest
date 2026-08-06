@@ -1,4 +1,15 @@
-# Example usage
+# Tangram App Manifest
+
+## Tangram CLI
+
+See the [Tangram CLI installation guide](TANGRAM_CLI.md) for usage, platform
+requirements, checksums, and source information.
+
+- [Download the native macOS Apple Silicon distribution](https://github.com/tangram-data/tangram-app-manifest/releases/download/tangram-cli%401.0.0/tangram-cli-1.0.0-macos-aarch64.tar.gz)
+- [Download the cross-platform JAR](https://github.com/tangram-data/tangram-app-manifest/releases/download/tangram-cli%401.0.0/tangram-cli-1.0.0.jar) (requires JDK 21)
+- [View the Tangram CLI 1.0.0 release](https://github.com/tangram-data/tangram-app-manifest/releases/tag/tangram-cli%401.0.0)
+
+## Example usage
 
 ```pkl
 import "@tangram-app-manifest/manifest.pkl" as manifest
@@ -32,7 +43,7 @@ package vocabulary) together with the `NativeApp`/`ConnectorApp`/`PlatformApp`
 application types — every application is an `App`, `Connector`, or `Agent`
 (see `docs/app-manifest-unification-design.md` in the tangram repo).
 
-# OAuth-backed connectors
+## OAuth-backed connectors
 
 OAuth declarations live in the standalone `oauth.pkl` module. Connector
 request-authentication templates live in `connector.pkl` because API-key and
@@ -60,7 +71,7 @@ oauth = new oauthTypes.OAuth2AuthCode {
 }
 ```
 
-# Publishing UI components
+## Publishing UI components
 An app publishes reusable UI components through the `components` property in
 `manifests/ui/spec.pkl` (see `examples/ui-components/`):
 ```
@@ -95,7 +106,7 @@ directory, and a sandboxed component's entry must live in its own
 
 `./gradlew evalUiComponentsExample` renders the example the way the platform loader does.
 
-# Releasing
+## Releasing
 
 Releases are cut by pushing a tag named `tangram-app-manifest@<version>`;
 CI (`.github/workflows/release.yaml`) runs `./gradlew createPackage` and
@@ -121,5 +132,5 @@ dependencies {
 After publishing, re-run `pkl project resolve` in each consuming repo so
 `PklProject.deps.json` records the published artifact's checksum.
 
-# Reference
+## Reference
 [pkl-lang: Package Import](https://pkl-lang.org/main/current/language-reference/index.html#import-clause)
