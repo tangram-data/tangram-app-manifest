@@ -89,3 +89,25 @@ Properties are injected lazily: a property is only required when a manifest expr
 ## Path hygiene
 
 Artifact paths inside the package (UI component specs and entries, deployment source directories) are relative to their owning manifest directory and MUST stay inside it. Platforms MUST reject absolute paths and `..` traversal at indexing time.
+
+## Authoring workflow (non-normative)
+
+The [Tangram CLI](../TANGRAM_CLI.md) automates the layout described on this page. A typical authoring loop:
+
+```sh
+# Scaffold a conforming package for the chosen application type
+tangram app manifest init my-app --group com.example --name my-app --app-type App
+
+# Resolve the pinned schema package (records checksums in PklProject.deps.json)
+cd my-app/manifests && pkl project resolve && cd ..
+
+# Edit app.pkl, api/resources.pkl, and the type-specific spec files…
+
+# Validate locally — the same validator the platform runs at registration
+tangram app manifest validate my-app
+
+# For apps with a UI or Python backend: preview locally, no platform needed
+tangram app dev my-app
+```
+
+`init` writes the base files (`PklProject`, `app.pkl`, `api/resources.pkl`, `settings.pkl`, `secrets.pkl`, `README.md`) plus the files the chosen `appType` needs: an `App` gets `api/spec.pkl`, `api/open_api.yml`, `ui/spec.pkl`, and `deployment/{components,dependencies}.pkl`; a `Connector` gets the Connector form of `api/spec.pkl` with `open_api.yml`; an `Agent` gets `agent/spec.pkl`. `validate` checks the package against this specification without contacting a platform, so authoring never requires credentials.

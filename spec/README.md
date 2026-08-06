@@ -30,3 +30,7 @@ package://pkg.pkl-lang.org/github.com/tangram-data/tangram-app-manifest/tangram-
 ```
 
 Manifests are authored in Pkl and evaluated by the platform to a JSON projection. Where this prose and the published schema disagree, the schema wins.
+
+## Tooling
+
+The [Tangram CLI](../TANGRAM_CLI.md) is the reference authoring tool for this specification. It scaffolds a conforming package (`tangram app manifest init`), validates one locally with the same validator the platform runs at registration (`tangram app manifest validate`), and previews an app's UI and Python backend without a platform (`tangram app dev`). The [Package Layout](package.md#authoring-workflow-non-normative) page walks through the workflow. The CLI is a convenience, not a requirement — any package that satisfies this specification is a valid manifest however it was produced.

@@ -48,6 +48,55 @@ PowerShell users can run the downloaded JAR with the same Java command:
 java -jar .\tangram-cli-1.0.0.jar --help
 ```
 
+## Authoring an app manifest
+
+The CLI scaffolds and validates packages conforming to the
+[Tangram App Manifest specification](spec/README.md).
+
+### Scaffold a package
+
+`tangram app manifest init` writes a complete skeleton — `manifests/` with
+`PklProject`, `app.pkl`, `api/resources.pkl`, `settings.pkl`, `secrets.pkl`,
+and the files the chosen application type needs:
+
+```sh
+# An App that deploys its own components
+tangram app manifest init my-app \
+  --group com.example --name my-app --version 0.1.0 --app-type App
+
+# A Connector for a remote API (Connector form of api/spec.pkl + open_api.yml)
+tangram app manifest init salesforce \
+  --group com.example --name salesforce --app-type Connector
+
+# An Agent (agent/spec.pkl with system prompt, default LLM, tool stubs)
+tangram app manifest init receipts-agent \
+  --group com.example --name receipts-agent --app-type Agent
+
+# Scaffold integration plugin libs alongside (libs/<name>/<version>/ + integrations/plugins.pkl)
+tangram app manifest init my-lakehouse \
+  --group com.example --name my-lakehouse --lib my-spark-io:1.0.0
+```
+
+Use `--force` to overwrite files in a non-empty target directory. After
+scaffolding, resolve the pinned schema package once:
+
+```sh
+cd my-app/manifests && pkl project resolve
+```
+
+### Validate locally
+
+`tangram app manifest validate` runs the same validator the platform runs at
+registration — no server connection or credentials required. It expects the
+package root (the directory containing `manifests/`, and optionally `libs/`):
+
+```sh
+tangram app manifest validate my-app
+```
+
+A non-zero exit means the package would be rejected at registration; each
+finding names the file and rule that failed.
+
 ## Local app preview
 
 From a Tangram app package directory, start its Python backend and browser UI
@@ -66,6 +115,73 @@ tangram app dev --no-backend --port 0 --open .
 
 Run `tangram app dev --help` for all options. A backend requires Python 3.12 or
 newer; use `--python <path>` to select it explicitly.
+
+## Installing and operating apps on a platform
+
+The remaining `app` commands talk to a Tangram OS instance; authenticate first
+with `tangram login` (and `tangram use <instance>` to pick a context).
+
+### Install, inspect, uninstall
+
+```sh
+# Install from the App Hub into a workspace
+tangram app install com.intuit quickbooks --workspace my-ws --version 0.1.0 --from-app-hub
+
+# Retry or change an existing deployment
+tangram app install com.intuit quickbooks --workspace my-ws --version 0.1.0 --upgrade
+
+# Inspect
+tangram app list --workspace my-ws
+tangram app get com.intuit quickbooks --workspace my-ws
+tangram app component status com.intuit quickbooks catalog-service --workspace my-ws
+tangram app infra-resources com.example my-app --workspace my-ws
+
+# Uninstall
+tangram app undeploy com.intuit quickbooks --workspace my-ws
+```
+
+### Agent installs: tool bindings
+
+Agent manifests declare tool *intent*; the concrete binding is chosen at
+install with repeated `--tool-binding` flags (a manifest `defaultBinding` is
+used when no override is given):
+
+```sh
+tangram app install com.example receipts-agent --workspace my-ws --version 0.1.0 \
+  --agent-name receipts \
+  --tool-binding 'create_lead=app:com.acme/salesforce#Lead.Create' \
+  --tool-binding 'lookup=http:GET:https://api.example.com/lookup/{id}#lookup-token' \
+  --tool-binding 'query=builtin:tangram_query_app_db'
+```
+
+Operators can also attach extras beyond what the manifest declares:
+
+```sh
+tangram app install com.example receipts-agent --workspace my-ws --version 0.1.0 --upgrade \
+  --add-tool 'ping=http:GET:https://status.example.com/ping;desc:Check upstream service health' \
+  --add-skill 'expense-policy@1.2.0'
+```
+
+### Connector OAuth
+
+For OAuth-backed connectors, drive the connection lifecycle after install:
+
+```sh
+# Prints the upstream authorize URL to open in a browser
+tangram app connector oauth-start com.intuit quickbooks --workspace my-ws
+
+# Mode, tenant, expiry, last error — token values are never returned
+tangram app connector oauth-status com.intuit quickbooks --workspace my-ws
+
+# Revokes upstream tokens (when supported) and clears local secrets
+tangram app connector oauth-disconnect com.intuit quickbooks --workspace my-ws
+```
+
+### Built-app packages
+
+`tangram app pkg` covers export, validate, and install of built-app packages
+(apps produced by the platform's app builder); run `tangram app pkg --help`
+for the subcommands.
 
 ## Release and source information
 
