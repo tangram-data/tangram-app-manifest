@@ -1,0 +1,55 @@
+// Example `manifests/ui/spec.pkl`. Real app packages depend on the released
+// package and import "@tangram-app-manifest/ui.pkl" instead.
+import "../../../../src/ui.pkl" as ui
+
+deployment: ui.UIDeployment = new {
+  mode = "UIComponent"
+  rootComponent = "churn-explorer"
+}
+
+components: Listing<ui.AppUIComponentSpec> = new Listing {
+  new ui.AppUIComponentSpec {
+    name = "top-accounts"
+    kind = "declarative"
+    description = "Top accounts by revenue for the selected period"
+    spec = "components/top-accounts/top-accounts.json"
+    surfaces { "chat"; "dashboard"; "app-page" }
+  }
+  new ui.AppUIComponentSpec {
+    name = "churn-explorer"
+    kind = "sandboxed"
+    entry = "components/churn-explorer/churn-explorer.tsx"
+    spec = new ui.UIComponentContract {
+      title = "Churn explorer"
+      description = "Interactive monthly churn trend with CSV export"
+      inputs {
+        type = "object"
+        properties {}
+      }
+      // Effects go through the governed in-frame SDK, not bindings:
+      //   await window.tangram.performAction({ resourceType: "Churn", action: "Export" })
+      bindings {
+        ["churn_series"] = new ui.SqlBinding {
+          sqlEngineId = "warehouse"
+          sql = "SELECT month, churned FROM sales.churn WHERE month >= :since ORDER BY month"
+          params {
+            ["since"] = new Dynamic { from = "period" }
+          }
+        }
+      }
+      outputs {
+        new ui.UIComponentOutput {
+          name = "select"
+          payload {
+            type = "object"
+            required { "month" }
+            properties {
+              ["month"] = new Dynamic { type = "string" }
+            }
+          }
+        }
+      }
+    }
+    surfaces { "chat"; "dashboard"; "app-page" }
+  }
+}

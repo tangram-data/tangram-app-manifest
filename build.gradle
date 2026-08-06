@@ -2,6 +2,8 @@ plugins {
   id "org.pkl-lang" version "0.28.2"
 }
 
+import groovy.json.JsonSlurper
+
 def projectDirs = file("src")
 def outputDir = file("build")
 
@@ -23,6 +25,61 @@ pkl {
           environmentVariables.put("VERSION", maybeVersion)
         }
       }
+    }
+  }
+  evaluators {
+    // Renders the `components` property in the example `ui/spec.pkl` the same way the platform loader
+    // does (evaluate the `components` expression to JSON); fails on schema drift.
+    register('evalUiComponentsExample') {
+      sourceModules = [file('examples/ui-components/manifests/ui/spec.pkl')]
+      expression = 'new JsonRenderer { omitNullProperties = false }.renderValue(components)'
+      outputFile = file('build/examples/ui-components.json')
+    }
+    // Renders a representative OAuth-backed connector declaration. This
+    // verifies that connector auth and the standalone OAuth vocabulary
+    // compose into the JSON shape consumed by the platform manifest loader.
+    register('evalOAuthConnectorExample') {
+      sourceModules = [file('examples/oauth-connector/manifests/api/spec.pkl')]
+      expression = 'new JsonRenderer { omitNullProperties = false }.renderValue(Map("auth", auth, "oauth", oauth, "oauthWithDefaults", oauthWithDefaults, "tenantSources", tenantSources, "connectionScopes", connectionScopes))'
+      outputFile = file('build/examples/oauth-connector.json')
+    }
+    // Renders one representative value from every domain moved out of the
+    // former core.pkl module. Null properties remain visible so removing or
+    // defaulting a nullable field cannot pass as an equivalent contract.
+    register('evalContractFixture') {
+      sourceModules = [file('examples/contract-fixture/fixture.pkl')]
+      expression = 'new JsonRenderer { omitNullProperties = false }.renderValue(fixture)'
+      outputFile = file('build/examples/contract-fixture.json')
+    }
+  }
+}
+
+tasks.register('verifyContractFixture') {
+  dependsOn tasks.named('evalContractFixture')
+  inputs.file(file('examples/contract-fixture/expected.json'))
+  inputs.file(file('build/examples/contract-fixture.json'))
+
+  doLast {
+    def parser = new JsonSlurper()
+    def expected = parser.parse(file('examples/contract-fixture/expected.json'))
+    def actual = parser.parse(file('build/examples/contract-fixture.json'))
+    if (actual != expected) {
+      throw new GradleException(
+        'Contract fixture JSON differs from the current snapshot. ' +
+        'Review the rendered diff before accepting schema drift.'
+      )
+    }
+  }
+}
+
+tasks.register('updateContractFixtureSnapshot') {
+  dependsOn tasks.named('evalContractFixture')
+
+  doLast {
+    copy {
+      from file('build/examples/contract-fixture.json')
+      into file('examples/contract-fixture')
+      rename { 'expected.json' }
     }
   }
 }

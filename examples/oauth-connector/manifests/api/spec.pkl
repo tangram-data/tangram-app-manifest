@@ -1,0 +1,67 @@
+module ai.tangram.os.examples.oauthconnector
+
+import "../../../../src/connector.pkl" as connector
+import "../../../../src/oauth.pkl" as oauthTypes
+
+auth = new connector.ConnectorAuth {
+  httpHeaders = Map(
+    "Authorization", new connector.HeaderTemplate {
+      template = "Bearer {{oauth.accessToken}}"
+    }
+  )
+}
+
+oauth = new oauthTypes.OAuth2AuthCode {
+  authorizationUrl = "https://provider.example.com/oauth/authorize"
+  tokenUrl = "https://provider.example.com/oauth/token"
+  revocationUrl = "https://provider.example.com/oauth/revoke"
+  scopes = List("records.read", "records.write")
+  clientIdSecret = "exampleClientId"
+  clientSecretSecret = "exampleClientSecret"
+  callbackPath = "/api/core/v1/connector-oauth/callback/com.example/records"
+  tokenAuthMethod = "ClientSecretPost"
+  additionalAuthorizeParams = List(
+    new oauthTypes.AuthorizeParam {
+      name = "prompt"
+      value = "consent"
+    }
+  )
+  tenant = new oauthTypes.CallbackParam {
+    name = "tenantId"
+  }
+  connectionScope = new oauthTypes.SelectableScope {
+    default = "PerUser"
+    allowedAtInstall = List("PerUser", "WorkspaceShared")
+  }
+}
+
+// Required fields only: exercises the OAuth declaration's defaults.
+oauthWithDefaults = new oauthTypes.OAuth2AuthCode {
+  authorizationUrl = "https://provider.example.com/oauth/authorize"
+  tokenUrl = "https://provider.example.com/oauth/token"
+  clientIdSecret = "exampleClientId"
+  clientSecretSecret = "exampleClientSecret"
+  callbackPath = "/api/core/v1/connector-oauth/callback/com.example/records"
+}
+
+tenantSources = List(
+  new oauthTypes.CallbackParam { name = "tenantId" },
+  new oauthTypes.TokenResponseField { jsonPath = "$.team.id" },
+  new oauthTypes.UserInfo {
+    url = "https://provider.example.com/userinfo"
+    jsonPath = "$.tenant.id"
+  },
+  new oauthTypes.RequiredAtInstall { settingName = "tenantId" }
+)
+
+// Exercise every schema discriminator, including the forward-declared
+// NamedTenant mode that the current runtime does not yet start.
+connectionScopes = List(
+  new oauthTypes.WorkspaceOnly {},
+  new oauthTypes.PerUserOnly {},
+  new oauthTypes.NamedTenantOnly {},
+  new oauthTypes.SelectableScope {
+    default = "NamedTenant"
+    allowedAtInstall = List("NamedTenant", "WorkspaceShared")
+  }
+)

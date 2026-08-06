@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "name": "top-accounts",
+  "owner": { "kind": "app-hub", "appGroup": "sales", "appName": "crm", "version": "1.4.0" },
+  "kind": "declarative",
+  "title": "Top accounts",
+  "surfaces": ["chat", "dashboard", "app-page"],
+  "inputs": { "type": "object", "properties": { "limit": { "type": "integer", "default": 10 } } },
+  "view": {
+    "type": "table",
+    "binding": {
+      "type": "semantic",
+      "semanticModels": ["sales.accounts"],
+      "semanticQuery": {
+        "model_name": "accounts",
+        "dimensions": ["account_id", "account_name"],
+        "measures": ["revenue"],
+        "order_by": [["revenue", "desc"]],
+        "limit": "{{inputs.limit}}"
+      }
+    },
+    "encoding": { "columns": ["account_name", "revenue"], "rowKey": "account_id" }
+  },
+  "outputs": [
+    {
+      "name": "select",
+      "payload": {
+        "type": "object",
+        "required": ["account_id"],
+        "properties": { "account_id": { "type": "string" } }
+      }
+    }
+  ]
+}

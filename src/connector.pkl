@@ -1,0 +1,16 @@
+module ai.tangram.os.connector
+
+// HTTP credentials injected into every request forwarded to a connector's
+// upstream REST API. Values are evaluated at request time.
+//
+// Available variables in templates:
+//   {{secrets.<key>}}   — value from workspace secrets
+//   {{settings.<key>}}  — value from workspace settings
+//   {{oauth.<key>}}     — OAuth connection value when oauth.pkl is used
+class HeaderTemplate {
+  template: String
+}
+
+class ConnectorAuth {
+  httpHeaders: Map<String, HeaderTemplate>
+}

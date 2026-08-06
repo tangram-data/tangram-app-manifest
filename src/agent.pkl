@@ -1,7 +1,5 @@
 module ai.tangram.os.agent
 
-import "core.pkl" as tangram
-
 // ---------------------------------------------------------------------------
 // Agent app manifest types
 //
@@ -51,7 +49,9 @@ abstract class AgentToolBinding {
 /// `app` is `<group>/<name>` (e.g. `com.acme/salesforce-connector`).
 /// `action` is `<resourceType>.<actionName>` (e.g. `leads.create`).
 class AppAction extends AgentToolBinding {
-  kind: String = "AppAction"
+  // Singleton literal type — author cannot override the discriminator and
+  // mis-route the decoder.
+  kind: "AppAction" = "AppAction"
   app: String
   action: String
 }
@@ -61,11 +61,11 @@ class AppAction extends AgentToolBinding {
 /// Authorization header. For non-Bearer auth shapes, wrap the upstream
 /// behind a Connector app and bind via `AppAction` instead.
 class HttpEndpoint extends AgentToolBinding {
-  kind: String = "HttpEndpoint"
-  /// HTTP method — GET, POST, PUT, PATCH, or DELETE. Bodyless methods
-  /// (GET/DELETE) get their arguments via path-placeholder substitution
-  /// and query string encoding; body-bearing methods get a JSON body.
-  method: String
+  kind: "HttpEndpoint" = "HttpEndpoint"
+  /// HTTP method. Bodyless methods (GET/DELETE) get their arguments via
+  /// path-placeholder substitution and query string encoding; body-bearing
+  /// methods get a JSON body.
+  method: "GET"|"POST"|"PUT"|"PATCH"|"DELETE"
   /// Absolute URL. May contain `{name}` placeholders that the runtime
   /// substitutes from tool arguments before the request fires.
   url: String
@@ -77,7 +77,7 @@ class HttpEndpoint extends AgentToolBinding {
 /// `tangram_query_app_db`). The platform's builtin registry resolves the
 /// name at invocation time; missing builtins fail with a clear error.
 class Builtin extends AgentToolBinding {
-  kind: String = "Builtin"
+  kind: "Builtin" = "Builtin"
   name: String
 }
 
@@ -91,8 +91,8 @@ class Builtin extends AgentToolBinding {
 /// (CLI `--tool-binding` overrides the manifest `defaultBinding`).
 class AgentToolDecl {
   /// Stable, lowercase-with-underscores identifier shown to the LLM and used
-  /// as the dispatcher key. Must match `^[a-z][a-z0-9_]*$`.
-  name: String
+  /// as the dispatcher key.
+  name: String(matches(Regex(#"^[a-z][a-z0-9_]*$"#)))
   /// One-line human description. Surfaces in the LLM's tool catalog — be
   /// specific; the LLM picks tools largely off this string.
   description: String

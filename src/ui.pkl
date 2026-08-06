@@ -1,0 +1,170 @@
+module ai.tangram.os.ui
+
+// ---------------------------------------------------------------------------
+// App-published UI components
+//
+// An app publishes reusable UI components to the App Hub catalog by declaring
+// `components` in `manifests/ui/spec.pkl`. The platform evaluates that property
+// and indexes each entry under the
+// namespaced catalog name `{group}/{app}/{name}`. Declarative components are
+// indexed at registration; sandboxed components are catalogued once the
+// publish-time bundle transform lands.
+//
+// Use in `manifests/ui/spec.pkl`:
+//   import "@tangram-app-manifest/ui.pkl" as ui
+//   components: Listing<ui.AppUIComponentSpec> = new Listing {
+//     new ui.AppUIComponentSpec {
+//       name = "top-accounts"
+//       kind = "declarative"
+//       spec = "components/top-accounts/top-accounts.json"
+//       surfaces { "chat"; "dashboard"; "app-page" }
+//     }
+//   }
+// ---------------------------------------------------------------------------
+
+/// Authoring tier: `declarative` is a JSON view spec rendered by the trusted
+/// frontend renderer; `sandboxed` is app-authored source run in a sandboxed iframe.
+typealias UIComponentKind = "declarative"|"sandboxed"
+
+/// Surfaces on which the host is allowed to render a component:
+///
+/// - `chat`: inside an AI conversation, either inline or in the chat side panel.
+/// - `dashboard`: as a reusable tile in a persisted dashboard grid.
+/// - `app-page`: on a page within an app, typically as part of an application
+///   screen or workflow.
+///
+/// This is an allowlist: the runtime rejects a component on an undeclared
+/// surface. Declaring multiple surfaces does not automatically adapt its layout;
+/// authors should ensure the component is suitable for every declared host.
+typealias UIComponentSurface = "chat"|"dashboard"|"app-page"
+
+/// Semantic-layer binding (preferred; governed, dialect-portable).
+/// `semanticQuery` may carry `{{…}}` templates resolved server-side at render.
+class SemanticBinding {
+  fixed type: String = "semantic"
+  semanticModels: Listing<String>
+  semanticQuery: Dynamic
+}
+
+/// Parameterized SQL bound to a `sqlEngineId` (escape hatch). `params` values
+/// are template strings or `{ from = "<input>" }` references; they bind as SQL
+/// parameters at the facade, never string-concatenated.
+class SqlBinding {
+  fixed type: String = "sql"
+  sqlEngineId: String(!isEmpty)?
+  sql: String(!isEmpty)
+  params: Mapping<String, Any>?
+}
+
+/// How a component reads data. Action invocation is not a binding: sandboxed
+/// source calls its own application's actions directly through the governed
+/// `window.tangram.performAction({ resourceType; action }, args)` SDK path,
+/// where the gateway remains authoritative for action existence, argument
+/// validation, IAM, and confirmation. Named action bindings survive only
+/// inside declarative component JSON artifacts as view wiring.
+typealias UIComponentBinding = SemanticBinding|SqlBinding
+
+/// An event the component may emit to the host; `payload` is a JSON Schema.
+class UIComponentOutput {
+  name: String(!isEmpty)
+  payload: Dynamic?
+}
+
+/// A sandboxed component's render contract: what the in-frame SDK may call
+/// (`query`/`action`), what inputs it takes, and what it emits. Never declares
+/// `bundle` or `view` — the platform fills `bundle.ref` from the compiled `entry`.
+class UIComponentContract {
+  /// Human-readable title; overrides the component name in the catalog.
+  title: String(!isEmpty)?
+
+  /// One-line summary of what the component shows; drives agent discovery.
+  /// Takes precedence over the manifest entry's `description`.
+  description: String(!isEmpty)?
+
+  /// JSON Schema object describing render input parameters.
+  inputs: Dynamic?
+
+  /// Named data/effect bindings callable from the in-frame SDK.
+  bindings: Mapping<String, UIComponentBinding>?
+
+  /// Events the component may emit via the in-frame SDK (`emit`).
+  outputs: Listing<UIComponentOutput>?
+}
+
+/// One published UI component. Artifact paths (`spec` as a path, `entry`) are
+/// relative to the `manifests/ui/` directory and must stay inside it — absolute
+/// paths and `..` traversal are rejected at indexing time.
+class AppUIComponentSpec {
+  /// Component name; catalogued as `{group}/{app}/{name}` (no cross-app
+  /// collisions). A lowercase slug: it is also the component's source
+  /// directory name under `components/`, so path-unsafe names are rejected.
+  name: String(matches(Regex(#"[a-z0-9]([-a-z0-9]*[a-z0-9])?"#)))
+
+  /// Authoring tier. `declarative` requires a `spec` path and forbids `entry`;
+  /// `sandboxed` requires an `entry` of the form
+  /// `components/<component-name>/<entry-file>` whose directory segment equals
+  /// this component's `name` — only that directory contributes to the
+  /// component's bundle and content hash.
+  kind: UIComponentKind(
+    this != "declarative" || (spec is String && entry == null),
+    this != "sandboxed" ||
+      (entry != null && entry.startsWith("components/\(name)/") &&
+        let (file = entry.substring("components/\(name)/".length, entry.length))
+          !file.isEmpty && !file.contains("/"))
+  )
+
+  /// One-line summary of what the component shows. Drives agent discovery
+  /// (intent matching in `tangram_list_components`); used as a fallback when
+  /// the `spec` artifact carries no `description` of its own.
+  description: String(!isEmpty)?
+
+  /// Where the component may render.
+  surfaces: Listing<UIComponentSurface>
+
+  /// Declarative: path to the full component JSON artifact, e.g.
+  /// "components/top-accounts.json". Sandboxed (optional): the render
+  /// contract, either inline as a typed [UIComponentContract] or as a path to
+  /// an equivalent contract JSON.
+  spec: (String(!isEmpty)|UIComponentContract)?
+
+  /// Sandboxed only: path to the TSX/JSX source entry, transformed to a bundle
+  /// at publish.
+  entry: String(!isEmpty)?
+}
+
+/// The UI components this app publishes.
+components: Listing<AppUIComponentSpec> = new Listing<AppUIComponentSpec> {}
+
+/// URL pattern for proxy-mode apps — defines which paths Tangram forwards.
+class UriPattern {
+  pattern: String
+}
+
+/// How the platform serves an app's UI, declared in `manifests/ui/spec.pkl`:
+/// `None` (no app UI), `Proxy` (the app serves its own UI from its container;
+/// the gateway forwards paths matching `uriPatterns`), `OSBuiltIn` (UI
+/// hand-built into the tangram OS frontend — first-party apps only), or
+/// `UIComponent` (the platform renders the app's packaged components).
+typealias UIDeploymentMode = "None"|"Proxy"|"OSBuiltIn"|"UIComponent"
+
+/// Typed `deployment` declaration for `manifests/ui/spec.pkl`:
+///   deployment: ui.UIDeployment = new { mode = "Proxy"; uriPatterns = List(...) }
+class UIDeployment {
+  /// Proxy is the only gateway-served mode; it requires `uriPatterns`
+  /// (enforced at manifest load).
+  mode: UIDeploymentMode = "None"
+
+  /// Proxy only: URL patterns the gateway forwards to the app.
+  uriPatterns: List<UriPattern>(mode == "Proxy")?
+
+  /// Proxy only: keep the app's static path prefix when forwarding UI assets.
+  keepAppStaticPathPrefix: Boolean(mode == "Proxy")?
+
+  /// Proxy only: keep that prefix for API calls the embedded UI makes back
+  /// through the gateway (e.g. a server launched with `--static-prefix`).
+  apiKeepAppStaticPathPrefix: Boolean(mode == "Proxy")?
+
+  /// UIComponent only: name of the entry component in `components` — the
+  /// root component IS the app's UI.
+  rootComponent: String(mode == "UIComponent")?
+}

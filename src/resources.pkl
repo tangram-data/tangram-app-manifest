@@ -1,23 +1,12 @@
-module ai.tangram.os
+module ai.tangram.os.resources
 
-// Current manifest schema version. Apps should reference this in app.pkl as:
-//   manifestSpecVersion = tangram.MANIFEST_SPEC_VERSION
-MANIFEST_SPEC_VERSION = "v1"
+import "manifest.pkl" as manifest
 
-TANGRAM_OS_GROUP_NAME = "ai.tangram-os"
-
-class AppName {
-  group: String
-  name: String
-}
-
-TANGRAM_OS_CORE_APP = new AppName {
-  group = TANGRAM_OS_GROUP_NAME
-  name = "core"
-}
-
+/// A resource type's global identity: the owning application plus the
+/// type name. Lives here because the resource vocabulary is its only consumer;
+/// `manifest.pkl` keeps pure application identity.
 class ResourceType {
-  app: AppName
+  app: manifest.AppName
   name: String
 }
 
@@ -54,10 +43,14 @@ Privilege: _PrivilegeConstants = new _PrivilegeConstants {}
 //   Reversible   — mutates state; prior state restorable; audit always recorded
 //   Irreversible — mutates state; cannot be undone; AI requires confirmation; audit always recorded
 // ---------------------------------------------------------------------------
+/// Closed effect set — the platform decodes `Action.effect` into a closed enum,
+/// so any other string fails at install; the schema rejects it at authoring time.
+typealias ActionEffect = "Stateless"|"Reversible"|"Irreversible"
+
 class _EffectConstants {
-  Stateless:    String = "Stateless"
-  Reversible:   String = "Reversible"
-  Irreversible: String = "Irreversible"
+  Stateless:    ActionEffect = "Stateless"
+  Reversible:   ActionEffect = "Reversible"
+  Irreversible: ActionEffect = "Irreversible"
 }
 Effect: _EffectConstants = new _EffectConstants {}
 
@@ -91,12 +84,11 @@ class QueryParam extends ResourceNameExtractor {
   name: String
 }
 
-/// Extracts from a request body field (dot-separated path).
-/// `index` is only needed when the field is an array.
+/// Extracts from a request body field. The path is a dot-separated traversal that
+/// may include array indices inline, e.g. `obj.arrayField[0].name`.
 class BodyField extends ResourceNameExtractor {
   type: String = "BodyField"
   path: String
-  index: Int?
 }
 
 /// Extracts from a response body field (dot-separated path). Useful when a resource's
@@ -151,13 +143,67 @@ class ResourcePrivilegeRequirement {
 // ---------------------------------------------------------------------------
 // Action
 // ---------------------------------------------------------------------------
+
+/// Typed action-result presentation. `kind` is persisted as the wire
+/// discriminator; concrete subclasses fix it to one supported renderer.
+abstract class ActionPresentation
+
+class CardPresentation extends ActionPresentation {
+  fixed kind: "card" = "card"
+  title: String?
+  fields: List<String>?
+}
+
+class PickerPresentation extends ActionPresentation {
+  fixed kind: "picker" = "picker"
+  title: String?
+  fields: List<String>?
+}
+
+class ConfirmPresentation extends ActionPresentation {
+  fixed kind: "confirm" = "confirm"
+  title: String?
+  fields: List<String>?
+}
+
+class FormPresentation extends ActionPresentation {
+  fixed kind: "form" = "form"
+  title: String?
+  fields: List<String>?
+}
+
+/// Source for one component input. Sources are deliberately selection-only:
+/// no templates, functions, wildcards, or transforms.
+abstract class PresentationInputSource
+
+class FromArg extends PresentationInputSource {
+  fixed source: "arg" = "arg"
+  /// Path segments within the generated LLM-facing argument object, e.g.
+  /// List("parameters", "id").
+  path: List<String>(length > 0, every((segment) -> !segment.isEmpty))
+}
+
+class Literal extends PresentationInputSource {
+  fixed source: "literal" = "literal"
+  value: Any
+}
+
+class ComponentPresentation extends ActionPresentation {
+  fixed kind: "component" = "component"
+  /// Manifest-local component name; the platform resolves it within this app.
+  component: String(!isEmpty)
+  /// Placement preference only; host policy may override it.
+  preferredDisplayMode: "panel"|"inline" = "panel"
+  inputs: Mapping<String, PresentationInputSource> = new Mapping {}
+}
+
 class Action {
   name: String
   /// Privilege class this action belongs to.
   /// Defaults to the action name when it matches a well-known privilege.
   privilege: String?
   /// Characterises the action's effect: Stateless, Reversible, or Irreversible.
-  effect: String
+  effect: ActionEffect
   idempotent: Boolean
   doc: String
   skipAuth: Boolean?
@@ -168,6 +214,39 @@ class Action {
   openApiMapping: OpenApiMapping?
   /// HTTP bindings for multiple operationIds (e.g. native API + Tangram wrapper API).
   openApiMappings: List<OpenApiMapping>?
+  /// Optional typed presentation for this action's result.
+  presentation: ActionPresentation?
+}
+
+// ---------------------------------------------------------------------------
+// ReBAC role declaration
+// ---------------------------------------------------------------------------
+
+/// A named role for the carrying resource type, declaring the privileges
+/// the role grants per-resource-instance under the ReBAC model.
+///
+/// Each ReBAC row in `resource_relations` carries a role name; at check
+/// time the platform resolves the role's `permissions` against the
+/// requested privilege. Roles whose name matches a parent type's role
+/// SHADOW (replace) the parent role — declaring `name = "owner"` here
+/// fully overrides any inherited `owner`.
+///
+/// `permissions` may contain the wildcard `"*"`, which expands at
+/// platform registration time to the full action set declared on this
+/// resource type's `actions` list (including actions inherited via
+/// `superTypeVersion`). Use sparingly — a wildcard role grants every
+/// future action added to the type without further review.
+class Role {
+  /// Role name. Unique within the carrying ResourceTypeVersion. Used as
+  /// the value of `resource_relations.role` for grants.
+  name: String
+
+  /// The privileges this role grants on a resource the principal holds
+  /// this role on. Names must be declared actions of the type (or `"*"`).
+  permissions: List<String>
+
+  /// Human-readable description shown in admin UIs.
+  description: String
 }
 
 // ---------------------------------------------------------------------------
@@ -178,6 +257,11 @@ class ResourceTypeVersion {
   served: Boolean
   superTypeVersion: String?
   actions: List<Action>
+  /// ReBAC role declarations for instances of this resource type.
+  /// Roles inherit from the supertype version (if any); a role with the
+  /// same name as an inherited role REPLACES (shadows) it — there is no
+  /// permission union. Omit (or leave empty) to inherit unchanged.
+  presetRoles: List<Role>?
 }
 
 class ResourceTypeDefinition {
@@ -198,168 +282,46 @@ class ResourceTypeDefinition {
 // Platform super types
 // ---------------------------------------------------------------------------
 WORKSPACE_TYPE = new ResourceType {
-  app = TANGRAM_OS_CORE_APP
+  app = manifest.TANGRAM_OS_CORE_APP
   name = "Workspace"
 }
 
 DATASET_TYPE = new ResourceType {
-  app = TANGRAM_OS_CORE_APP
+  app = manifest.TANGRAM_OS_CORE_APP
   name = "Dataset"
 }
 
 CATALOG_TYPE = new ResourceType {
-  app = TANGRAM_OS_CORE_APP
+  app = manifest.TANGRAM_OS_CORE_APP
   name = "DataCatalog"
 }
 
 STORAGE_TYPE = new ResourceType {
-  app = TANGRAM_OS_CORE_APP
+  app = manifest.TANGRAM_OS_CORE_APP
   name = "Storage"
 }
 
 DATABASE_TYPE = new ResourceType {
-  app = TANGRAM_OS_CORE_APP
+  app = manifest.TANGRAM_OS_CORE_APP
   name = "Database"
 }
 
 COMPUTE_TYPE = new ResourceType {
-  app = TANGRAM_OS_CORE_APP
+  app = manifest.TANGRAM_OS_CORE_APP
   name = "Compute"
 }
 
 SQL_ENGINE_TYPE = new ResourceType {
-  app = TANGRAM_OS_CORE_APP
+  app = manifest.TANGRAM_OS_CORE_APP
   name = "SQLEngine"
 }
 
 WORKFLOW_TYPE = new ResourceType {
-  app = TANGRAM_OS_CORE_APP
+  app = manifest.TANGRAM_OS_CORE_APP
   name = "Workflow"
 }
 
 DASHBOARD_TYPE = new ResourceType {
-  app = TANGRAM_OS_CORE_APP
+  app = manifest.TANGRAM_OS_CORE_APP
   name = "Dashboard"
-}
-
-// ---------------------------------------------------------------------------
-// Integration interfaces
-// ---------------------------------------------------------------------------
-class AppIntegrationInterface {
-  app: AppName
-  name: String
-  version: String
-}
-
-class IntegrationImplementation {
-  interface: AppIntegrationInterface
-  implementationSpec: Dynamic
-  implementationType: String?
-  version: String?
-}
-
-TANGRAM_SQL_APP = new AppName {
-  group = TANGRAM_OS_GROUP_NAME
-  name = "sql"
-}
-
-DATA_CATALOG_APP = new AppName {
-  group = TANGRAM_OS_GROUP_NAME
-  name = "data-catalog"
-}
-
-SPARK_IO = new AppIntegrationInterface {
-  app = DATA_CATALOG_APP
-  name = "spark-io"
-  version = "v1"
-}
-
-SQL_QUERYABLE = new AppIntegrationInterface {
-  app = TANGRAM_SQL_APP
-  name = "queryable"
-  version = "v1"
-}
-
-SCHEMA_UPDATOR = new AppIntegrationInterface {
-  app = DATA_CATALOG_APP
-  name = "schema-update-executor"
-  version = "v1"
-}
-
-class TangramSQLQueryableSpec {
-  sqlCommandPrivilegeMapping: Map<String, List<String>>
-}
-
-class ConfigField {
-  name: String
-  description: String
-  required: Boolean
-  default: String?
-  example: String?
-}
-
-// ---------------------------------------------------------------------------
-// App types
-// ---------------------------------------------------------------------------
-NATIVE_APP_TYPE    = "NativeApp"
-CONNECTOR_APP_TYPE = "ConnectorApp"
-// Agent apps are LLM-driven services declared in `manifests/agent/spec.pkl`
-// (see `agent.pkl`). They have no HTTP service of their own; tools are
-// declared at the manifest level and bound to backends at install time.
-AGENT_APP_TYPE     = "Agent"
-typealias AppType  = "NativeApp"|"ConnectorApp"|"Agent"
-
-// ---------------------------------------------------------------------------
-// Connector auth
-//
-// HTTP credentials injected into every request forwarded to the connector's REST API.
-// Values are evaluated at request time using Mustache-style templates.
-//
-//   Available variables in templates:
-//     {{secrets.<key>}}   — value from workspace secrets
-//     {{settings.<key>}}  — value from workspace settings
-// ---------------------------------------------------------------------------
-class Template {
-  template: String
-}
-
-class ConnectorAuth {
-  httpHeaders: Map<String, Template>
-}
-
-// ---------------------------------------------------------------------------
-// Helm deployment types — used in deployment/helm_charts.pkl.
-//
-// These are plain PKL data classes (not annotations). The platform reads
-// `charts` via evaluateExpression and JSON-decodes it into HelmChartMeta.
-// ---------------------------------------------------------------------------
-class ContainerMeta {
-  name: String
-  image: String
-  description: String?
-}
-
-class HelmComponent {
-  name: String
-  apiServiceComponent: Boolean?
-  recommendedReplica: Int?
-  maxReplica: Int?
-  optional: Boolean?
-  initContainers: List<ContainerMeta>?
-  containers: List<ContainerMeta>
-}
-
-class HelmChart {
-  repo: String
-  fullName: String
-  version: String
-  components: List<HelmComponent>
-}
-
-// ---------------------------------------------------------------------------
-// UI spec types
-// ---------------------------------------------------------------------------
-/// URL pattern for proxy-mode apps — defines which paths Tangram forwards.
-class UriPattern {
-  pattern: String
 }

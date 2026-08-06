@@ -1,0 +1,37 @@
+module ai.tangram.os.manifest
+
+// Current manifest schema version. Apps should reference this in app.pkl as:
+//   manifestSpecVersion = manifest.MANIFEST_SPEC_VERSION
+MANIFEST_SPEC_VERSION = "v1"
+
+TANGRAM_OS_GROUP_NAME = "ai.tangram-os"
+
+class AppName {
+  group: String
+  name: String
+}
+
+TANGRAM_OS_CORE_APP = new AppName {
+  group = TANGRAM_OS_GROUP_NAME
+  name = "core"
+}
+
+class ConfigField {
+  name: String
+  description: String
+  required: Boolean
+  default: String?
+  example: String?
+}
+
+// The three public application types. `App` is any user-facing application,
+// whatever mix of components, Helm releases, and dependency claims it deploys.
+// `Connector` integrates a remote system and owns connector endpoint/auth/
+// credential semantics. `Agent` is an instruction/model/skill-driven runtime
+// declared in `manifests/agent/spec.pkl` (see `agent.pkl`).
+// The removed `NativeApp`, `ConnectorApp`, and `PlatformApp` values are
+// rejected; there is no deployment-mode taxonomy in application identity.
+APP_TYPE       = "App"
+CONNECTOR_TYPE = "Connector"
+AGENT_TYPE     = "Agent"
+typealias AppType = "App"|"Connector"|"Agent"

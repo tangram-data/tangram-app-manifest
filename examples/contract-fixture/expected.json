@@ -1,0 +1,651 @@
+{
+  "identity_": {
+    "specVersion": "v1",
+    "groupName": "ai.tangram-os",
+    "coreApp": {
+      "group": "ai.tangram-os",
+      "name": "core"
+    },
+    "appTypes": [
+      "App",
+      "Connector",
+      "Agent"
+    ],
+    "superTypes": [
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Workspace"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Dataset"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "DataCatalog"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Storage"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Database"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Compute"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "SQLEngine"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Workflow"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "core"
+        },
+        "name": "Dashboard"
+      }
+    ],
+    "integrationApps": [
+      {
+        "group": "ai.tangram-os",
+        "name": "sql"
+      },
+      {
+        "group": "ai.tangram-os",
+        "name": "data-catalog"
+      }
+    ],
+    "interfaces": [
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "data-catalog"
+        },
+        "name": "spark-io",
+        "version": "v1"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "sql"
+        },
+        "name": "queryable",
+        "version": "v1"
+      },
+      {
+        "app": {
+          "group": "ai.tangram-os",
+          "name": "data-catalog"
+        },
+        "name": "schema-update-executor",
+        "version": "v1"
+      }
+    ]
+  },
+  "serviceTypeDefinition_": {
+    "name": "Record",
+    "doc": "A record resource",
+    "activeVersion": "v2",
+    "versions": [
+      {
+        "version": "v1",
+        "served": false,
+        "superTypeVersion": null,
+        "actions": [
+          {
+            "name": "List",
+            "privilege": "Read",
+            "effect": "Stateless",
+            "idempotent": true,
+            "doc": "List records",
+            "skipAuth": null,
+            "skipAudit": null,
+            "requiresConfirmation": null,
+            "additionalPrivileges": null,
+            "openApiMapping": null,
+            "openApiMappings": [
+              {
+                "operationId": "listRecordsNative",
+                "resourceName": null,
+                "resourceId": null,
+                "newName": null,
+                "resourceNameTemplate": null,
+                "resourceIdTemplate": null,
+                "newNameTemplate": null
+              },
+              {
+                "operationId": "listRecordsWrapper",
+                "resourceName": null,
+                "resourceId": null,
+                "newName": null,
+                "resourceNameTemplate": null,
+                "resourceIdTemplate": null,
+                "newNameTemplate": null
+              }
+            ],
+            "presentation": null
+          }
+        ],
+        "presetRoles": null
+      },
+      {
+        "version": "v2",
+        "served": true,
+        "superTypeVersion": "v1",
+        "actions": [
+          {
+            "name": "Rename",
+            "privilege": "Write",
+            "effect": "Reversible",
+            "idempotent": true,
+            "doc": "Rename a record",
+            "skipAuth": false,
+            "skipAudit": false,
+            "requiresConfirmation": true,
+            "additionalPrivileges": [
+              {
+                "resourceType": "Workspace",
+                "privilege": "Describe",
+                "resourceName": [
+                  {
+                    "type": "PathParam",
+                    "name": "workspace"
+                  }
+                ]
+              }
+            ],
+            "openApiMapping": {
+              "operationId": "renameRecord",
+              "resourceName": [
+                {
+                  "type": "PathParam",
+                  "name": "recordId"
+                },
+                {
+                  "type": "QueryParam",
+                  "name": "revision"
+                },
+                {
+                  "type": "BodyField",
+                  "path": "record.meta[0].name"
+                },
+                {
+                  "type": "ResponseField",
+                  "path": "record.id"
+                }
+              ],
+              "resourceId": {
+                "type": "BodyField",
+                "path": "record.id"
+              },
+              "newName": {
+                "type": "BodyField",
+                "path": "record.newName"
+              },
+              "resourceNameTemplate": "[{{getNameById(requestBody.record.id)}}]",
+              "resourceIdTemplate": "{{requestBody.record.id}}",
+              "newNameTemplate": "{{requestBody.record.newName}}"
+            },
+            "openApiMappings": null,
+            "presentation": {
+              "kind": "card",
+              "title": "Record",
+              "fields": [
+                "id",
+                "name"
+              ]
+            }
+          },
+          {
+            "name": "List",
+            "privilege": "Read",
+            "effect": "Stateless",
+            "idempotent": true,
+            "doc": "List records",
+            "skipAuth": null,
+            "skipAudit": null,
+            "requiresConfirmation": null,
+            "additionalPrivileges": null,
+            "openApiMapping": null,
+            "openApiMappings": [
+              {
+                "operationId": "listRecordsNative",
+                "resourceName": null,
+                "resourceId": null,
+                "newName": null,
+                "resourceNameTemplate": null,
+                "resourceIdTemplate": null,
+                "newNameTemplate": null
+              },
+              {
+                "operationId": "listRecordsWrapper",
+                "resourceName": null,
+                "resourceId": null,
+                "newName": null,
+                "resourceNameTemplate": null,
+                "resourceIdTemplate": null,
+                "newNameTemplate": null
+              }
+            ],
+            "presentation": null
+          }
+        ],
+        "presetRoles": [
+          {
+            "name": "owner",
+            "permissions": [
+              "*"
+            ],
+            "description": "Full control of the record"
+          }
+        ]
+      }
+    ],
+    "superType": {
+      "app": {
+        "group": "ai.tangram-os",
+        "name": "core"
+      },
+      "name": "Dataset"
+    },
+    "scopeType": {
+      "app": {
+        "group": "ai.tangram-os",
+        "name": "core"
+      },
+      "name": "Workspace"
+    },
+    "scopePrivilegePropagation": {
+      "Admin": [
+        "Read",
+        "Write"
+      ]
+    }
+  },
+  "presentations_": [
+    {
+      "kind": "picker",
+      "title": "Pick a record",
+      "fields": [
+        "id",
+        "name"
+      ]
+    },
+    {
+      "kind": "confirm",
+      "title": "Confirm rename",
+      "fields": null
+    },
+    {
+      "kind": "form",
+      "title": null,
+      "fields": [
+        "name",
+        "revision"
+      ]
+    },
+    {
+      "kind": "component",
+      "component": "mail-viewer",
+      "preferredDisplayMode": "inline",
+      "inputs": {
+        "messageId": {
+          "source": "arg",
+          "path": [
+            "parameters",
+            "id"
+          ]
+        },
+        "mode": {
+          "source": "literal",
+          "value": "read-only"
+        }
+      }
+    }
+  ],
+  "noteTypeDefinition_": {
+    "name": "Note",
+    "doc": "A note resource",
+    "activeVersion": "v1",
+    "versions": [
+      {
+        "version": "v1",
+        "served": true,
+        "superTypeVersion": null,
+        "actions": [
+          {
+            "name": "Approve",
+            "privilege": "Approve",
+            "effect": "Irreversible",
+            "idempotent": false,
+            "doc": "Approve a note",
+            "skipAuth": null,
+            "skipAudit": null,
+            "requiresConfirmation": true,
+            "additionalPrivileges": null,
+            "openApiMapping": {
+              "operationId": "approveNote",
+              "resourceName": null,
+              "resourceId": {
+                "type": "PathParam",
+                "name": "noteId"
+              },
+              "newName": null,
+              "resourceNameTemplate": null,
+              "resourceIdTemplate": null,
+              "newNameTemplate": null
+            },
+            "openApiMappings": null,
+            "presentation": null
+          }
+        ],
+        "presetRoles": [
+          {
+            "name": "reviewer",
+            "permissions": [
+              "Approve"
+            ],
+            "description": "Can approve notes"
+          }
+        ]
+      }
+    ],
+    "superType": null,
+    "scopeType": null,
+    "scopePrivilegePropagation": null
+  },
+  "integrationImpl_": {
+    "interface": {
+      "app": {
+        "group": "ai.tangram-os",
+        "name": "sql"
+      },
+      "name": "queryable",
+      "version": "v1"
+    },
+    "implementationSpec": {
+      "endpoint": "http://sql.example"
+    },
+    "implementationType": "http",
+    "version": "v1"
+  },
+  "queryableSpec_": {
+    "sqlCommandPrivilegeMapping": {
+      "SELECT": [
+        "Read"
+      ]
+    }
+  },
+  "connectorAuth_": {
+    "httpHeaders": {
+      "Authorization": {
+        "template": "Bearer {{oauth.accessToken}}"
+      }
+    }
+  },
+  "configField_": {
+    "name": "apiBase",
+    "description": "Upstream API base URL",
+    "required": true,
+    "default": "https://api.example.com",
+    "example": "https://api.example.com"
+  },
+  "otlpObservability_": {
+    "traces": "otlp",
+    "metrics": {
+      "kind": "otlp"
+    },
+    "targetContainers": [
+      "server"
+    ]
+  },
+  "prometheusObservability_": {
+    "traces": "none",
+    "metrics": {
+      "kind": "prometheus",
+      "port": 9090,
+      "path": "/custom/metrics",
+      "scheme": "https",
+      "interval": "15s",
+      "sampleLimit": 5000
+    },
+    "targetContainers": null
+  },
+  "helmChart_": {
+    "repo": "https://charts.example.com",
+    "fullName": "example/starrocks",
+    "version": "1.2.3",
+    "requestedCapabilities": {
+      "hooks": true,
+      "crds": true,
+      "clusterScopedKinds": [
+        "ClusterRole"
+      ]
+    },
+    "components": [
+      {
+        "name": "fe",
+        "recommendedReplica": 1,
+        "maxReplica": 3,
+        "optional": false,
+        "initContainers": [
+          {
+            "name": "init",
+            "image": "example/init@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+            "description": "Init container"
+          }
+        ],
+        "containers": [
+          {
+            "name": "fe",
+            "image": "example/fe@sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "description": null
+          }
+        ]
+      }
+    ],
+    "observability": {
+      "traces": "otlp",
+      "metrics": {
+        "kind": "otlp"
+      },
+      "targetContainers": [
+        "server"
+      ]
+    },
+    "crds": [
+      {
+        "apiGroup": "starrocks.com",
+        "resources": [
+          "starrocksclusters",
+          "starrocksclusters/status"
+        ],
+        "verbs": [
+          "create",
+          "get",
+          "list",
+          "watch",
+          "update",
+          "delete",
+          "patch"
+        ]
+      }
+    ]
+  },
+  "uriPattern_": {
+    "pattern": "/app/*"
+  },
+  "uiDeployment_": {
+    "mode": "Proxy",
+    "uriPatterns": [
+      {
+        "pattern": "/app/*"
+      }
+    ],
+    "keepAppStaticPathPrefix": true,
+    "apiKeepAppStaticPathPrefix": null,
+    "rootComponent": null
+  },
+  "uiComponentDeployment_": {
+    "mode": "UIComponent",
+    "uriPatterns": null,
+    "keepAppStaticPathPrefix": null,
+    "apiKeepAppStaticPathPrefix": null,
+    "rootComponent": "churn-explorer"
+  },
+  "componentSpec_": {
+    "service": {
+      "port": 80,
+      "targetPort": 8080,
+      "protocol": "TCP"
+    },
+    "initContainers": [
+      {
+        "ports": [],
+        "variables": {
+          "MODE": "init"
+        },
+        "files": [],
+        "command": [
+          "sh",
+          "-c",
+          "init"
+        ],
+        "args": null
+      }
+    ],
+    "containers": [
+      {
+        "ports": [
+          8080
+        ],
+        "variables": {
+          "API_KEY": {
+            "value": "secret-ref"
+          },
+          "LOG_LEVEL": "info"
+        },
+        "files": [
+          {
+            "name": "config",
+            "path": "/etc/app/config.yaml",
+            "isSensitive": true,
+            "content": "key: value"
+          }
+        ],
+        "command": [
+          "server"
+        ],
+        "args": [
+          "--port",
+          "8080"
+        ]
+      }
+    ]
+  },
+  "containerMeta_": {
+    "name": "server",
+    "image": "example/server@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "description": "Main container"
+  },
+  "componentMeta_": {
+    "name": "orders-api",
+    "initContainers": null,
+    "containers": [
+      {
+        "name": "server",
+        "image": "example/server@sha256:3333333333333333333333333333333333333333333333333333333333333333",
+        "description": "Main container"
+      }
+    ],
+    "sourceArtifact": {
+      "containerName": "api",
+      "runtime": "python-3.12",
+      "entry": "orders_api.main",
+      "lockfile": "uv.lock",
+      "sourceDir": "source/orders-api"
+    },
+    "maxReplica": null,
+    "recommendedReplica": 2,
+    "optional": false,
+    "observability": null
+  },
+  "sourceComponentSpec_": {
+    "service": {
+      "port": 8080,
+      "targetPort": 8080,
+      "protocol": "TCP"
+    },
+    "initContainers": null,
+    "containers": [
+      {
+        "ports": [
+          8080
+        ],
+        "variables": {
+          "LOG_LEVEL": "info"
+        },
+        "files": [],
+        "command": [],
+        "args": null
+      },
+      {
+        "ports": [
+          9100
+        ],
+        "variables": {
+          "MODE": "sidecar"
+        },
+        "files": [],
+        "command": [],
+        "args": null
+      }
+    ]
+  },
+  "serviceBackend_": {
+    "serviceName": "orders-api",
+    "port": 8080
+  },
+  "deploymentContext_": {
+    "id": "dep-1",
+    "tangramOSPublicUrl": "https://os.example.com",
+    "workspace": "ws-1",
+    "k8sNamespace": "app-ns",
+    "cloudProvider": "AWS",
+    "serviceAccountTokenSecret": {
+      "name": "app-sa-app-ns",
+      "tokenKey": ".auth_token"
+    }
+  }
+}

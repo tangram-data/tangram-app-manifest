@@ -1,0 +1,231 @@
+module ai.tangram.os.oauth
+
+// ---------------------------------------------------------------------------
+// Connector OAuth — for connectors that require an OAuth2 authorization-code
+// flow (e.g. QuickBooks, Slack, Google).
+//
+// Usage in `manifests/api/spec.pkl` for an OAuth-backed connector:
+//
+//   import "@tangram-app-manifest/connector.pkl" as connector
+//   import "@tangram-app-manifest/oauth.pkl" as oauthTypes
+//
+//   oauth = new oauthTypes.OAuth2AuthCode {
+//     authorizationUrl   = "https://appcenter.intuit.com/connect/oauth2"
+//     tokenUrl           = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
+//     revocationUrl      = "https://developer.api.intuit.com/v2/oauth2/tokens/revoke"
+//     scopes             = List("com.intuit.quickbooks.accounting")
+//     clientIdSecret     = "quickbooksClientId"
+//     clientSecretSecret = "quickbooksClientSecret"
+//     callbackPath       = "/api/core/v1/connector-oauth/callback/com.intuit/quickbooks"
+//     tenant             = new oauthTypes.CallbackParam { name = "realmId" }
+//   }
+//   auth = new connector.ConnectorAuth {
+//     httpHeaders = Map(
+//       "Authorization", new connector.HeaderTemplate { template = "Bearer {{oauth.accessToken}}" }
+//     )
+//   }
+// ---------------------------------------------------------------------------
+
+/// How the connector authenticates to the upstream token endpoint. Sealed —
+/// connector authors should pick one of these literals (not pass arbitrary
+/// strings). v1 implements ClientSecretBasic / ClientSecretPost / None; the
+/// validator rejects PrivateKeyJwt / TlsClientAuth at install with a clear
+/// "planned for a later version" error rather than letting them fail
+/// post-consent.
+typealias TokenAuthMethod = "ClientSecretBasic"|"ClientSecretPost"|"PrivateKeyJwt"|"TlsClientAuth"|"None"
+
+/// Extra `?name=value` parameter appended to the authorize URL. Use a list
+/// (not a map) — some providers (Microsoft) care about parameter ordering.
+class AuthorizeParam {
+  name: String
+  value: String
+}
+
+// ---------------------------------------------------------------------------
+// Tenant capture — how Tangram learns the upstream tenant identifier so the
+// proxy can substitute it into per-operation paths via `{{oauth.tenantId}}`.
+//
+//   CallbackParam      — provider redirects with `?realmId=...` (QuickBooks).
+//   TokenResponseField — token-exchange body carries it (Slack: `team.id`).
+//   UserInfo           — fetch from a separate /userinfo endpoint (OIDC).
+//   RequiredAtInstall  — admin supplies an install-time setting before
+//                        OAuth runs (Salesforce instance URL).
+// ---------------------------------------------------------------------------
+
+/// Sealed parent. Discriminated by `kind` so the platform's JSON decoder can
+/// pick the right variant — PKL doesn't carry class identity through JSON.
+abstract class TenantSource {
+  kind: String
+}
+
+/// Tenant id arrives as a query parameter on the OAuth callback URL.
+/// `name` is the parameter name (e.g. `realmId`).
+class CallbackParam extends TenantSource {
+  // Singleton literal type — author cannot override the discriminator and
+  // mis-route the decoder.
+  kind: "CallbackParam" = "CallbackParam"
+  name: String
+}
+
+/// Tenant id is a field in the token-exchange response body. `jsonPath` is a
+/// minimal dot-path (e.g. `$.team.id`). Use TokenResponseField when the
+/// provider doesn't put the tenant on the callback URL.
+class TokenResponseField extends TenantSource {
+  kind: "TokenResponseField" = "TokenResponseField"
+  jsonPath: String
+}
+
+/// Tenant id is fetched from a separate /userinfo endpoint after token
+/// exchange. (Not implemented in v1.)
+class UserInfo extends TenantSource {
+  kind: "UserInfo" = "UserInfo"
+  url: String
+  jsonPath: String
+}
+
+/// Tenant id must be supplied as an install-time workspace setting before
+/// OAuth even runs. (Not implemented in v1.)
+class RequiredAtInstall extends TenantSource {
+  kind: "RequiredAtInstall" = "RequiredAtInstall"
+  settingName: String
+}
+
+// ---------------------------------------------------------------------------
+// Connection scope — governs the natural-key shape for stored connections.
+//
+//   WorkspaceShared   — one connection per workspace, acts as an admin.
+//                       Best for Stripe / single-customer QuickBooks.
+//   PerUser           — one connection per Tangram user. Best for Google
+//                       Drive / GitHub where privacy matters.
+//   NamedTenant       — N admin-labelled connections per workspace. Best
+//                       for accounting agencies managing many QuickBooks
+//                       company files from one Tangram workspace.
+//   PerUserPerTenant  — composite of the above. Rare; consultants with
+//                       multiple clients on multiple platforms.
+//
+// The current runtime supports WorkspaceShared and PerUser connections.
+// NamedTenant and PerUserPerTenant remain in the manifest vocabulary so
+// connectors can declare their intended shape ahead of runtime support, but
+// starting a connection in either deferred mode is rejected explicitly.
+// ---------------------------------------------------------------------------
+
+typealias ConnectionMode = "WorkspaceShared"|"PerUser"|"NamedTenant"|"PerUserPerTenant"
+
+/// Sealed parent. Choose the scope declaration that matches the connector's
+/// real-world deployment shape and the modes its current runtime supports.
+abstract class ConnectionScope {
+  kind: String
+}
+
+/// Restricts the connector to the supported WorkspaceShared mode. Use this
+/// when the connector genuinely supports nothing else (Stripe pattern).
+class WorkspaceOnly extends ConnectionScope {
+  kind: "WorkspaceOnly" = "WorkspaceOnly"
+}
+
+/// Restricts the connector to the supported PerUser mode. Use this when
+/// privacy requires per-user isolation (Google Drive pattern).
+class PerUserOnly extends ConnectionScope {
+  kind: "PerUserOnly" = "PerUserOnly"
+}
+
+/// Declares NamedTenant as the connector's only mode. The schema accepts this
+/// forward-looking declaration, but the current runtime rejects connection
+/// starts until NamedTenant support is implemented.
+class NamedTenantOnly extends ConnectionScope {
+  kind: "NamedTenantOnly" = "NamedTenantOnly"
+}
+
+/// Admin picks the mode at install from `allowedAtInstall`; `default` is
+/// pre-selected on the install page. The current runtime can start
+/// WorkspaceShared and PerUser connections. It rejects NamedTenant and
+/// PerUserPerTenant even when they are declared in `allowedAtInstall`.
+///
+/// Constraints:
+///   - `allowedAtInstall` must be non-empty (an install screen with zero
+///     options is unusable).
+///   - `default` must appear in `allowedAtInstall` (otherwise the
+///     pre-selected value isn't selectable).
+/// Both are enforced as PKL constraints AND mirrored in the Tangram
+/// manifest validator (Scala side) — defense in depth in case a manifest
+/// somehow bypasses the PKL evaluator.
+class SelectableScope extends ConnectionScope {
+  kind: "Either" = "Either"
+  default: ConnectionMode
+  allowedAtInstall: List<ConnectionMode>(
+    !isEmpty,
+    contains(default)
+  )
+}
+
+// ---------------------------------------------------------------------------
+// OAuth2 authorization-code-flow declaration.
+// ---------------------------------------------------------------------------
+class OAuth2AuthCode {
+  /// Provider's authorize endpoint (https only — enforced here and by the
+  /// platform validator).
+  authorizationUrl: String(startsWith("https://"))
+
+  /// Provider's token endpoint (https only). Used for the initial
+  /// authorization_code exchange AND for refresh_token grants.
+  tokenUrl: String(startsWith("https://"))
+
+  /// Provider's revocation endpoint. When set, disconnect calls it
+  /// best-effort before clearing local tokens — so consent doesn't linger
+  /// upstream after the workspace removes the connection.
+  revocationUrl: String(startsWith("https://"))?
+
+  /// Scopes requested at authorize time. The platform compares this list
+  /// against the granted scopes on each connection load and flags
+  /// `scope_drift` when the manifest gains a scope that wasn't granted.
+  scopes: List<String> = List()
+
+  /// Name of the GLOBAL Tangram system secret (NOT per-install workspace
+  /// secret) holding the publisher's OAuth client_id. Workspace admins
+  /// never see or type this. Must differ from clientSecretSecret.
+  clientIdSecret: String
+
+  /// Name of the GLOBAL system secret holding the OAuth client_secret.
+  /// Must differ from clientIdSecret.
+  clientSecretSecret: String(this != clientIdSecret)
+
+  /// Path Tangram serves the callback on AND sends as redirect_uri to the
+  /// provider. The platform validator enforces the canonical shape
+  /// `/api/core/v1/connector-oauth/callback/{group}/{name}` matching this
+  /// app's group/name — drift between the two would cause the upstream
+  /// to reject every callback.
+  callbackPath: String
+
+  /// How to authenticate to the token endpoint. Defaults to Basic-auth
+  /// header (RFC 6749 §2.3.1, most common). Use ClientSecretPost for
+  /// providers that require client_id/client_secret in the form body
+  /// instead. Use None for PKCE-only public clients.
+  tokenAuthMethod: TokenAuthMethod = "ClientSecretBasic"
+
+  /// Extra parameters appended to the authorize URL (ordered). Most
+  /// providers accept the default `response_type=code` Tangram adds
+  /// automatically — only set this for provider-specific requirements
+  /// like `prompt=consent` or `audience=...`.
+  additionalAuthorizeParams: List<AuthorizeParam> = List()
+
+  /// How Tangram captures the upstream tenant id. Omit if the provider
+  /// doesn't have a tenant concept (e.g. single-account APIs). When set,
+  /// per-operation paths in open_api.yml can reference `{{oauth.tenantId}}`.
+  tenant: TenantSource?
+
+  /// PKCE on by default. Set false only for providers that don't support
+  /// PKCE — modern providers should all support it. RFC 7636.
+  pkce: Boolean = true
+
+  /// Refresh access tokens this many seconds before expiry. 10 min default
+  /// cushions clock skew between Tangram and the provider; 5 min routinely
+  /// loses to skew and forces a 401-driven retry on the proxy hot path.
+  /// Must be in (0, 3600).
+  refreshWindowSeconds: Int(this > 0, this < 3600) = 600
+
+  /// Which connection modes the connector author supports. The current
+  /// runtime can start WorkspaceShared and PerUser connections; NamedTenant
+  /// and PerUserPerTenant are schema-valid declarations but remain runtime-
+  /// gated until their connection lifecycle is implemented.
+  connectionScope: ConnectionScope = new WorkspaceOnly {}
+}
