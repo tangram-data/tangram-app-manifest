@@ -54,7 +54,15 @@ Two conformance targets exist:
 - A **conforming manifest** is a package that evaluates successfully against the schema package and satisfies every MUST in this specification.
 - A **conforming platform** accepts every conforming manifest whose declared `manifestSpecVersion` it supports, rejects non-conforming manifests with actionable errors, and honors the declared semantics (privileges, effects, capability requests, surfaces) at runtime.
 
-Schema-level constraints (Pkl type constraints such as regex-limited names or `https://`-only URLs) are normative. A conforming platform SHOULD additionally enforce them server-side rather than trusting the evaluator alone.
+### Enforcement layers
+
+Requirements in this specification are enforced at three layers, and a requirement is normative regardless of which layer checks it:
+
+1. **Schema constraints** — Pkl type constraints in the schema package (regex-limited names, `https://`-only URLs, cross-field constraints) fail at authoring time. These are normative, and a conforming platform SHOULD additionally enforce them server-side rather than trusting the evaluator alone.
+2. **Platform validation** — many MUSTs in this spec (uniqueness rules, cross-file references, canonical path shapes, exact-class checks) are not expressible as Pkl constraints and are enforced by the platform at registration or install.
+3. **Runtime** — surface allowlists, privilege checks, confirmation gates, and capability ceilings are enforced on every request.
+
+The schema package alone therefore does not check every requirement in this document; a manifest that evaluates cleanly may still be rejected by a conforming platform.
 
 ## Notation
 

@@ -26,7 +26,7 @@ tools = new Listing {
 
 | Field | Type | Req. | Meaning |
 |---|---|---|---|
-| `defaultLlm` | `AgentLlmRef` | SHOULD | Provider + model the agent runs under (`provider` one of the platform's LLM providers — Anthropic, OpenAI, Gemini, OpenRouter, Ollama; `model` the provider-specific identifier). |
+| `defaultLlm` | `AgentLlmRef` | SHOULD | Provider + model the agent runs under. `provider` is an open string but SHOULD name a provider the platform supports (v1: Anthropic, OpenAI, Gemini, OpenRouter, Ollama); `model` is the provider-specific identifier. |
 | `systemPrompt` | `String` | MUST | Free-form system prompt: role, tools to reach for, what to refuse or escalate. |
 | `allowCustomLlm` | `Boolean` | MAY (default `true`) | Whether workspace operators may switch provider/model at runtime. Set `false` for agents tightly coupled to a specific model. |
 | `tools` | `Listing<AgentToolDecl>` | MAY | Declared tools (below). |

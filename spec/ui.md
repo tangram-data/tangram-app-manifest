@@ -68,9 +68,9 @@ Declares what the in-frame SDK may do and what the component consumes/emits. It 
 |---|---|---|
 | `title` | `String?` | Human-readable title; overrides the name in the catalog |
 | `description` | `String?` | Summary; takes precedence over the manifest entry's `description` |
-| `inputs` | JSON Schema object | Render input parameters |
-| `bindings` | `Mapping<String, SemanticBinding \| SqlBinding>` | Named data bindings callable from the in-frame SDK |
-| `outputs` | `Listing<UIComponentOutput>` | Events the component may emit (`name` + JSON-Schema `payload`) |
+| `inputs` | JSON Schema object, OPTIONAL | Render input parameters |
+| `bindings` | `Mapping<String, SemanticBinding \| SqlBinding>?` | Named data bindings callable from the in-frame SDK |
+| `outputs` | `Listing<UIComponentOutput>?` | Events the component may emit (`name` + JSON-Schema `payload`) |
 
 Data bindings:
 
@@ -94,4 +94,13 @@ deployment: ui.UIDeployment = new { mode = "UIComponent"; rootComponent = "home"
 | `OSBuiltIn` | UI hand-built into the platform frontend. Reserved for first-party applications. | — |
 | `UIComponent` | The platform renders the application's packaged components; `rootComponent` names the entry component in `components` — the root component *is* the application's UI. | `rootComponent` |
 
-Constraints (enforced at manifest load): `uriPatterns` is meaningful only when `mode == "Proxy"`, `rootComponent` only when `mode == "UIComponent"`. `Proxy` is the only gateway-served mode and MUST declare `uriPatterns`.
+Constraints (enforced at manifest load): `uriPatterns` is meaningful only when `mode == "Proxy"`, `rootComponent` only when `mode == "UIComponent"`. `Proxy` is the only gateway-served mode and MUST declare `uriPatterns`. In `UIComponent` mode, authors SHOULD set `rootComponent`; when set, it MUST name a component declared in `components`.
+
+## Branding assets
+
+`ui/spec.pkl` MAY also declare top-level branding fields consumed by the platform catalog:
+
+- `logo` — path to the application's logo image.
+- `resourceTypeIcons` — map from resource type name to an icon image path.
+
+Asset paths MUST begin with `static/` and resolve to files under `manifests/ui/static/` (e.g. `logo = "static/logo.png"`).

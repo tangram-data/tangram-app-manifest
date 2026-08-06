@@ -24,7 +24,7 @@ readme      = read("README.md").text
 | Field | Type | Req. | Meaning |
 |---|---|---|---|
 | `manifestSpecVersion` | `String` | MUST | The manifest spec version this package targets. This revision defines `"v1"`. |
-| `group` | `String` | MUST | Reverse-DNS publisher namespace (e.g. `com.intuit`, `ai.tangram`). Together with `name`, globally identifies the application. |
+| `group` | `String` | MUST | Publisher namespace; reverse-DNS form is the RECOMMENDED convention (e.g. `com.intuit`, `ai.tangram`). Together with `name`, globally identifies the application. |
 | `name` | `String` | MUST | Application name, unique within the group. |
 | `version` | `String` | MUST | Application package version (semantic versioning RECOMMENDED). |
 | `appType` | `"App" \| "Connector" \| "Agent"` | MUST | Application type. Platforms MUST reject a missing or unknown value, and MUST reject the removed pre-1.0 values (`NativeApp`, `PlatformApp`, `ConnectorApp`) with a pointer to the replacement type. |
@@ -39,7 +39,7 @@ readme      = read("README.md").text
 
 The pair `group/name` is the application's canonical reference everywhere else in the platform: agent tool bindings (`com.acme/salesforce`), UI component catalog names (`{group}/{app}/{component}`), resource-type identities, and OAuth callback paths.
 
-The reserved group `ai.tangram-os` identifies the platform itself; the well-known application `ai.tangram-os/core` owns the platform super types (see [Resources & Actions](resources.md#platform-super-types)). Third-party manifests MUST NOT claim the reserved group.
+The reserved group `ai.tangram-os` identifies the platform itself; the well-known application `ai.tangram-os/core` owns the platform super types (see [Resources & Actions](resources.md#platform-super-types)). Third-party manifests MUST NOT claim the reserved group; this is registration policy, enforced by the platform rather than the schema.
 
 ## Configuration — settings and secrets
 

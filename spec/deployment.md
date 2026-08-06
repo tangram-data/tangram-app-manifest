@@ -70,7 +70,7 @@ Instead of a prebuilt image, a component may ship source that the platform build
 | `runtime` | `SourceRuntime` | Closed set; v1 defines `python-3.12`. Each identifier maps to a platform builder/base-image recipe — adding a value is a platform capability release. |
 | `entry` | `String` | Runtime-interpreted entry; for `python-3.12`, a dotted module under the source `src/` tree launched as `python -m <entry>` |
 | `lockfile` | `String` | Dependency lockfile relative to the source dir; `python-3.12` REQUIRES a `uv.lock` |
-| `sourceDir` | `String?` | Source tree location relative to `deployment/` (default `deployment/source/<component-name>/`) |
+| `sourceDir` | `String?` | Source tree location relative to `deployment/`; when omitted, the platform uses the conventional `deployment/source/<component-name>/` |
 
 Every `SourceArtifact` field MUST be a schema-time constant literal — no settings, secrets, dependency outputs, or deployment context.
 

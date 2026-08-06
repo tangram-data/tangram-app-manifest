@@ -52,13 +52,13 @@ The platform application `ai.tangram-os/core` owns well-known super types that m
 | `effect` | `"Stateless" \| "Reversible" \| "Irreversible"` | MUST | Effect classification (below). Closed set — any other value MUST be rejected. |
 | `idempotent` | `Boolean` | MUST | Whether repeating the call with the same arguments is safe. |
 | `doc` | `String` | MUST | Description. This string is what AI agents read to decide when and how to call the action — write it for the model, with concrete argument guidance. |
-| `privilege` | `String?` | SHOULD | Privilege class the action belongs to. Defaults to the action name when that matches a well-known privilege. |
+| `privilege` | `String?` | SHOULD | Privilege class the action belongs to. When omitted, the platform defaults it to the action name if that matches a well-known privilege. |
 | `skipAuth` | `Boolean?` | MAY | Skip the platform IAM check. Use only for intentionally public actions. |
 | `skipAudit` | `Boolean?` | MAY | Suppress audit recording. |
 | `requiresConfirmation` | `Boolean?` | MAY | Force a user confirmation prompt before AI-initiated invocation. |
 | `additionalPrivileges` | `List<ResourcePrivilegeRequirement>?` | MAY | Cross-resource authorization the action also requires. |
-| `openApiMapping` | `OpenApiMapping?` | MAY | HTTP binding for a single `operationId`. |
-| `openApiMappings` | `List<OpenApiMapping>?` | MAY | Multiple HTTP bindings (e.g. native API + platform wrapper API). |
+| `openApiMapping` | `OpenApiMapping?` | MAY | HTTP binding for a single `operationId` — convenience for the common single-binding case. |
+| `openApiMappings` | `List<OpenApiMapping>?` | MAY | Multiple HTTP bindings (e.g. native API + platform wrapper API). An action's effective bindings are the concatenation of `openApiMapping` (if set) and `openApiMappings` (if set); declaring both is permitted. |
 | `presentation` | `ActionPresentation?` | MAY | Typed presentation of the action's result (below). |
 
 ### Privileges
