@@ -139,3 +139,32 @@ components: Listing<AppUIComponentSpec> = new Listing<AppUIComponentSpec> {}
 class UriPattern {
   pattern: String
 }
+
+/// How the platform serves an app's UI, declared in `manifests/ui/spec.pkl`:
+/// `None` (no app UI), `Proxy` (the app serves its own UI from its container;
+/// the gateway forwards paths matching `uriPatterns`), `OSBuiltIn` (UI
+/// hand-built into the tangram OS frontend — first-party apps only), or
+/// `UIComponent` (the platform renders the app's packaged components).
+typealias UIDeploymentMode = "None"|"Proxy"|"OSBuiltIn"|"UIComponent"
+
+/// Typed `deployment` declaration for `manifests/ui/spec.pkl`:
+///   deployment: ui.UIDeployment = new { mode = "Proxy"; uriPatterns = List(...) }
+class UIDeployment {
+  /// Proxy is the only gateway-served mode; it requires `uriPatterns`
+  /// (enforced at manifest load).
+  mode: UIDeploymentMode = "None"
+
+  /// Proxy only: URL patterns the gateway forwards to the app.
+  uriPatterns: List<UriPattern>(mode == "Proxy")?
+
+  /// Proxy only: keep the app's static path prefix when forwarding UI assets.
+  keepAppStaticPathPrefix: Boolean(mode == "Proxy")?
+
+  /// Proxy only: keep that prefix for API calls the embedded UI makes back
+  /// through the gateway (e.g. a server launched with `--static-prefix`).
+  apiKeepAppStaticPathPrefix: Boolean(mode == "Proxy")?
+
+  /// UIComponent only: name of the entry component in `components` — the
+  /// root component IS the app's UI.
+  rootComponent: String(mode == "UIComponent")?
+}

@@ -506,6 +506,24 @@
   "uriPattern_": {
     "pattern": "/app/*"
   },
+  "uiDeployment_": {
+    "mode": "Proxy",
+    "uriPatterns": [
+      {
+        "pattern": "/app/*"
+      }
+    ],
+    "keepAppStaticPathPrefix": true,
+    "apiKeepAppStaticPathPrefix": null,
+    "rootComponent": null
+  },
+  "uiComponentDeployment_": {
+    "mode": "UIComponent",
+    "uriPatterns": null,
+    "keepAppStaticPathPrefix": null,
+    "apiKeepAppStaticPathPrefix": null,
+    "rootComponent": "churn-explorer"
+  },
   "componentSpec_": {
     "service": {
       "port": 80,

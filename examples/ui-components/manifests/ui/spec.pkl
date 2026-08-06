@@ -2,6 +2,11 @@
 // package and import "@tangram-app-manifest/ui.pkl" instead.
 import "../../../../src/ui.pkl" as ui
 
+deployment: ui.UIDeployment = new {
+  mode = "UIComponent"
+  rootComponent = "churn-explorer"
+}
+
 components: Listing<ui.AppUIComponentSpec> = new Listing {
   new ui.AppUIComponentSpec {
     name = "top-accounts"

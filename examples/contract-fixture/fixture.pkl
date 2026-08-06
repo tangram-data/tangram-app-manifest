@@ -223,6 +223,17 @@ local helmChart = new deployment.HelmChart {
 
 local uriPattern = new ui.UriPattern { pattern = "/app/*" }
 
+local uiDeployment = new ui.UIDeployment {
+  mode = "Proxy"
+  uriPatterns = List(uriPattern)
+  keepAppStaticPathPrefix = true
+}
+
+local uiComponentDeployment = new ui.UIDeployment {
+  mode = "UIComponent"
+  rootComponent = "churn-explorer"
+}
+
 local identity = new Dynamic {
   specVersion = manifest.MANIFEST_SPEC_VERSION
   groupName = manifest.TANGRAM_OS_GROUP_NAME
@@ -343,6 +354,8 @@ fixture = new Dynamic {
   prometheusObservability_ = prometheusObservability
   helmChart_ = helmChart
   uriPattern_ = uriPattern
+  uiDeployment_ = uiDeployment
+  uiComponentDeployment_ = uiComponentDeployment
   componentSpec_ = componentSpec
   containerMeta_ = containerMeta
   componentMeta_ = componentMeta
