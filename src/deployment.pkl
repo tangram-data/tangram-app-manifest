@@ -1,6 +1,6 @@
 module ai.tangram.os.deployment
 
-typealias CloudProvider = "Local"|"AWS"|"Azure"|"Scaleway"|"GCP"
+typealias CloudProvider = "Local"|"AWS"|"Azure"|"GCP"|"Scaleway"|"Ovh"
 
 /// Platform-issued Kubernetes Secret carrying the app service-account token.
 /// Authors reference this typed binding from Helm values instead of deriving
