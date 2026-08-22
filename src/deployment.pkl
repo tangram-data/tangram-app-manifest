@@ -116,8 +116,10 @@ class PublicEndpoint {
   /// (`https://public.<domain>/<workspace>/<appGroup>/<appName>/<name>/...`).
   name: String(matches(Regex(#"[a-z0-9]([-a-z0-9]{0,30}[a-z0-9])?"#)))
   /// Only this path subtree of the component's Service becomes publicly
-  /// reachable; requests are forwarded as `<pathPrefix>/<rest>`.
-  pathPrefix: String(startsWith("/"), !contains(".."))
+  /// reachable; requests are forwarded as `<pathPrefix>/<rest>`. Must be a
+  /// canonical absolute path: no empty, `.` or `..` segments, no query,
+  /// fragment or percent-encoding.
+  pathPrefix: String(matches(Regex(#"/|(/[A-Za-z0-9._~-]+)+"#)), !contains(".."), !contains("/./"), !endsWith("/."))
   /// Request-body cap enforced at the edge; the platform clamps to its own maximum.
   maxBodyBytes: Int(isPositive) = 1048576
   /// Approximate per-client-IP rate limit at the edge (fairness brake, not a

@@ -82,12 +82,14 @@ A component MAY declare publicly reachable HTTP subtrees of its Service. The pla
 | Field | Type | Meaning |
 |---|---|---|
 | `name` | `String` (`[a-z0-9]([-a-z0-9]{0,30}[a-z0-9])?`) | Stable name, part of the public URL; unique within the component |
-| `pathPrefix` | `String` (starts with `/`, no `..`) | Only this path subtree becomes publicly reachable; requests forward as `<pathPrefix>/<rest>` |
+| `pathPrefix` | `String` (canonical absolute path) | Only this path subtree becomes publicly reachable; requests forward as `<pathPrefix>/<rest>`. Segments limited to `[A-Za-z0-9._~-]`; no empty, `.` or `..` segments, no query/fragment/percent-encoding |
 | `maxBodyBytes` | `Int` (default `1048576`) | Request-body cap at the edge; the platform clamps to its own maximum |
 | `rateLimitRps` | `Int` (default `100`) | Approximate per-client-IP edge rate limit — a fairness brake, not a precise global cap; absolute budgets stay app-side |
 | `doc` | `String` | Human-readable purpose, shown in the approval diff |
 
 Every `PublicEndpoint` field MUST be a schema-time constant literal.
+
+A component declaring `publicEndpoints` MUST have a paired `AppComponentSpec.service` — there is no exposure without a backing Service. Endpoint names MUST be unique across the whole app (they namespace the public URL, which carries no component segment). The platform rejects installation on either violation.
 
 ## Helm charts — `helm_charts.pkl`
 
