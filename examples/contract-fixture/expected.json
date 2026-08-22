@@ -599,7 +599,16 @@
     "maxReplica": null,
     "recommendedReplica": 2,
     "optional": false,
-    "observability": null
+    "observability": null,
+    "publicEndpoints": [
+      {
+        "name": "ingest",
+        "pathPrefix": "/api/v1/ingest",
+        "maxBodyBytes": 262144,
+        "rateLimitRps": 50,
+        "doc": "Browser event ingestion, authenticated by write-only ingestion keys"
+      }
+    ]
   },
   "sourceComponentSpec_": {
     "service": {

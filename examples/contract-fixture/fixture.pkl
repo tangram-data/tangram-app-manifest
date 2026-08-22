@@ -296,6 +296,13 @@ local componentMeta = new deployment.AppComponentMeta {
   }
   containers = List(containerMeta)
   recommendedReplica = 2
+  publicEndpoints = List(new deployment.PublicEndpoint {
+    name = "ingest"
+    pathPrefix = "/api/v1/ingest"
+    maxBodyBytes = 262144
+    rateLimitRps = 50
+    doc = "Browser event ingestion, authenticated by write-only ingestion keys"
+  })
 }
 
 // Runtime spec paired with componentMeta: position zero is the synthesized

@@ -107,6 +107,26 @@ class SourceArtifact {
   sourceDir: String(!isEmpty)?
 }
 
+/// A publicly reachable HTTP subtree of the component's Service. The platform
+/// reconciles the exposure behind its dedicated public host with managed TLS
+/// and edge guardrails; the endpoint's own authentication stays with the app.
+/// Every field must be a schema-time constant literal.
+class PublicEndpoint {
+  /// Stable name; part of the public URL
+  /// (`https://public.<domain>/<workspace>/<appGroup>/<appName>/<name>/...`).
+  name: String(matches(Regex(#"[a-z0-9]([-a-z0-9]{0,30}[a-z0-9])?"#)))
+  /// Only this path subtree of the component's Service becomes publicly
+  /// reachable; requests are forwarded as `<pathPrefix>/<rest>`.
+  pathPrefix: String(startsWith("/"), !contains(".."))
+  /// Request-body cap enforced at the edge; the platform clamps to its own maximum.
+  maxBodyBytes: Int(isPositive) = 1048576
+  /// Approximate per-client-IP rate limit at the edge (fairness brake, not a
+  /// precise global cap); absolute budgets remain the app's responsibility.
+  rateLimitRps: Int(isPositive) = 100
+  /// Human-readable purpose, shown in the install/upgrade approval diff.
+  doc: String(!isEmpty)
+}
+
 class AppComponentMeta extends Annotation {
   /// Also the component's Kubernetes Service name, so it must be a DNS-1035 label.
   name: String(matches(Regex(#"[a-z]([-a-z0-9]{0,61}[a-z0-9])?"#)))
@@ -120,6 +140,9 @@ class AppComponentMeta extends Annotation {
   optional: Boolean? = false
   /// Per-component telemetry collection (absent = platform default / none).
   observability: ComponentObservability?
+  /// Publicly exposed HTTP subtrees of this component's Service (absent = the
+  /// component is cluster-internal, reachable only through the platform).
+  publicEndpoints: List<PublicEndpoint>(isDistinctBy((e) -> e.name))?
 }
 
 class SecretValue {

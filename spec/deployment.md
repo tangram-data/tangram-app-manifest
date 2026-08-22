@@ -52,6 +52,7 @@ The annotation MUST be the `AppComponentMeta` class from the schema package's de
 | `recommendedReplica` / `maxReplica` | `Int?` | Replica defaults and ceiling (default recommended: 1) |
 | `optional` | `Boolean?` | Whether installs may disable the component |
 | `observability` | `ComponentObservability?` | Telemetry collection (below) |
+| `publicEndpoints` | `List<PublicEndpoint>?` | Publicly exposed HTTP subtrees of the component's Service (below); absent means cluster-internal only |
 
 ### `AppComponentSpec`
 
@@ -73,6 +74,20 @@ Instead of a prebuilt image, a component may ship source that the platform build
 | `sourceDir` | `String?` | Source tree location relative to `deployment/`; when omitted, the platform uses the conventional `deployment/source/<component-name>/` |
 
 Every `SourceArtifact` field MUST be a schema-time constant literal — no settings, secrets, dependency outputs, or deployment context.
+
+### Public endpoints — `PublicEndpoint`
+
+A component MAY declare publicly reachable HTTP subtrees of its Service. The platform reconciles the exposure behind its dedicated public host (`https://public.<domain>/<workspace>/<appGroup>/<appName>/<endpointName>/…`) with managed TLS and edge guardrails; authentication on the endpoint itself remains the app's responsibility (ingestion keys, webhook signatures, …). Declaring an endpoint is an approval-relevant change: installers see it in the install/upgrade diff.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `name` | `String` (`[a-z0-9]([-a-z0-9]{0,30}[a-z0-9])?`) | Stable name, part of the public URL; unique within the component |
+| `pathPrefix` | `String` (starts with `/`, no `..`) | Only this path subtree becomes publicly reachable; requests forward as `<pathPrefix>/<rest>` |
+| `maxBodyBytes` | `Int` (default `1048576`) | Request-body cap at the edge; the platform clamps to its own maximum |
+| `rateLimitRps` | `Int` (default `100`) | Approximate per-client-IP edge rate limit — a fairness brake, not a precise global cap; absolute budgets stay app-side |
+| `doc` | `String` | Human-readable purpose, shown in the approval diff |
+
+Every `PublicEndpoint` field MUST be a schema-time constant literal.
 
 ## Helm charts — `helm_charts.pkl`
 
