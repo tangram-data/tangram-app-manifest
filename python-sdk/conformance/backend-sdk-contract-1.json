@@ -97,6 +97,89 @@
         "workspace": "demo",
         "app": "notes"
       }
+    },
+    {
+      "id": "action-error-shape",
+      "kind": "action_error",
+      "args": [
+        "some_code",
+        "boom",
+        true
+      ],
+      "expect": {
+        "code": "some_code",
+        "retryable": true,
+        "message_contains": "boom"
+      }
+    },
+    {
+      "id": "envelope-structured",
+      "kind": "error_envelope",
+      "input": {
+        "error": {
+          "code": "x",
+          "message": "m",
+          "retryable": true
+        }
+      },
+      "expect": [
+        "x",
+        "m",
+        true
+      ]
+    },
+    {
+      "id": "envelope-mistyped-retryable-degrades",
+      "kind": "error_envelope",
+      "input": {
+        "error": {
+          "code": "x",
+          "message": "m",
+          "retryable": "false"
+        }
+      },
+      "expect": [
+        "x",
+        "m",
+        false
+      ]
+    },
+    {
+      "id": "envelope-mistyped-code-degrades",
+      "kind": "error_envelope",
+      "input": {
+        "error": {
+          "code": 5,
+          "message": "m"
+        }
+      },
+      "expect": [
+        "action_failed",
+        "m",
+        false
+      ]
+    },
+    {
+      "id": "envelope-legacy-string",
+      "kind": "error_envelope",
+      "input": {
+        "error": "legacy text"
+      },
+      "expect": [
+        "action_failed",
+        "legacy text",
+        false
+      ]
+    },
+    {
+      "id": "envelope-garbage",
+      "kind": "error_envelope",
+      "input": "nonsense",
+      "expect": [
+        "action_failed",
+        "nonsense",
+        false
+      ]
     }
   ]
 }

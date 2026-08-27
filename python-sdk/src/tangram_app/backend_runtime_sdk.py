@@ -25,7 +25,7 @@ class ActionError(RuntimeError):
         self.retryable = retryable
 
 
-def _error_parts(detail):
+def _normalize_error_envelope(detail):
     """Normalize the error envelope: canonical {"error": {code, message,
     retryable}} or the protocol-1 legacy {"error": "<text>"} string form.
     Only correctly typed fields are honored — anything else degrades to the
@@ -191,7 +191,7 @@ class _Actions:
                     parsed = json.loads(raw)
                 except ValueError:
                     parsed = raw
-                code, message, retryable = _error_parts(parsed)
+                code, message, retryable = _normalize_error_envelope(parsed)
                 raise ActionError(code, message, retryable) from None
 
 

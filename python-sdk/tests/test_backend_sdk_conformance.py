@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 
 ARTIFACT = Path(__file__).resolve().parents[1] / "conformance" / "backend-sdk-contract-1.json"
-EXPECTED_SHA256 = "ca6cc57c6cb48aa9c52b44471ce70421a32172f6ce9449a5f94103cc362665f1"
+EXPECTED_SHA256 = "61ed589b6a2c2cc086e9544e8ee0d838aa9989e86c80cfd172b743e7d088570e"
 
 
 def load_module():
@@ -78,6 +78,14 @@ def run_conformance(case: unittest.TestCase, module) -> None:
                 for k in ("TANGRAM_WORKSPACE", "TANGRAM_APP"):
                     os.environ.pop(k, None)
                 os.environ.update({k: v for k, v in saved.items() if v is not None})
+        elif kind == "action_error":
+            err = module.ActionError(*vector["args"])
+            case.assertEqual(err.code, vector["expect"]["code"], vector["id"])
+            case.assertEqual(err.retryable, vector["expect"]["retryable"], vector["id"])
+            case.assertIn(vector["expect"]["message_contains"], str(err), vector["id"])
+        elif kind == "error_envelope":
+            got = module._normalize_error_envelope(vector["input"])
+            case.assertEqual(list(got), vector["expect"], vector["id"])
         else:
             case.fail(f"unknown vector kind {kind!r} — update the conformance runner")
 
