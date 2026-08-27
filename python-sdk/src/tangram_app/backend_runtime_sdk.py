@@ -202,3 +202,7 @@ actions = _Actions()
 # Declared workspace queries (tangram.sql.run) are a platform feature: they
 # need approved statements, workspace engines and the SQL proxy.
 sql = _UnsupportedFacade("sql", " — declared workspace queries require Tangram OS")
+# Durable platform schedules (tangram.schedules, composable-app-sdk §5.5) are
+# a platform feature: the OS scheduler fires the app's own actions under the
+# approved declare_backend_scheduling capability.
+schedules = _UnsupportedFacade("schedules", " — durable schedules require Tangram OS (declare_backend_scheduling)")

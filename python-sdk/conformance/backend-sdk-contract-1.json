@@ -67,6 +67,31 @@
           "name",
           "params"
         ]
+      },
+      "schedules": {
+        "create": [
+          "name",
+          "resource_type",
+          "action",
+          "args",
+          "cron",
+          "at",
+          "timezone"
+        ],
+        "list": [],
+        "delete": [
+          "name"
+        ],
+        "pause": [
+          "name"
+        ],
+        "resume": [
+          "name"
+        ],
+        "runs": [
+          "name",
+          "limit"
+        ]
       }
     }
   },

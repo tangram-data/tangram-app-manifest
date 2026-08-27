@@ -181,6 +181,10 @@ class LocalAppSession:
             "state": "unsupported",
             "detail": "requires Tangram OS (declared workspace queries)",
         }
+        report["capabilities"]["schedules"] = {
+            "state": "unsupported",
+            "detail": "requires Tangram OS (declare_backend_scheduling + platform scheduler)",
+        }
         report["runtime"] = {
             "state": "running",
             "kind": "local-source",

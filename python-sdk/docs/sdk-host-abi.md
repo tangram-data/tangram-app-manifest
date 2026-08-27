@@ -62,6 +62,12 @@ repos) enforces the module surface; this document freezes the wire.
 | secrets.get | `secrets/get` | — | `{key}` | `{value}` |
 | actions.invoke | `actions/invoke` | `/actions/invoke` | `{resource_type, action, args, app?}` | `{result}` |
 | sql.run | `sql/run` | — | `{name, params}` | `{rows, truncated}` |
+| schedules.create | `schedules/create` | — | `{name, resource_type, action, args?, cron? \| at?, timezone?}` | `{schedule}` |
+| schedules.list | `schedules/list` | — | `{}` | `{schedules}` |
+| schedules.delete | `schedules/delete` | — | `{name}` | `{deleted}` |
+| schedules.pause | `schedules/pause` | — | `{name}` | `{paused}` |
+| schedules.resume | `schedules/resume` | — | `{name}` | `{resumed}` |
+| schedules.runs | `schedules/runs` | — | `{name, limit?}` | `{runs}` |
 
 Size limits: storage.put ≤ 8 MiB content; standalone actions request body
 ≤ 1 MiB. Hosts answer `413` beyond limits.
@@ -98,4 +104,12 @@ Codes (HTTP mapping): `unauthenticated` (401), `not_found` (404),
   the platform; the standalone host answers `cross_app_unsupported`.
 - `sql.run` executes only statements approved via `declare_backend_query`;
   the request never carries SQL text.
+- `schedules.*` requires the approved `declare_backend_scheduling`
+  capability and only ever targets the app's OWN unattended-eligible
+  actions (`create` upserts by name with exactly one of `cron`/`at`; args
+  are frozen, size-capped, references-not-secrets). Fires are at-most-once
+  per window, carry a `schedule-run-<id>` invocation id for dedup, and
+  repeated consecutive failures autopause the schedule until
+  `schedules.resume`. The standalone host does not implement this surface
+  (the staged module raises its unsupported error before any transport).
 - Hosts never echo secrets or tokens in error messages.
