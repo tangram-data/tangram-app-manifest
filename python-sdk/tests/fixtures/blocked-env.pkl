@@ -1,0 +1,1 @@
+value = read("env:TANGRAM_SDK_SHOULD_NOT_BE_READ")

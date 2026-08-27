@@ -1,0 +1,5 @@
+apiSpecFile = "open_api.yml"
+backend = new Dynamic {
+  serviceName = "orders"
+  port = 8080
+}

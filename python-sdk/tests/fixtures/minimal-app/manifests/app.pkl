@@ -1,0 +1,7 @@
+manifestSpecVersion = "v1"
+group = "com.example"
+name = "orders"
+version = "0.1.0"
+appType = "App"
+description = "Minimal Pkl-driven SDK fixture"
+tags = List("sdk", "fixture")

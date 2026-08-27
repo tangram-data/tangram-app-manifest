@@ -1,0 +1,3 @@
+import "@fixture/message.pkl" as fixture
+
+message = fixture.message

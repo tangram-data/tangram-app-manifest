@@ -1,0 +1,32 @@
+name: python-sdk
+
+on:
+  push:
+    paths: ["python-sdk/**"]
+  pull_request:
+    paths: ["python-sdk/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ./python-sdk pytest
+      - name: Test
+        # Real-Pkl integration tests skip when pkl is absent (documented).
+        run: pytest -q python-sdk/tests
+      - name: Artifact smoke (clean-env wheel install)
+        run: |
+          pip install build
+          python -m build --wheel python-sdk --outdir /tmp/dist
+          python -m venv /tmp/venv && /tmp/venv/bin/pip -q install /tmp/dist/*.whl pytest
+          /tmp/venv/bin/python -c "import tangram_app; print(tangram_app.__version__)"

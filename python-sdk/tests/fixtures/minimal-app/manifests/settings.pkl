@@ -1,0 +1,8 @@
+settings = List(
+  new Dynamic {
+    name = "region"
+    description = "Deployment region"
+    required = false
+    example = "eu-west-2"
+  }
+)

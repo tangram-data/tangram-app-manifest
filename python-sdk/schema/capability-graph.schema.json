@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tangram.ai/schemas/capability-graph/v1.json",
+  "title": "Tangram Capability Graph",
+  "type": "object",
+  "required": [
+    "formatVersion",
+    "manifestSpecVersion",
+    "package",
+    "actions"
+  ],
+  "properties": {
+    "formatVersion": {
+      "const": "1"
+    },
+    "authority": {
+      "enum": ["unknown", "development", "publishing"]
+    },
+    "developmentOnly": {
+      "type": "boolean",
+      "default": false
+    },
+    "manifestSpecVersion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "package": {
+      "$ref": "#/$defs/package"
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/action"
+      }
+    },
+    "runtimeRequirements": {
+      "type": "object"
+    },
+    "ui": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true,
+  "$defs": {
+    "package": {
+      "type": "object",
+      "required": ["id", "version", "digest"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[^/]+/[^/]+$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "digest": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": true
+    },
+    "action": {
+      "type": "object",
+      "required": [
+        "id",
+        "resourceType",
+        "name",
+        "description",
+        "effect",
+        "idempotent",
+        "bindings"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "resourceType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "effect": {
+          "enum": ["Stateless", "Reversible", "Irreversible"]
+        },
+        "idempotent": {
+          "type": "boolean"
+        },
+        "requiresConfirmation": {
+          "type": "boolean",
+          "default": false
+        },
+        "requiredPrivileges": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "default": []
+        },
+        "bindings": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/binding"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "binding": {
+      "type": "object",
+      "required": [
+        "id",
+        "operationId",
+        "method",
+        "path",
+        "inputSchema"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operationId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "method": {
+          "type": "string",
+          "enum": ["GET", "PUT", "POST", "DELETE", "OPTIONS", "HEAD", "PATCH", "TRACE"]
+        },
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "inputSchema": {
+          "type": "object"
+        },
+        "outputSchema": {
+          "type": "object"
+        },
+        "bodyRequired": {
+          "type": "boolean",
+          "default": false
+        },
+        "inputBindings": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/inputBinding"
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "inputBinding": {
+      "type": "object",
+      "required": ["location"],
+      "properties": {
+        "location": {
+          "enum": ["path", "query", "header", "body"]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

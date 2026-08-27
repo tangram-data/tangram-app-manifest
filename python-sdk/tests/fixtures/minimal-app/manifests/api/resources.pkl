@@ -1,0 +1,30 @@
+types = List(
+  new Dynamic {
+    name = "Order"
+    doc = "An order"
+    activeVersion = "v1"
+    versions = List(
+      new Dynamic {
+        version = "v1"
+        served = true
+        actions = List(
+          new Dynamic {
+            name = "List"
+            doc = "List orders"
+            privilege = "Read"
+            effect = "Stateless"
+            idempotent = true
+            openApiMapping = new Dynamic { operationId = "listOrders" }
+          }
+        )
+        presetRoles = List(
+          new Dynamic {
+            name = "reader"
+            permissions = List("Read")
+            description = "Can list orders"
+          }
+        )
+      }
+    )
+  }
+)
