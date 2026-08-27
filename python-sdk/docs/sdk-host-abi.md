@@ -104,9 +104,11 @@ Codes (HTTP mapping): `unauthenticated` (401), `not_found` (404),
   the platform; the standalone host answers `cross_app_unsupported`.
 - `sql.run` executes only statements approved via `declare_backend_query`;
   the request never carries SQL text.
-- `schedules.*` requires the approved `declare_backend_scheduling`
-  capability and only ever targets the app's OWN unattended-eligible
-  actions (`create` upserts by name with exactly one of `cron`/`at`; args
+- `schedules.create` requires the approved `declare_backend_scheduling`
+  capability (the other schedule operations require ownership only — the
+  scheduler itself stops firing fail-closed when the capability is gone)
+  and only ever targets the app's OWN unattended-eligible actions
+  (`create` upserts by name with exactly one of `cron`/`at`; args
   are frozen, size-capped, references-not-secrets). Fires are at-most-once
   per window, carry a `schedule-run-<id>` invocation id for dedup, and
   repeated consecutive failures autopause the schedule until
