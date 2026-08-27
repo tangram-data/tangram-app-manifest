@@ -27,12 +27,19 @@ repos) enforces the module surface; this document freezes the wire.
 
 - Loopback (or in-cluster service) HTTP; `POST` only; request and response
   bodies are `application/json`.
-- Authentication: `Authorization: Bearer <token>` — the backend service
-  token (`TANGRAM_SERVICE_TOKEN`) on the platform; the per-session actions
-  token (`TANGRAM_LOCAL_ACTIONS_TOKEN`) on the standalone host.
-- Client timeout: 60s per request. Retry policy: ONLY `503` responses are
-  retried (0.5s backoff, 30s deadline) — every operation must therefore be
-  treated as non-idempotent by hosts on non-503 paths.
+- Authentication:
+  - **Platform:** the module sends NO `Authorization` header and never sees
+    the service token — the runtime supervisor pops `TANGRAM_SERVICE_TOKEN`
+    from the environment before app code loads and injects
+    `Authorization: Bearer <token>` at its loopback SDK proxy
+    (`TANGRAM_SDK_URL` points at the proxy). Auth is out-of-band by design:
+    app code cannot exfiltrate a credential it never holds.
+  - **Standalone:** `Authorization: Bearer <TANGRAM_LOCAL_ACTIONS_TOKEN>`,
+    sent by the module.
+- Client timeout: 60s per request. Retry policy (protocol 1): the
+  STANDALONE module retries `503` on `actions.invoke` only (0.5s backoff,
+  30s deadline, the host-starting window); the platform module performs no
+  client-side retry. Hosts must treat every operation as non-idempotent.
 
 ## Environments
 
@@ -68,9 +75,13 @@ Canonical (structured):
 ```
 
 Protocol-1 legacy (platform routes, string form): `{"error": "<text>"}`.
-The module normalizes BOTH into `tangram.ActionError(code, message,
-retryable)`; the string form maps to code `action_failed`. Callers branch
-on `code`, never message text.
+Both module implementations normalize BOTH forms into
+`tangram.ActionError(code, message, retryable)` — an identical public
+class shape — honoring only correctly typed envelope fields (anything
+malformed degrades to `action_failed` / safe message / `retryable: false`).
+The string form maps to code `action_failed`. Callers branch on `code`,
+never message text. A protocol-major mismatch detected on ANY response
+(success or error) raises code `protocol_mismatch`.
 
 Codes (HTTP mapping): `unauthenticated` (401), `not_found` (404),
 `payload_too_large` (413), `host_starting` (503, retryable),

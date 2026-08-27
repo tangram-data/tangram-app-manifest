@@ -2,9 +2,9 @@ name: python-sdk
 
 on:
   push:
-    paths: ["python-sdk/**"]
+    paths: ["python-sdk/**", ".github/workflows/python-sdk-ci.yaml"]
   pull_request:
-    paths: ["python-sdk/**"]
+    paths: ["python-sdk/**", ".github/workflows/python-sdk-ci.yaml"]
 
 jobs:
   test:

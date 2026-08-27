@@ -27,14 +27,19 @@ class ActionError(RuntimeError):
 
 def _error_parts(detail):
     """Normalize the error envelope: canonical {"error": {code, message,
-    retryable}} or the protocol-1 legacy {"error": "<text>"} string form."""
+    retryable}} or the protocol-1 legacy {"error": "<text>"} string form.
+    Only correctly typed fields are honored — anything else degrades to the
+    safe defaults instead of leaking through."""
     if isinstance(detail, dict):
         inner = detail.get("error", detail)
         if isinstance(inner, dict):
+            code = inner.get("code")
+            message = inner.get("message")
+            retryable = inner.get("retryable")
             return (
-                inner.get("code", "action_failed"),
-                inner.get("message", "unknown error"),
-                bool(inner.get("retryable", False)),
+                code if isinstance(code, str) and code else "action_failed",
+                message if isinstance(message, str) and message else "unknown error",
+                retryable if isinstance(retryable, bool) else False,
             )
         if isinstance(inner, str):
             return ("action_failed", inner, False)
@@ -172,6 +177,12 @@ class _Actions:
                         )
                     return json.loads(response.read())["result"]
             except urllib.error.HTTPError as error:
+                answered = (error.headers or {}).get("X-Tangram-SDK-Protocol")
+                if answered and answered.split(".")[0] != PROTOCOL:
+                    raise ActionError(
+                        "protocol_mismatch",
+                        f"host speaks SDK protocol {answered}, this module speaks {PROTOCOL}",
+                    ) from None
                 if error.code == 503 and time.monotonic() < deadline:
                     time.sleep(0.5)
                     continue

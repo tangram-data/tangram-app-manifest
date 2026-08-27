@@ -3,16 +3,71 @@
   "protocol": "1",
   "notes": "Behavioral conformance for the in-backend `tangram` module. Both implementations (tangram-app-manifest staged module, tangram platform runtime module) must satisfy this artifact verbatim; each repo pins its copy by sha256 in the conformance test. Change process: update artifact + both pins in one coordinated pass.",
   "descriptor": {
-    "module_constants": ["__version__", "PROTOCOL"],
+    "module_constants": [
+      "__version__",
+      "PROTOCOL",
+      "ActionError"
+    ],
     "functions": {
-      "context": {"params": ["request"], "optional": ["request"]}
+      "context": {
+        "params": [
+          "request"
+        ],
+        "optional": [
+          "request"
+        ]
+      }
     },
     "facades": {
-      "db": {"query": ["sql", "params"], "execute": ["sql", "params"]},
-      "storage": {"put": ["path", "data"], "get": ["path"], "list": ["prefix"], "delete": ["path"], "presign": ["path", "method", "expires_seconds"]},
-      "secrets": {"get": ["key"]},
-      "actions": {"invoke": ["resource_type", "action", "args", "app"]},
-      "sql": {"run": ["name", "params"]}
+      "db": {
+        "query": [
+          "sql",
+          "params"
+        ],
+        "execute": [
+          "sql",
+          "params"
+        ]
+      },
+      "storage": {
+        "put": [
+          "path",
+          "data"
+        ],
+        "get": [
+          "path"
+        ],
+        "list": [
+          "prefix"
+        ],
+        "delete": [
+          "path"
+        ],
+        "presign": [
+          "path",
+          "method",
+          "expires_seconds"
+        ]
+      },
+      "secrets": {
+        "get": [
+          "key"
+        ]
+      },
+      "actions": {
+        "invoke": [
+          "resource_type",
+          "action",
+          "args",
+          "app"
+        ]
+      },
+      "sql": {
+        "run": [
+          "name",
+          "params"
+        ]
+      }
     }
   },
   "vectors": [
@@ -26,13 +81,22 @@
       "id": "context-defaults",
       "kind": "context_env",
       "env": {},
-      "expect_subset": {"workspace": "local", "app": "local"}
+      "expect_subset": {
+        "workspace": "local",
+        "app": "local"
+      }
     },
     {
       "id": "context-env-mapping",
       "kind": "context_env",
-      "env": {"TANGRAM_WORKSPACE": "demo", "TANGRAM_APP": "notes"},
-      "expect_subset": {"workspace": "demo", "app": "notes"}
+      "env": {
+        "TANGRAM_WORKSPACE": "demo",
+        "TANGRAM_APP": "notes"
+      },
+      "expect_subset": {
+        "workspace": "demo",
+        "app": "notes"
+      }
     }
   ]
 }
