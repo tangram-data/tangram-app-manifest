@@ -68,6 +68,8 @@ repos) enforces the module surface; this document freezes the wire.
 | schedules.pause | `schedules/pause` | — | `{name}` | `{paused}` |
 | schedules.resume | `schedules/resume` | — | `{name}` | `{resumed}` |
 | schedules.runs | `schedules/runs` | — | `{name, limit?}` | `{runs}` |
+| notifications.send | `notifications/send` | — | `{to, subject, body, link?, channel?, dedupe_key?}` | `{id, queued, skipped, deduped?}` |
+| notifications.list | `notifications/list` | — | `{limit?}` | `{notifications}` |
 
 Size limits: storage.put ≤ 8 MiB content; standalone actions request body
 ≤ 1 MiB. Hosts answer `413` beyond limits.
@@ -118,4 +120,16 @@ Codes (HTTP mapping): `unauthenticated` (401), `not_found` (404),
   repeated consecutive failures autopause the schedule until
   `schedules.resume`. The standalone host does not implement this surface
   (the staged module raises its unsupported error before any transport).
+- `notifications.send` requires the approved `declare_backend_notifications`
+  capability and addresses WORKSPACE MEMBER account ids only — the request
+  never carries an email address or Slack id (address-shaped values are
+  refused), and the platform resolves addresses and delivers, attributed to
+  the app. Delivery is asynchronous and at-most-once: `send` answers the
+  enqueue preview (`queued` / `skipped` with coarse reasons `not-a-member`
+  | `unreachable`), every gate re-runs at dispatch, and ambiguous provider
+  outcomes land terminal `unknown` in `notifications.list`, never retried.
+  `dedupe_key` pins the exact request by digest inside a fixed window —
+  same key + different content is an error. The standalone host does not
+  implement this surface (the staged module raises its unsupported error
+  before any transport).
 - Hosts never echo secrets or tokens in error messages.

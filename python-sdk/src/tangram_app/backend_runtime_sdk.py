@@ -206,3 +206,9 @@ sql = _UnsupportedFacade("sql", " — declared workspace queries require Tangram
 # a platform feature: the OS scheduler fires the app's own actions under the
 # approved declare_backend_scheduling capability.
 schedules = _UnsupportedFacade("schedules", " — durable schedules require Tangram OS (declare_backend_scheduling)")
+# Member notifications (tangram.notifications, app-notifications design) are
+# a platform feature: member resolution, platform channels, and the approved
+# declare_backend_notifications capability all live in the OS.
+notifications = _UnsupportedFacade(
+    "notifications", " — member notifications require Tangram OS (declare_backend_notifications)"
+)

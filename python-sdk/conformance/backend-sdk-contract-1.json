@@ -93,6 +93,19 @@
           "name",
           "limit"
         ]
+      },
+      "notifications": {
+        "send": [
+          "to",
+          "subject",
+          "body",
+          "link",
+          "channel",
+          "dedupe_key"
+        ],
+        "list": [
+          "limit"
+        ]
       }
     }
   },

@@ -185,6 +185,10 @@ class LocalAppSession:
             "state": "unsupported",
             "detail": "requires Tangram OS (declare_backend_scheduling + platform scheduler)",
         }
+        report["capabilities"]["notifications"] = {
+            "state": "unsupported",
+            "detail": "requires Tangram OS (declare_backend_notifications + platform channels)",
+        }
         report["runtime"] = {
             "state": "running",
             "kind": "local-source",
