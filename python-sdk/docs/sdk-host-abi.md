@@ -62,7 +62,7 @@ repos) enforces the module surface; this document freezes the wire.
 | secrets.get | `secrets/get` | — | `{key}` | `{value}` |
 | actions.invoke | `actions/invoke` | `/actions/invoke` | `{resource_type, action, args, app?}` | `{result}` |
 | sql.run | `sql/run` | — | `{name, params}` | `{rows, truncated}` |
-| schedules.create | `schedules/create` | — | `{name, resource_type, action, args?, cron? \| at?, timezone?}` | `{schedule}` |
+| schedules.create | `schedules/create` | — | `{name, resource_type, action, args?, cron? \| every? \| at?, timezone?}` | `{schedule}` |
 | schedules.list | `schedules/list` | — | `{}` | `{schedules}` |
 | schedules.delete | `schedules/delete` | — | `{name}` | `{deleted}` |
 | schedules.pause | `schedules/pause` | — | `{name}` | `{paused}` |
@@ -108,8 +108,12 @@ Codes (HTTP mapping): `unauthenticated` (401), `not_found` (404),
   capability (the other schedule operations require ownership only — the
   scheduler itself stops firing fail-closed when the capability is gone)
   and only ever targets the app's OWN unattended-eligible actions
-  (`create` upserts by name with exactly one of `cron`/`at`; args
-  are frozen, size-capped, references-not-secrets). Fires are at-most-once
+  (`create` upserts by name with exactly one of `cron` — standard 5-field
+  Unix cron or Quartz, evaluated in `timezone` — `every` — a fixed
+  interval `<n><s|m|h|d>` like `"30m"`/`"90m"`/`"2h"`, first fire
+  immediately then every interval; use this for interval cadence instead
+  of hand-built `*/N` cron, which is invalid for N>59 — or `at`, a future
+  ISO instant; args are frozen, size-capped, references-not-secrets). Fires are at-most-once
   per window, carry a `schedule-run-<id>` invocation id for dedup, and
   repeated consecutive failures autopause the schedule until
   `schedules.resume`. The standalone host does not implement this surface

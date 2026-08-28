@@ -18,7 +18,7 @@ import unittest
 from pathlib import Path
 
 ARTIFACT = Path(__file__).resolve().parents[1] / "conformance" / "backend-sdk-contract-1.json"
-EXPECTED_SHA256 = "64c498a80001b9eb5c0f65c112c434684ea4123a6831369e14b88013aa8686e0"
+EXPECTED_SHA256 = "ee7606615a8313121372deaefc4849fbc776d3f811bdb7f4734ac5a957f0fcc9"
 
 
 def load_module():

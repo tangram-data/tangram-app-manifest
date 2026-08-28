@@ -76,6 +76,7 @@
           "args",
           "cron",
           "at",
+          "every",
           "timezone"
         ],
         "list": [],
