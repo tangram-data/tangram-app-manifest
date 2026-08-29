@@ -163,6 +163,31 @@ printf '%s' '{}' | python -m tangram_app call \
   --input-json -
 ```
 
+## In-backend `tangram` module
+
+Backend code (platform or standalone) imports one staged `tangram` module.
+The public surface:
+
+| Surface | What it does | Standalone |
+|---|---|---|
+| `tangram.db` / `tangram.context` | Own-database SQL, invocation identity | yes |
+| `tangram.actions.invoke(...)` | Call the app's (or a declared dependency's) actions | own app only |
+| `tangram.storage`, `tangram.secrets` | Own object storage, declared secrets | no |
+| `tangram.sql.run(name, params)` | Declared workspace queries (`declare_backend_query`) | no |
+| `tangram.schedules` | Durable schedules firing the app's own unattended actions (`declare_backend_scheduling`) | no |
+| `tangram.notifications` | Notify workspace members by account id via platform channels (`declare_backend_notifications`) | no |
+
+Platform-only surfaces raise the module's structured unsupported error when
+called standalone. The two newest surfaces in brief — `schedules.create`
+upserts by name with exactly one of `every` (`"30m"`-style interval), `cron`
+(5-field, evaluated in `timezone`), or `at` (one-shot ISO instant), plus
+`list`/`pause`/`resume`/`delete`/`runs`; `notifications.send(to, subject,
+body, link?, channel?, dedupe_key?)` addresses member account ids only
+(never raw email/Slack addresses), delivers asynchronously at-most-once,
+and `notifications.list` shows per-recipient terminal status. Normative
+operation shapes, capability gates, and delivery semantics live in the
+[SDK ↔ host ABI](sdk-host-abi.md).
+
 ## Detailed documentation
 
 - [Manifest authoring and compilation](manifest-authoring.md)
@@ -170,5 +195,6 @@ printf '%s' '{}' | python -m tangram_app call \
 - [Actions and agent integration](actions-and-agents.md)
 - [Command-line reference](cli-reference.md)
 - [Security and operations](security-and-operations.md)
+- [SDK ↔ host ABI](sdk-host-abi.md)
 
 Each topic has one owning page so normative behavior is not duplicated.

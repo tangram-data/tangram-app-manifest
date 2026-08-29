@@ -140,10 +140,16 @@ tangram.db.execute(
 `tangram.context(request)` returns local workspace/app identity and consumes
 trusted Tangram context headers when present.
 
-The standalone staged backend module currently supports database access and
-context. Backend `tangram.storage`, `tangram.secrets`, and nested
-`tangram.actions` calls fail explicitly because their standalone providers are
-not implemented yet.
+The standalone staged backend module currently supports database access,
+context, and same-app `tangram.actions.invoke`. The platform-only surfaces —
+`tangram.storage`, `tangram.secrets`, `tangram.sql` (declared workspace
+queries), `tangram.schedules` (durable schedules firing the app's own
+unattended actions under the approved `declare_backend_scheduling`
+capability), and `tangram.notifications` (member notifications under the
+approved `declare_backend_notifications` capability) — fail explicitly with
+the module's unsupported error, because their providers live in Tangram OS.
+Operation shapes and platform semantics for every surface are frozen in the
+[SDK ↔ host ABI](sdk-host-abi.md).
 
 ### React UI provider
 
