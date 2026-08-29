@@ -313,6 +313,7 @@ class LocalSchedulerTest(unittest.TestCase):
         )
         state = json.loads(book.state_path.read_text())
         state["schedules"]["sweep"]["runs"] = None
+        del state["schedules"]["sweep"]["consecutive_failures"]
         book.state_path.write_text(json.dumps(state), encoding="utf-8")
         reloaded = LocalScheduler(book.state_path, invoker=book._invoke, now_fn=lambda: book.now)
         reloaded._session = book.scheduler._session

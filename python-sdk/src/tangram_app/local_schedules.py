@@ -224,7 +224,10 @@ class LocalScheduler:
     # -- persistence -------------------------------------------------------
 
     _REQUIRED = frozenset(
-        ("name", "resource_type", "action", "args", "timezone", "state", "next_fire", "generation", "runs")
+        (
+            "name", "resource_type", "action", "args", "timezone", "state", "next_fire",
+            "generation", "runs", "consecutive_failures", "created_at", "updated_at",
+        )
     )
     _STATES = frozenset(("active", "paused", "autopaused", "completed"))
 
@@ -245,6 +248,9 @@ class LocalScheduler:
                 isinstance(schedule["args"], dict)
                 and schedule["state"] in cls._STATES
                 and isinstance(schedule["generation"], int)
+                and isinstance(schedule["consecutive_failures"], int)
+                and isinstance(schedule["created_at"], str)
+                and isinstance(schedule["updated_at"], str)
                 and isinstance(schedule["runs"], list)
                 and all(isinstance(run, dict) for run in schedule["runs"])
             ):
