@@ -206,9 +206,128 @@ sql = _UnsupportedFacade("sql", " — declared workspace queries require Tangram
 # a platform feature: the OS scheduler fires the app's own actions under the
 # approved declare_backend_scheduling capability.
 schedules = _UnsupportedFacade("schedules", " — durable schedules require Tangram OS (declare_backend_scheduling)")
-# Member notifications (tangram.notifications, app-notifications design) are
-# a platform feature: member resolution, platform channels, and the approved
-# declare_backend_notifications capability all live in the OS.
-notifications = _UnsupportedFacade(
-    "notifications", " — member notifications require Tangram OS (declare_backend_notifications)"
-)
+def _deliver_desktop(title, body):
+    """Show one native desktop notification on this machine, or raise.
+
+    Strings travel as argv/env — never interpolated into the scripts — so
+    app-controlled content cannot inject AppleScript/PowerShell/shell."""
+    import subprocess
+    import sys
+
+    if sys.platform == "darwin":
+        command = [
+            "osascript",
+            "-e", "on run argv",
+            "-e", "display notification (item 2 of argv) with title (item 1 of argv)",
+            "-e", "end run",
+            title, body,
+        ]
+        environment = None
+    elif sys.platform == "win32":
+        script = (
+            "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, "
+            "ContentType = WindowsRuntime] | Out-Null; "
+            "$t = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent("
+            "[Windows.UI.Notifications.ToastTemplateType]::ToastText02); "
+            "$x = $t.GetElementsByTagName('text'); "
+            "$x.Item(0).AppendChild($t.CreateTextNode($env:TANGRAM_NOTIFY_TITLE)) | Out-Null; "
+            "$x.Item(1).AppendChild($t.CreateTextNode($env:TANGRAM_NOTIFY_BODY)) | Out-Null; "
+            "[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("
+            "'Tangram App').Show([Windows.UI.Notifications.ToastNotification]::new($t))"
+        )
+        command = ["powershell", "-NoProfile", "-NonInteractive", "-Command", script]
+        environment = dict(os.environ, TANGRAM_NOTIFY_TITLE=title, TANGRAM_NOTIFY_BODY=body)
+    else:
+        command = ["notify-send", title, body]
+        environment = None
+    subprocess.run(command, env=environment, capture_output=True, timeout=10, check=True)
+
+
+class _Notifications:
+    """Developer desktop notifications for the standalone host.
+
+    Platform parity in SHAPE, not in routing: send() shows one native OS
+    notification on this machine (macOS/Windows/Linux) — member resolution
+    and the email/Slack channels live in Tangram OS, so explicit
+    channel="email"/"slack" answers every recipient skipped "unreachable"
+    and never falls back. Recipients are echoed queued without resolution;
+    list() serves the in-process per-recipient record; the dedupe_key
+    window is the process lifetime."""
+
+    def __init__(self):
+        import threading
+
+        self._lock = threading.Lock()
+        self._records = []
+        self._dedupe = {}
+        self._counter = 0
+
+    def send(self, to, subject, body, link=None, channel="auto", dedupe_key=None):
+        recipients = [item for item in (to or [])]
+        if not recipients or not all(isinstance(item, str) and item for item in recipients):
+            raise ActionError("invalid_request", "to must be a non-empty list of member account ids")
+        for item in recipients:
+            if "@" in item:
+                raise ActionError(
+                    "invalid_request",
+                    "address recipients by member account id, never an email/Slack address",
+                )
+        if not (isinstance(subject, str) and subject and isinstance(body, str) and body):
+            raise ActionError("invalid_request", "subject and body must be non-empty strings")
+        if channel not in ("auto", "email", "slack"):
+            raise ActionError("invalid_request", f"unknown channel {channel!r}")
+
+        import hashlib
+        import json
+
+        digest = hashlib.sha256(
+            json.dumps([recipients, subject, body, link, channel]).encode("utf-8")
+        ).hexdigest()
+        # One lock over check-deliver-record: a concurrent same-key send must
+        # never double-deliver (local mirror of the platform's at-most-once).
+        with self._lock:
+            if dedupe_key is not None and dedupe_key in self._dedupe:
+                seen_digest, envelope = self._dedupe[dedupe_key]
+                if seen_digest != digest:
+                    raise ActionError(
+                        "invalid_request", "dedupe_key was already used with different content"
+                    )
+                return dict(envelope, deduped=True)
+            self._counter += 1
+            identifier = f"local-{self._counter}"
+
+            if channel in ("email", "slack"):
+                status, queued, skipped = "skipped", [], [
+                    {"id": item, "reason": "unreachable"} for item in recipients
+                ]
+            else:
+                title = f"{os.environ.get('TANGRAM_APP', 'local')}: {subject}"
+                text = body if link is None else f"{body}\n{link}"
+                try:
+                    _deliver_desktop(title, text)
+                    status = "sent"
+                except Exception:
+                    status = "failed"
+                queued, skipped = recipients, []
+
+            envelope = {"id": identifier, "queued": queued, "skipped": skipped}
+            if dedupe_key is not None:
+                self._dedupe[dedupe_key] = (digest, envelope)
+            for item in recipients:
+                self._records.append(
+                    {
+                        "id": identifier,
+                        "account_id": item,
+                        "channel": channel,
+                        "status": status,
+                        "subject": subject,
+                    }
+                )
+        return envelope
+
+    def list(self, limit=20):
+        with self._lock:
+            return list(reversed(self._records))[: max(0, int(limit))]
+
+
+notifications = _Notifications()

@@ -129,7 +129,14 @@ Codes (HTTP mapping): `unauthenticated` (401), `not_found` (404),
   | `unreachable`), every gate re-runs at dispatch, and ambiguous provider
   outcomes land terminal `unknown` in `notifications.list`, never retried.
   `dedupe_key` pins the exact request by digest inside a fixed window —
-  same key + different content is an error. The standalone host does not
-  implement this surface (the staged module raises its unsupported error
-  before any transport).
+  same key + different content is an error. The standalone host has no
+  wire surface for notifications: the staged module implements both
+  operations IN-MODULE as developer desktop notifications (macOS
+  `osascript`, Windows toast, Linux `notify-send`) — one native
+  notification per `send`, titled with the app id; recipients are echoed
+  `queued` without member resolution; explicit `email`/`slack` answer
+  every recipient skipped `unreachable`; a failed notifier lands terminal
+  `failed` in `notifications.list`; the dedupe window is the process
+  lifetime. Envelope shapes match the platform rows above so app code
+  ports unchanged.
 - Hosts never echo secrets or tokens in error messages.

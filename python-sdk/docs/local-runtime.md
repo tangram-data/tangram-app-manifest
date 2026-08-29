@@ -141,13 +141,16 @@ tangram.db.execute(
 trusted Tangram context headers when present.
 
 The standalone staged backend module currently supports database access,
-context, and same-app `tangram.actions.invoke`. The platform-only surfaces —
+context, and same-app `tangram.actions.invoke`. `tangram.notifications`
+delivers as a native desktop notification on the developer's machine
+(macOS `osascript`, Windows toast, Linux `notify-send`) with
+platform-shaped envelopes — member routing and the email/Slack channels
+stay platform-only. The remaining platform-only surfaces —
 `tangram.storage`, `tangram.secrets`, `tangram.sql` (declared workspace
-queries), `tangram.schedules` (durable schedules firing the app's own
+queries), and `tangram.schedules` (durable schedules firing the app's own
 unattended actions under the approved `declare_backend_scheduling`
-capability), and `tangram.notifications` (member notifications under the
-approved `declare_backend_notifications` capability) — fail explicitly with
-the module's unsupported error, because their providers live in Tangram OS.
+capability) — fail explicitly with the module's unsupported error, because
+their providers live in Tangram OS.
 Operation shapes and platform semantics for every surface are frozen in the
 [SDK ↔ host ABI](sdk-host-abi.md).
 

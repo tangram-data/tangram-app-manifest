@@ -186,8 +186,11 @@ class LocalAppSession:
             "detail": "requires Tangram OS (declare_backend_scheduling + platform scheduler)",
         }
         report["capabilities"]["notifications"] = {
-            "state": "unsupported",
-            "detail": "requires Tangram OS (declare_backend_notifications + platform channels)",
+            "state": "emulated",
+            "detail": (
+                "developer desktop notification (macOS/Windows/Linux); "
+                "member routing + email/Slack channels require Tangram OS"
+            ),
         }
         report["runtime"] = {
             "state": "running",
