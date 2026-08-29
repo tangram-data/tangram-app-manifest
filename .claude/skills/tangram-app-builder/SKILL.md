@@ -35,8 +35,8 @@ my-app/
     │   ├── spec.pkl            # apiSpecFile + backend {serviceName, port}
     │   └── open_api.yml        # OpenAPI 3.x; operationIds bind actions
     ├── settings.pkl            # declared settings (optional)
-    ├── infra.pkl               # infrastructure claims (optional)
     ├── deployment/
+    │   ├── dependencies.pkl    # infrastructure claims (optional)
     │   ├── source/backend/     # canonical Python backend
     │   │   ├── pyproject.toml  # [tool.tangram.backend] entry/runtime/egress
     │   │   └── src/<entry>.py  # exposes `app` (FastAPI)
@@ -119,11 +119,19 @@ egress = []
 ```
 
 The SDK launches uvicorn itself (own port, managed venv with pinned
-fastapi/psycopg/etc.) — the entry module just exposes `app` and must serve
-every OpenAPI operation; `run` diffs the live `/openapi.json` against the
-declared operations and refuses on mismatch. **Set `operation_id`
+fastapi/psycopg/etc.) — the entry module just exposes `app`. On start,
+`run` checks every COMPILED ACTION BINDING (operationId + method + path)
+against the live `/openapi.json` and refuses on mismatch; extra live
+routes and declared-but-unmapped operations are fine. **Set `operation_id`
 explicitly on every route** — FastAPI's auto-generated ids
-(`list_orders_orders_get`) will not match the manifest:
+(`list_orders_orders_get`) will not match the manifest.
+
+**Dependencies gotcha:** the managed venv installs only the SDK's pinned
+base set (fastapi, pydantic, psycopg, requests, httpx, uvicorn…) —
+`[project].dependencies` is *declared* metadata, not installed. Code that
+imports anything beyond the pins needs a prepared interpreter via the
+Python API (`run_local(..., managed_environment=False)`), or stick to the
+pinned set.
 
 ```python
 from fastapi import FastAPI
@@ -160,8 +168,9 @@ Know these before debugging "failures" that are actually policy:
 - **Irreversible or confirmation-gated actions refuse unattended** —
   from backend code (`tangram.actions.invoke`) and from schedules. That
   refusal is platform parity, not a bug.
-- Postgres claim: declare it in `infra.pkl` (only
-  `PostgresqlDatabaseClaim` has a local provider); migrations under
+- Postgres claim: declare it in `manifests/deployment/dependencies.pkl`
+  (referencing `infra.PostgresqlDatabaseClaim` — the only claim with a
+  local provider); migrations under
   `manifests/deployment/migrations/main/` apply on start.
 
 ## In-backend `tangram` module
