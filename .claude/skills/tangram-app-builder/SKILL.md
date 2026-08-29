@@ -123,8 +123,9 @@ fastapi/psycopg/etc.) — the entry module just exposes `app`. On start,
 `run` checks every COMPILED ACTION BINDING (operationId + method + path)
 against the live `/openapi.json` and refuses on mismatch; extra live
 routes and declared-but-unmapped operations are fine. **Set `operation_id`
-explicitly on every route** — FastAPI's auto-generated ids
-(`list_orders_orders_get`) will not match the manifest.
+explicitly on every action-bound route** — FastAPI's auto-generated ids
+(`list_orders_orders_get`) will not match the manifest; unmapped routes
+may keep generated ids.
 
 **Dependencies gotcha:** the managed venv installs only the SDK's pinned
 base set (fastapi, pydantic, psycopg, requests, httpx, uvicorn…) —
