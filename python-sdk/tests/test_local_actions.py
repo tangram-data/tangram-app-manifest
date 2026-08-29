@@ -176,7 +176,7 @@ class StagedBackendSdkTest(unittest.TestCase):
         os.environ.pop("TANGRAM_LOCAL_ACTIONS_URL", None)
         with self.assertRaises(RuntimeError) as missing:
             module.actions.invoke("Todo", "List")
-        self.assertIn("did not expose an actions endpoint", str(missing.exception))
+        self.assertIn("did not expose its loopback endpoint", str(missing.exception))
 
 
 if __name__ == "__main__":

@@ -36,7 +36,7 @@ class LocalActionsServer:
     """Threaded loopback server the staged backend SDK posts to."""
 
     def __init__(
-        self, server: ThreadingHTTPServer, thread: threading.Thread, token: str
+        self, server: ThreadingHTTPServer, thread: threading.Thread, token: str, scheduler=None
     ) -> None:
         self._server = server
         self._thread = thread
@@ -45,24 +45,29 @@ class LocalActionsServer:
         # (which receives it via env) may call this surface — not any local
         # process that discovers the port.
         self.token = token
+        self._scheduler = scheduler
 
     @classmethod
-    def start(cls) -> "LocalActionsServer":
+    def start(cls, scheduler=None) -> "LocalActionsServer":
         holder = _SessionHolder()
         token = secrets.token_urlsafe(32)
-        handler = _handler_factory(holder, token)
+        handler = _handler_factory(holder, token, scheduler)
         server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         server.daemon_threads = True
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
-        instance = cls(server, thread, token)
+        instance = cls(server, thread, token, scheduler)
         instance._holder = holder
         return instance
 
     def attach(self, session: "LocalAppSession") -> None:
         self._holder.session = session
+        if self._scheduler is not None:
+            self._scheduler.attach(session)
 
     def close(self) -> None:
+        if self._scheduler is not None:
+            self._scheduler.stop()
         self._server.shutdown()
         self._server.server_close()
         self._thread.join(timeout=5)
@@ -110,7 +115,7 @@ def invoke_backend_action(
     return asyncio.run(bound.call(action.id, arguments))
 
 
-def _handler_factory(holder: _SessionHolder, token: str):
+def _handler_factory(holder: _SessionHolder, token: str, scheduler=None):
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self) -> None:  # noqa: N802 (http.server contract)
             asked = self.headers.get("X-Tangram-SDK-Protocol")
@@ -120,7 +125,10 @@ def _handler_factory(holder: _SessionHolder, token: str):
                     _err("protocol_mismatch", f"host speaks SDK protocol {PROTOCOL}, caller asked {asked}"),
                 )
                 return
-            if urlsplit(self.path).path != "/actions/invoke":
+            path = urlsplit(self.path).path
+            if path != "/actions/invoke" and not (
+                scheduler is not None and path.startswith("/schedules/")
+            ):
                 self._json(404, _err("not_found", "not found"))
                 return
             supplied = self.headers.get("Authorization", "")
@@ -137,6 +145,9 @@ def _handler_factory(holder: _SessionHolder, token: str):
                 length = -1
             if length < 0 or length > _MAX_BODY:
                 self._json(413, _err("payload_too_large", "action request is too large"))
+                return
+            if path.startswith("/schedules/"):
+                self._schedules(path.removeprefix("/schedules/"), length)
                 return
             try:
                 body = json.loads(self.rfile.read(length))
@@ -162,6 +173,21 @@ def _handler_factory(holder: _SessionHolder, token: str):
             except (KeyError, TypeError, ValueError) as error:
                 self._json(400, _err("invalid_request", f"invalid action request: {error}"))
             except Exception as error:  # surfaced verbatim to the app author
+                self._json(400, _err("action_failed", str(error)[:2000]))
+
+        def _schedules(self, op: str, length: int) -> None:
+            from .local_schedules import ScheduleError
+
+            try:
+                body = json.loads(self.rfile.read(length)) if length else {}
+                if not isinstance(body, dict):
+                    raise ValueError("request body must be a JSON object")
+                self._json(200, scheduler.handle(op, body))
+            except ScheduleError as error:
+                self._json(error.status, _err(error.code, str(error)))
+            except ValueError as error:
+                self._json(400, _err("invalid_request", f"invalid schedules request: {error}"))
+            except Exception as error:
                 self._json(400, _err("action_failed", str(error)[:2000]))
 
         def _json(self, status: int, payload: dict) -> None:

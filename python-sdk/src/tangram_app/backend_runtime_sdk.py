@@ -129,6 +129,62 @@ class _UnsupportedFacade:
         return unavailable
 
 
+def _local_host_call(surface, path, body):
+    """POST one operation to the standalone local host and return its JSON.
+
+    Shared by every standalone-served surface: bearer auth from env,
+    protocol echo check on success AND error, 503 retried briefly (the
+    host attaches the session only after the backend answers its readiness
+    probe, so startup hooks would otherwise fail deterministically)."""
+    base = os.environ.get("TANGRAM_LOCAL_ACTIONS_URL")
+    if not base:
+        raise RuntimeError(
+            f"tangram.{surface} is not available: the local host did not "
+            "expose its loopback endpoint (upgrade the tangram-app SDK)"
+        )
+    import json
+    import time
+    import urllib.error
+    import urllib.request
+
+    payload = json.dumps(body).encode("utf-8")
+    headers = {"Content-Type": "application/json", "X-Tangram-SDK-Protocol": PROTOCOL}
+    token = os.environ.get("TANGRAM_LOCAL_ACTIONS_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    deadline = time.monotonic() + 30
+    while True:
+        request = urllib.request.Request(
+            f"{base}/{path}", data=payload, headers=headers, method="POST"
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                answered = response.headers.get("X-Tangram-SDK-Protocol")
+                if answered and answered.split(".")[0] != PROTOCOL:
+                    raise ActionError(
+                        "protocol_mismatch",
+                        f"host speaks SDK protocol {answered}, this module speaks {PROTOCOL}",
+                    )
+                return json.loads(response.read())
+        except urllib.error.HTTPError as error:
+            answered = (error.headers or {}).get("X-Tangram-SDK-Protocol")
+            if answered and answered.split(".")[0] != PROTOCOL:
+                raise ActionError(
+                    "protocol_mismatch",
+                    f"host speaks SDK protocol {answered}, this module speaks {PROTOCOL}",
+                ) from None
+            if error.code == 503 and time.monotonic() < deadline:
+                time.sleep(0.5)
+                continue
+            raw = error.read().decode("utf-8", "replace")
+            try:
+                parsed = json.loads(raw)
+            except ValueError:
+                parsed = raw
+            code, message, retryable = _normalize_error_envelope(parsed)
+            raise ActionError(code, message, retryable) from None
+
+
 class _Actions:
     """Compose the app's OWN governed actions through the local host pipeline
     (platform parity: unattended — irreversible / confirmation-gated actions
@@ -140,59 +196,56 @@ class _Actions:
                 "tangram.actions.invoke(app=...) requires Tangram OS — cross-app "
                 "invocation is unsupported in the standalone local host"
             )
-        base = os.environ.get("TANGRAM_LOCAL_ACTIONS_URL")
-        if not base:
-            raise RuntimeError(
-                "tangram.actions.invoke is not available: the local host did not "
-                "expose an actions endpoint (upgrade the tangram-app SDK)"
-            )
-        import json
-        import urllib.error
-        import urllib.request
+        return _local_host_call(
+            "actions.invoke",
+            "actions/invoke",
+            {"resource_type": resource_type, "action": action, "args": args or {}},
+        )["result"]
 
-        import time
 
-        payload = json.dumps(
-            {"resource_type": resource_type, "action": action, "args": args or {}}
-        ).encode("utf-8")
-        headers = {"Content-Type": "application/json", "X-Tangram-SDK-Protocol": PROTOCOL}
-        token = os.environ.get("TANGRAM_LOCAL_ACTIONS_TOKEN")
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
-        # The host attaches the session only after the backend answers its
-        # readiness probe; a startup hook calling here retries 503 briefly
-        # instead of failing deterministically.
-        deadline = time.monotonic() + 30
-        while True:
-            request = urllib.request.Request(
-                f"{base}/actions/invoke", data=payload, headers=headers, method="POST"
-            )
-            try:
-                with urllib.request.urlopen(request, timeout=60) as response:
-                    answered = response.headers.get("X-Tangram-SDK-Protocol")
-                    if answered and answered.split(".")[0] != PROTOCOL:
-                        raise ActionError(
-                            "protocol_mismatch",
-                            f"host speaks SDK protocol {answered}, this module speaks {PROTOCOL}",
-                        )
-                    return json.loads(response.read())["result"]
-            except urllib.error.HTTPError as error:
-                answered = (error.headers or {}).get("X-Tangram-SDK-Protocol")
-                if answered and answered.split(".")[0] != PROTOCOL:
-                    raise ActionError(
-                        "protocol_mismatch",
-                        f"host speaks SDK protocol {answered}, this module speaks {PROTOCOL}",
-                    ) from None
-                if error.code == 503 and time.monotonic() < deadline:
-                    time.sleep(0.5)
-                    continue
-                raw = error.read().decode("utf-8", "replace")
-                try:
-                    parsed = json.loads(raw)
-                except ValueError:
-                    parsed = raw
-                code, message, retryable = _normalize_error_envelope(parsed)
-                raise ActionError(code, message, retryable) from None
+class _Schedules:
+    """Durable schedules firing this app's OWN actions unattended
+    (composable-app-sdk §5.5); targets must be unattended-eligible.
+
+    create() upserts by kebab-case name with exactly one of ``every``
+    (fixed interval like "30m", first fire immediately), ``cron``
+    (calendar cadence evaluated in ``timezone``), or ``at`` (a future
+    ISO-8601 one-shot). Standalone, the scheduler lives in the LOCAL HOST:
+    it fires only while the run session is up (missed windows collapse
+    into one fire), accepts standard 5-field Unix cron only (Quartz needs
+    Tangram OS), and persists under the project's .preview/. Repeated
+    consecutive failures autopause the schedule until resume()."""
+
+    def create(self, name, resource_type, action, args=None, cron=None, at=None, every=None, timezone="UTC"):
+        payload = {
+            "name": name,
+            "resource_type": resource_type,
+            "action": action,
+            "args": args or {},
+            "timezone": timezone,
+        }
+        if cron is not None:
+            payload["cron"] = cron
+        if at is not None:
+            payload["at"] = at
+        if every is not None:
+            payload["every"] = every
+        return _local_host_call("schedules", "schedules/create", payload)["schedule"]
+
+    def list(self):
+        return _local_host_call("schedules", "schedules/list", {})["schedules"]
+
+    def delete(self, name):
+        return _local_host_call("schedules", "schedules/delete", {"name": name})["deleted"]
+
+    def pause(self, name):
+        return _local_host_call("schedules", "schedules/pause", {"name": name})["paused"]
+
+    def resume(self, name):
+        return _local_host_call("schedules", "schedules/resume", {"name": name})["resumed"]
+
+    def runs(self, name, limit=20):
+        return _local_host_call("schedules", "schedules/runs", {"name": name, "limit": limit})["runs"]
 
 
 db = _Db()
@@ -202,10 +255,7 @@ actions = _Actions()
 # Declared workspace queries (tangram.sql.run) are a platform feature: they
 # need approved statements, workspace engines and the SQL proxy.
 sql = _UnsupportedFacade("sql", " — declared workspace queries require Tangram OS")
-# Durable platform schedules (tangram.schedules, composable-app-sdk §5.5) are
-# a platform feature: the OS scheduler fires the app's own actions under the
-# approved declare_backend_scheduling capability.
-schedules = _UnsupportedFacade("schedules", " — durable schedules require Tangram OS (declare_backend_scheduling)")
+schedules = _Schedules()
 def _deliver_desktop(title, body):
     """Show one native desktop notification on this machine, or raise.
 

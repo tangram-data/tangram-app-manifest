@@ -37,9 +37,10 @@ repos) enforces the module surface; this document freezes the wire.
   - **Standalone:** `Authorization: Bearer <TANGRAM_LOCAL_ACTIONS_TOKEN>`,
     sent by the module.
 - Client timeout: 60s per request. Retry policy (protocol 1): the
-  STANDALONE module retries `503` on `actions.invoke` only (0.5s backoff,
-  30s deadline, the host-starting window); the platform module performs no
-  client-side retry. Hosts must treat every operation as non-idempotent.
+  STANDALONE module retries `503` on every standalone-served operation
+  (0.5s backoff, 30s deadline, the host-starting window); the platform
+  module performs no client-side retry. Hosts must treat every operation
+  as non-idempotent.
 
 ## Environments
 
@@ -62,12 +63,12 @@ repos) enforces the module surface; this document freezes the wire.
 | secrets.get | `secrets/get` | — | `{key}` | `{value}` |
 | actions.invoke | `actions/invoke` | `/actions/invoke` | `{resource_type, action, args, app?}` | `{result}` |
 | sql.run | `sql/run` | — | `{name, params}` | `{rows, truncated}` |
-| schedules.create | `schedules/create` | — | `{name, resource_type, action, args?, cron? \| every? \| at?, timezone?}` | `{schedule}` |
-| schedules.list | `schedules/list` | — | `{}` | `{schedules}` |
-| schedules.delete | `schedules/delete` | — | `{name}` | `{deleted}` |
-| schedules.pause | `schedules/pause` | — | `{name}` | `{paused}` |
-| schedules.resume | `schedules/resume` | — | `{name}` | `{resumed}` |
-| schedules.runs | `schedules/runs` | — | `{name, limit?}` | `{runs}` |
+| schedules.create | `schedules/create` | `/schedules/create` | `{name, resource_type, action, args?, cron? \| every? \| at?, timezone?}` | `{schedule}` |
+| schedules.list | `schedules/list` | `/schedules/list` | `{}` | `{schedules}` |
+| schedules.delete | `schedules/delete` | `/schedules/delete` | `{name}` | `{deleted}` |
+| schedules.pause | `schedules/pause` | `/schedules/pause` | `{name}` | `{paused}` |
+| schedules.resume | `schedules/resume` | `/schedules/resume` | `{name}` | `{resumed}` |
+| schedules.runs | `schedules/runs` | `/schedules/runs` | `{name, limit?}` | `{runs}` |
 | notifications.send | `notifications/send` | — | `{to, subject, body, link?, channel?, dedupe_key?}` | `{id, queued, skipped, deduped?}` |
 | notifications.list | `notifications/list` | — | `{limit?}` | `{notifications}` |
 
@@ -118,8 +119,16 @@ Codes (HTTP mapping): `unauthenticated` (401), `not_found` (404),
   ISO instant; args are frozen, size-capped, references-not-secrets). Fires are at-most-once
   per window, carry a `schedule-run-<id>` invocation id for dedup, and
   repeated consecutive failures autopause the schedule until
-  `schedules.resume`. The standalone host does not implement this surface
-  (the staged module raises its unsupported error before any transport).
+  `schedules.resume`. The STANDALONE host serves this surface with a
+  host-side scheduler (never in app code) firing through the same
+  unattended actions pipeline as `actions.invoke`, with deliberate
+  divergences: fires happen only while a run session is up and missed
+  windows collapse into ONE fire; `cron` accepts standard 5-field Unix
+  only (numeric atoms — Quartz, names, `?`/`L` are refused
+  `invalid_request`); the scheduling capability is treated as granted;
+  autopause threshold is 5 consecutive failures; `runs` keeps the last 20;
+  `args` are capped at 32 KiB; state persists in the project's
+  `.preview/schedules.json`.
 - `notifications.send` requires the approved `declare_backend_notifications`
   capability and addresses WORKSPACE MEMBER account ids only — the request
   never carries an email address or Slack id (address-shaped values are

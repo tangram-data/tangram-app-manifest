@@ -145,12 +145,14 @@ context, and same-app `tangram.actions.invoke`. `tangram.notifications`
 delivers as a native desktop notification on the developer's machine
 (macOS `osascript`, Windows toast, Linux `notify-send`) with
 platform-shaped envelopes — member routing and the email/Slack channels
-stay platform-only. The remaining platform-only surfaces —
-`tangram.storage`, `tangram.secrets`, `tangram.sql` (declared workspace
-queries), and `tangram.schedules` (durable schedules firing the app's own
-unattended actions under the approved `declare_backend_scheduling`
-capability) — fail explicitly with the module's unsupported error, because
-their providers live in Tangram OS.
+stay platform-only. `tangram.schedules` is served by a scheduler in the
+local host that fires the app's own unattended-eligible actions through
+the same governed pipeline as `actions.invoke`; schedules persist in
+`.preview/schedules.json` but fire only while the session runs, and cron
+is standard 5-field Unix only. The remaining platform-only surfaces —
+`tangram.storage`, `tangram.secrets`, and `tangram.sql` (declared
+workspace queries) — fail explicitly with the module's unsupported error,
+because their providers live in Tangram OS.
 Operation shapes and platform semantics for every surface are frozen in the
 [SDK ↔ host ABI](sdk-host-abi.md).
 

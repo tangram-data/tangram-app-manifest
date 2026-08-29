@@ -174,13 +174,15 @@ The public surface:
 | `tangram.actions.invoke(...)` | Call the app's (or a declared dependency's) actions | own app only |
 | `tangram.storage`, `tangram.secrets` | Own object storage, declared secrets | no |
 | `tangram.sql.run(name, params)` | Declared workspace queries (`declare_backend_query`) | no |
-| `tangram.schedules` | Durable schedules firing the app's own unattended actions (`declare_backend_scheduling`) | no |
+| `tangram.schedules` | Durable schedules firing the app's own unattended actions (`declare_backend_scheduling`) | host-side scheduler |
 | `tangram.notifications` | Notify workspace members by account id via platform channels (`declare_backend_notifications`) | desktop notification |
 
 Platform-only surfaces raise the module's structured unsupported error when
-called standalone; `tangram.notifications` instead delivers a native
-desktop notification on the developer's machine (macOS/Windows/Linux) with
-platform-shaped envelopes, so notification flows are testable locally.
+called standalone. `tangram.notifications` instead delivers a native
+desktop notification on the developer's machine (macOS/Windows/Linux), and
+`tangram.schedules` runs against a host-side local scheduler (session-
+scoped firing, Unix 5-field cron only, state under `.preview/`) — both
+with platform-shaped envelopes, so those flows are testable locally.
 The two newest surfaces in brief — `schedules.create`
 upserts by name with exactly one of `every` (`"30m"`-style interval), `cron`
 (5-field, evaluated in `timezone`), or `at` (one-shot ISO instant), plus

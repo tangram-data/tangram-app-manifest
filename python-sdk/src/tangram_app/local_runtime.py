@@ -182,8 +182,11 @@ class LocalAppSession:
             "detail": "requires Tangram OS (declared workspace queries)",
         }
         report["capabilities"]["schedules"] = {
-            "state": "unsupported",
-            "detail": "requires Tangram OS (declare_backend_scheduling + platform scheduler)",
+            "state": "emulated",
+            "detail": (
+                "host-side scheduler firing own unattended actions; fires only while "
+                "the session runs; Unix 5-field cron only (Quartz requires Tangram OS)"
+            ),
         }
         report["capabilities"]["notifications"] = {
             "state": "emulated",
@@ -289,8 +292,11 @@ class LocalSourceRuntime:
             # injected; the session attaches after bind, and calls before
             # that answer 503 (the staged SDK retries briefly).
             from .local_actions import LocalActionsServer
+            from .local_schedules import LocalScheduler
 
-            actions_server = LocalActionsServer.start()
+            actions_server = LocalActionsServer.start(
+                scheduler=LocalScheduler(preview / "schedules.json")
+            )
         except Exception:
             if database is not None:
                 database.close()
