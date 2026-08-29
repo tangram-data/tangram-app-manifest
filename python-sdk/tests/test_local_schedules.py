@@ -104,6 +104,10 @@ class CadenceParsingTest(unittest.TestCase):
         self.assertEqual(first, datetime(2026, 11, 1, 5, 30, tzinfo=UTC))
         after = cron.next_after(first, new_york)
         self.assertEqual(after, datetime(2026, 11, 2, 6, 30, tzinfo=UTC))
+        # From WITHIN the repeated hour (06:15Z = 01:15 EST, the second
+        # pass): the answer must stay strictly after, not rewind to 05:30Z.
+        inside = cron.next_after(datetime(2026, 11, 1, 6, 15, tzinfo=UTC), new_york)
+        self.assertEqual(inside, datetime(2026, 11, 2, 6, 30, tzinfo=UTC))
 
     def test_cron_refuses_quartz_and_bad_fields(self):
         for bad in ("0 0 * * * *", "* * * *", "0 0 ? * MON", "*/70 * * * *", "61 * * * *", "0 0 32 * *"):
@@ -281,6 +285,39 @@ class LocalSchedulerTest(unittest.TestCase):
         self.assertEqual(listed["cron"], "0 9 * * *")
         run = book.scheduler.handle("runs", {"name": "sweep"})["runs"][0]
         self.assertEqual(run["status"], "failed")  # ...but the run record is honest
+
+    def test_delete_and_recreate_during_fire_never_commits_onto_the_new_spec(self):
+        book = _Book()
+
+        def replacing_invoke(session, resource_type, action, args):
+            book.scheduler.handle("delete", {"name": "sweep"})
+            book.scheduler.handle(
+                "create",
+                {"name": "sweep", "resource_type": "Todo", "action": "Sweep", "cron": "0 9 * * *"},
+            )
+            raise RuntimeError("old spec failed")
+
+        book.scheduler._invoker = replacing_invoke
+        book.scheduler.handle(
+            "create", {"name": "sweep", "resource_type": "Todo", "action": "Sweep", "every": "1m"}
+        )
+        book.scheduler.tick(book.now)
+        listed = book.scheduler.handle("list", {})["schedules"][0]
+        self.assertEqual(listed["state"], "active")
+        self.assertEqual(listed["consecutive_failures"], 0)
+
+    def test_structurally_invalid_state_is_quarantined(self):
+        book = _Book()
+        book.scheduler.handle(
+            "create", {"name": "sweep", "resource_type": "Todo", "action": "Sweep", "every": "1h"}
+        )
+        state = json.loads(book.state_path.read_text())
+        state["schedules"]["sweep"]["runs"] = None
+        book.state_path.write_text(json.dumps(state), encoding="utf-8")
+        reloaded = LocalScheduler(book.state_path, invoker=book._invoke, now_fn=lambda: book.now)
+        reloaded._session = book.scheduler._session
+        self.assertEqual(reloaded.handle("list", {})["schedules"], [])
+        self.assertTrue(book.state_path.with_suffix(".corrupt").exists())
 
     def test_corrupt_state_is_quarantined_not_overwritten(self):
         book = _Book()

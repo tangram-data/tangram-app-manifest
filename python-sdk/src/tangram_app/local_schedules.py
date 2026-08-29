@@ -146,8 +146,14 @@ class Cron:
                 for minute in minutes:
                     if hour == floor[0] and minute < floor[1]:
                         continue
-                    candidate = datetime(day.year, day.month, day.day, hour, minute, tzinfo=tz)
-                    return candidate.astimezone(timezone.utc)
+                    candidate = datetime(
+                        day.year, day.month, day.day, hour, minute, tzinfo=tz
+                    ).astimezone(timezone.utc)
+                    # Fold guard: inside a fall-back repeat the fold=0 candidate
+                    # maps before `moment`; strictly-after holds at instant level.
+                    if candidate <= moment:
+                        continue
+                    return candidate
         raise ScheduleError("invalid_request", "cron expression never matches a real date")
 
 
@@ -220,6 +226,43 @@ class LocalScheduler:
     _REQUIRED = frozenset(
         ("name", "resource_type", "action", "args", "timezone", "state", "next_fire", "generation", "runs")
     )
+    _STATES = frozenset(("active", "paused", "autopaused", "completed"))
+
+    def _next_generation(self) -> int:
+        self._counter += 1
+        return self._counter
+
+    @classmethod
+    def _sound_schedule(cls, schedule) -> bool:
+        """Deep structural soundness: every field the scheduler will later
+        parse or branch on must already be parseable, or the file is bad."""
+        try:
+            if not (isinstance(schedule, dict) and cls._REQUIRED <= schedule.keys()):
+                return False
+            if not all(isinstance(schedule[k], str) for k in ("name", "resource_type", "action")):
+                return False
+            if not (
+                isinstance(schedule["args"], dict)
+                and schedule["state"] in cls._STATES
+                and isinstance(schedule["generation"], int)
+                and isinstance(schedule["runs"], list)
+                and all(isinstance(run, dict) for run in schedule["runs"])
+            ):
+                return False
+            cadences = [k for k in ("cron", "every", "at") if isinstance(schedule.get(k), str)]
+            if len(cadences) != 1:
+                return False
+            datetime.fromisoformat(schedule["next_fire"])
+            ZoneInfo(schedule["timezone"])
+            if cadences[0] == "cron":
+                Cron(schedule["cron"])
+            elif cadences[0] == "every":
+                parse_every(schedule["every"])
+            else:
+                parse_at(schedule["at"])
+            return True
+        except Exception:
+            return False
 
     def _load(self) -> None:
         self._schedules, self._counter = {}, 0
@@ -232,9 +275,8 @@ class LocalScheduler:
             schedules, counter = state["schedules"], state["counter"]
             if not (isinstance(counter, int) and isinstance(schedules, dict)):
                 raise ValueError("bad state shape")
-            for schedule in schedules.values():
-                if not (isinstance(schedule, dict) and self._REQUIRED <= schedule.keys()):
-                    raise ValueError("bad schedule shape")
+            if not all(self._sound_schedule(schedule) for schedule in schedules.values()):
+                raise ValueError("bad schedule shape")
         except (ValueError, KeyError, TypeError, AttributeError):
             # Quarantine rather than silently overwriting the only copy.
             try:
@@ -329,8 +371,10 @@ class LocalScheduler:
             "state": "active",
             "consecutive_failures": 0,
             "next_fire": next_fire.isoformat(),
-            # In-flight fires of a replaced spec must not commit onto this one.
-            "generation": (previous["generation"] + 1) if previous else 1,
+            # In-flight fires of a replaced spec must not commit onto this
+            # one; the shared counter keeps generations unique even across
+            # delete-and-recreate under the same name.
+            "generation": self._next_generation(),
             "created_at": previous["created_at"] if previous else now.isoformat(),
             "updated_at": now.isoformat(),
             "runs": previous["runs"] if previous else [],
