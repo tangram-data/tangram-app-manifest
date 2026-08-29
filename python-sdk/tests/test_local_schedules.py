@@ -91,6 +91,20 @@ class CadenceParsingTest(unittest.TestCase):
         fire = cron.next_after(base, ZoneInfo("America/New_York"))
         self.assertEqual(fire, datetime(2026, 8, 29, 13, 0, tzinfo=UTC))  # 9am EDT same day
 
+    def test_cron_dst_transitions_are_defined(self):
+        new_york = ZoneInfo("America/New_York")
+        # Spring forward (2027-03-14): 02:30 never exists → fires once at
+        # the shifted instant just after the jump (03:30 EDT = 07:30Z).
+        spring = Cron("30 2 * * *").next_after(datetime(2027, 3, 14, 6, 0, tzinfo=UTC), new_york)
+        self.assertEqual(spring, datetime(2027, 3, 14, 7, 30, tzinfo=UTC))
+        # Fall back (2026-11-01): 01:30 happens twice → first occurrence
+        # only (01:30 EDT = 05:30Z), and the repeat (06:30Z) is skipped.
+        cron = Cron("30 1 * * *")
+        first = cron.next_after(datetime(2026, 11, 1, 4, 0, tzinfo=UTC), new_york)
+        self.assertEqual(first, datetime(2026, 11, 1, 5, 30, tzinfo=UTC))
+        after = cron.next_after(first, new_york)
+        self.assertEqual(after, datetime(2026, 11, 2, 6, 30, tzinfo=UTC))
+
     def test_cron_refuses_quartz_and_bad_fields(self):
         for bad in ("0 0 * * * *", "* * * *", "0 0 ? * MON", "*/70 * * * *", "61 * * * *", "0 0 32 * *"):
             with self.assertRaises(ScheduleError):
@@ -225,6 +239,73 @@ class LocalSchedulerTest(unittest.TestCase):
         book.scheduler.tick(book.now)
         book.scheduler.tick(book.now)
         self.assertEqual(len(book.fired), 1)
+
+    def test_window_is_claimed_durably_before_the_action_runs(self):
+        book = _Book()
+        observed = {}
+
+        def spying_invoke(session, resource_type, action, args):
+            state = json.loads(book.state_path.read_text())
+            schedule = state["schedules"]["sweep"]
+            observed["next_fire"] = schedule["next_fire"]
+            observed["run_status"] = schedule["runs"][-1]["status"]
+
+        book.scheduler._invoker = spying_invoke
+        book.scheduler.handle(
+            "create", {"name": "sweep", "resource_type": "Todo", "action": "Sweep", "every": "30m"}
+        )
+        book.scheduler.tick(book.now)
+        expected_next = (book.now + timedelta(minutes=30)).isoformat()
+        self.assertEqual(observed, {"next_fire": expected_next, "run_status": "started"})
+        run = book.scheduler.handle("runs", {"name": "sweep"})["runs"][0]
+        self.assertEqual(run["status"], "succeeded")
+
+    def test_upsert_during_fire_never_commits_onto_the_new_spec(self):
+        book = _Book()
+
+        def upserting_invoke(session, resource_type, action, args):
+            book.scheduler.handle(
+                "create",
+                {"name": "sweep", "resource_type": "Todo", "action": "Sweep", "cron": "0 9 * * *"},
+            )
+            raise RuntimeError("old spec failed")
+
+        book.scheduler._invoker = upserting_invoke
+        book.scheduler.handle(
+            "create", {"name": "sweep", "resource_type": "Todo", "action": "Sweep", "every": "1m"}
+        )
+        book.scheduler.tick(book.now)
+        listed = book.scheduler.handle("list", {})["schedules"][0]
+        self.assertEqual(listed["state"], "active")  # old failure did not touch the new spec
+        self.assertEqual(listed["consecutive_failures"], 0)
+        self.assertEqual(listed["cron"], "0 9 * * *")
+        run = book.scheduler.handle("runs", {"name": "sweep"})["runs"][0]
+        self.assertEqual(run["status"], "failed")  # ...but the run record is honest
+
+    def test_corrupt_state_is_quarantined_not_overwritten(self):
+        book = _Book()
+        book.state_path.write_text("{not json", encoding="utf-8")
+        reloaded = LocalScheduler(book.state_path, invoker=book._invoke, now_fn=lambda: book.now)
+        reloaded._session = book.scheduler._session
+        self.assertEqual(reloaded.handle("list", {})["schedules"], [])
+        self.assertEqual(book.state_path.with_suffix(".corrupt").read_text(), "{not json")
+
+    def test_interrupted_runs_reload_as_terminal_unknown(self):
+        book = _Book()
+
+        def dying_invoke(session, resource_type, action, args):
+            raise KeyboardInterrupt  # simulate a host crash mid-action
+
+        book.scheduler._invoker = dying_invoke
+        book.scheduler.handle(
+            "create", {"name": "sweep", "resource_type": "Todo", "action": "Sweep", "every": "1m"}
+        )
+        with self.assertRaises(KeyboardInterrupt):
+            book.scheduler.tick(book.now)
+        reloaded = LocalScheduler(book.state_path, invoker=book._invoke, now_fn=lambda: book.now)
+        reloaded._session = book.scheduler._session
+        run = reloaded.handle("runs", {"name": "sweep"})["runs"][0]
+        self.assertEqual(run["status"], "unknown")
 
     def test_state_survives_a_scheduler_restart(self):
         book = _Book()

@@ -127,7 +127,12 @@ class Cron:
         return dom_ok or dow_ok  # classic cron OR when both are restricted
 
     def next_after(self, moment: datetime, tz: ZoneInfo) -> datetime:
-        """First matching instant strictly after `moment`, returned in UTC."""
+        """First matching instant strictly after `moment`, returned in UTC.
+
+        DST is deliberate vixie-style: a nonexistent wall time (spring
+        forward) fires once at the shifted instant just after the
+        transition; an ambiguous wall time (fall back) fires at its FIRST
+        occurrence only (fold=0), never both."""
         local = moment.astimezone(tz).replace(second=0, microsecond=0) + timedelta(minutes=1)
         hours, minutes = sorted(self.hours), sorted(self.minutes)
         for offset in range(_CRON_SEARCH_DAYS):
@@ -212,13 +217,36 @@ class LocalScheduler:
 
     # -- persistence -------------------------------------------------------
 
+    _REQUIRED = frozenset(
+        ("name", "resource_type", "action", "args", "timezone", "state", "next_fire", "generation", "runs")
+    )
+
     def _load(self) -> None:
+        self._schedules, self._counter = {}, 0
         try:
-            state = json.loads(self._path.read_text(encoding="utf-8"))
-            self._schedules = state["schedules"]
-            self._counter = state["counter"]
-        except (OSError, ValueError, KeyError):
-            self._schedules, self._counter = {}, 0
+            raw = self._path.read_text(encoding="utf-8")
+        except OSError:
+            return
+        try:
+            state = json.loads(raw)
+            schedules, counter = state["schedules"], state["counter"]
+            if not (isinstance(counter, int) and isinstance(schedules, dict)):
+                raise ValueError("bad state shape")
+            for schedule in schedules.values():
+                if not (isinstance(schedule, dict) and self._REQUIRED <= schedule.keys()):
+                    raise ValueError("bad schedule shape")
+        except (ValueError, KeyError, TypeError, AttributeError):
+            # Quarantine rather than silently overwriting the only copy.
+            try:
+                os.replace(self._path, self._path.with_suffix(".corrupt"))
+            except OSError:
+                pass
+            return
+        for schedule in schedules.values():
+            for run in schedule["runs"]:
+                if isinstance(run, dict) and run.get("status") == "started":
+                    run["status"] = "unknown"  # host died mid-action
+        self._schedules, self._counter = schedules, counter
 
     def _save(self) -> None:
         payload = json.dumps({"version": 1, "schedules": self._schedules, "counter": self._counter})
@@ -301,6 +329,8 @@ class LocalScheduler:
             "state": "active",
             "consecutive_failures": 0,
             "next_fire": next_fire.isoformat(),
+            # In-flight fires of a replaced spec must not commit onto this one.
+            "generation": (previous["generation"] + 1) if previous else 1,
             "created_at": previous["created_at"] if previous else now.isoformat(),
             "updated_at": now.isoformat(),
             "runs": previous["runs"] if previous else [],
@@ -328,7 +358,7 @@ class LocalScheduler:
 
     @staticmethod
     def _view(schedule: dict) -> dict:
-        return {k: v for k, v in schedule.items() if k != "runs"}
+        return {k: v for k, v in schedule.items() if k not in ("runs", "generation")}
 
     # -- firing ------------------------------------------------------------
 
@@ -345,47 +375,71 @@ class LocalScheduler:
         for snapshot in due:
             self._fire(session, snapshot, now)
 
+    def _current(self, snapshot: dict) -> dict | None:
+        schedule = self._schedules.get(snapshot["name"])
+        if schedule is None or schedule["generation"] != snapshot["generation"]:
+            return None  # deleted, or replaced by upsert, while firing
+        return schedule
+
     def _fire(self, session, snapshot: dict, now: datetime) -> None:
+        # Claim the window durably BEFORE invoking: cadence advances and a
+        # provisional run persist first, so a crash mid-action can never
+        # re-fire the same window (the run reloads as terminal `unknown`).
         with self._lock:
+            schedule = self._current(snapshot)
+            if (
+                schedule is None
+                or schedule["state"] != "active"
+                or datetime.fromisoformat(schedule["next_fire"]) > now
+            ):
+                return  # paused/deleted/replaced/already claimed since the due scan
             self._counter += 1
             run_id = f"schedule-run-{self._counter}"
+            run = {
+                "id": run_id,
+                "status": "started",
+                "scheduled_for": schedule["next_fire"],
+                "started": self._now().isoformat(),
+            }
+            schedule["runs"] = (schedule["runs"] + [run])[-RUNS_KEPT:]
+            if schedule.get("at"):
+                schedule["state"] = "completed"
+            elif schedule.get("every"):
+                # Missed windows (host down) collapse into this one fire.
+                schedule["next_fire"] = (now + timedelta(seconds=parse_every(schedule["every"]))).isoformat()
+            else:
+                tz = ZoneInfo(schedule["timezone"])
+                schedule["next_fire"] = Cron(schedule["cron"]).next_after(now, tz).isoformat()
+            schedule["updated_at"] = self._now().isoformat()
+            self._save()
         invoker = self._invoker
         if invoker is None:
             from .local_actions import invoke_backend_action
 
             invoker = invoke_backend_action
         error = None
-        started = self._now()
         try:  # the lock is NOT held across the action call
             invoker(session, snapshot["resource_type"], snapshot["action"], snapshot["args"])
         except Exception as caught:
             error = str(caught)[:2000]
         with self._lock:
             schedule = self._schedules.get(snapshot["name"])
-            if schedule is None:  # deleted while firing
+            if schedule is None:
                 return
-            run = {
-                "id": run_id,
-                "status": "failed" if error else "succeeded",
-                "scheduled_for": schedule["next_fire"],
-                "started": started.isoformat(),
-                "finished": self._now().isoformat(),
-            }
-            if error:
-                run["error"] = error
-                schedule["consecutive_failures"] += 1
-                if schedule["consecutive_failures"] >= AUTOPAUSE_AFTER:
-                    schedule["state"] = "autopaused"
-            else:
-                schedule["consecutive_failures"] = 0
-            schedule["runs"] = (schedule["runs"] + [run])[-RUNS_KEPT:]
-            if schedule.get("at"):
-                schedule["state"] = "completed" if schedule["state"] == "active" else schedule["state"]
-            elif schedule.get("every"):
-                # Missed windows (host down) collapse into the one fire above.
-                schedule["next_fire"] = (now + timedelta(seconds=parse_every(schedule["every"]))).isoformat()
-            else:
-                tz = ZoneInfo(schedule["timezone"])
-                schedule["next_fire"] = Cron(schedule["cron"]).next_after(now, tz).isoformat()
+            for run in schedule["runs"]:  # upserts inherit history: finalize the run either way
+                if run["id"] == run_id:
+                    run["status"] = "failed" if error else "succeeded"
+                    run["finished"] = self._now().isoformat()
+                    if error:
+                        run["error"] = error
+                    break
+            if schedule["generation"] == snapshot["generation"]:
+                # Counter/state effects only apply to the spec that fired.
+                if error:
+                    schedule["consecutive_failures"] += 1
+                    if schedule["consecutive_failures"] >= AUTOPAUSE_AFTER and schedule["state"] == "active":
+                        schedule["state"] = "autopaused"
+                else:
+                    schedule["consecutive_failures"] = 0
             schedule["updated_at"] = self._now().isoformat()
             self._save()

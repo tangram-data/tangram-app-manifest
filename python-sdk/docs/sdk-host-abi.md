@@ -128,7 +128,12 @@ Codes (HTTP mapping): `unauthenticated` (401), `not_found` (404),
   `invalid_request`); the scheduling capability is treated as granted;
   autopause threshold is 5 consecutive failures; `runs` keeps the last 20;
   `args` are capped at 32 KiB; state persists in the project's
-  `.preview/schedules.json`.
+  `.preview/schedules.json`. The window is claimed durably BEFORE the
+  action runs, so a host crash mid-action never re-fires it — the
+  interrupted run reloads as terminal `unknown`; a corrupt state file is
+  quarantined to `schedules.corrupt`, never silently overwritten. Cron
+  DST is vixie-style: nonexistent wall times fire once at the shifted
+  instant, ambiguous ones at their first occurrence only.
 - `notifications.send` requires the approved `declare_backend_notifications`
   capability and addresses WORKSPACE MEMBER account ids only — the request
   never carries an email address or Slack id (address-shaped values are
