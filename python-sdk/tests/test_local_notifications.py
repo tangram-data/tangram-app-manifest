@@ -61,8 +61,18 @@ class LocalNotificationsTest(unittest.TestCase):
             self.module.notifications.send(["acc-1"], "s", "DIFFERENT", dedupe_key="k1")
         self.assertEqual(caught.exception.code, "invalid_request")
 
+    def test_returned_envelopes_and_rows_are_isolated_copies(self):
+        first = self.module.notifications.send(["acc-1"], "s", "b", dedupe_key="k1")
+        first["queued"].append("intruder")
+        first["skipped"].append({"id": "intruder"})
+        again = self.module.notifications.send(["acc-1"], "s", "b", dedupe_key="k1")
+        self.assertEqual(again["queued"], ["acc-1"])
+        self.assertEqual(again["skipped"], [])
+        self.module.notifications.list()[0]["status"] = "tampered"
+        self.assertEqual(self.module.notifications.list()[0]["status"], "sent")
+
     def test_refuses_address_shaped_recipients_and_bad_input(self):
-        for bad in (["a@example.com"], [], [""], None):
+        for bad in (["a@example.com"], [], [""], None, "acc-1"):
             with self.assertRaises(self.module.ActionError) as caught:
                 self.module.notifications.send(bad, "s", "b")
             self.assertEqual(caught.exception.code, "invalid_request")
@@ -79,6 +89,35 @@ class LocalNotificationsTest(unittest.TestCase):
         self.patch.start()
         self.assertEqual(envelope["queued"], ["acc-1"])
         self.assertEqual(self.module.notifications.list()[0]["status"], "failed")
+
+    def test_desktop_lanes_pass_content_after_an_option_terminator(self):
+        self.patch.stop()
+        self.addCleanup(self.patch.start)
+        import subprocess
+        import sys
+
+        title, body = "-e beep", "--urgency=critical"
+        with mock.patch.object(subprocess, "run") as run:
+            with mock.patch.object(sys, "platform", "darwin"):
+                self.module._deliver_desktop(title, body)
+            command = run.call_args.args[0]
+            self.assertEqual(command[:2], ["osascript", "-"])
+            self.assertEqual(command[2:], [title, body])
+            self.assertIn(b"on run argv", run.call_args.kwargs["input"])
+
+            with mock.patch.object(sys, "platform", "linux"):
+                self.module._deliver_desktop(title, body)
+            command = run.call_args.args[0]
+            self.assertEqual(command, ["notify-send", "--", title, body])
+
+            with mock.patch.object(sys, "platform", "win32"):
+                self.module._deliver_desktop(title, body)
+            command = run.call_args.args[0]
+            self.assertEqual(command[0], "powershell")
+            self.assertNotIn(title, " ".join(command))
+            environment = run.call_args.kwargs["env"]
+            self.assertEqual(environment["TANGRAM_NOTIFY_TITLE"], title)
+            self.assertEqual(environment["TANGRAM_NOTIFY_BODY"], body)
 
     def test_list_is_newest_first_and_bounded(self):
         for index in range(3):

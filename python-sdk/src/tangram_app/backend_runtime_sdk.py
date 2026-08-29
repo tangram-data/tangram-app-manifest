@@ -209,21 +209,27 @@ schedules = _UnsupportedFacade("schedules", " — durable schedules require Tang
 def _deliver_desktop(title, body):
     """Show one native desktop notification on this machine, or raise.
 
-    Strings travel as argv/env — never interpolated into the scripts — so
-    app-controlled content cannot inject AppleScript/PowerShell/shell."""
+    Strings travel as argv/env — never interpolated into the scripts — and
+    always land after an option terminator (`-` script-from-stdin marker,
+    `--`) so app-controlled content can inject neither script nor options."""
     import subprocess
     import sys
 
     if sys.platform == "darwin":
-        command = [
-            "osascript",
-            "-e", "on run argv",
-            "-e", "display notification (item 2 of argv) with title (item 1 of argv)",
-            "-e", "end run",
-            title, body,
-        ]
-        environment = None
-    elif sys.platform == "win32":
+        script = (
+            "on run argv\n"
+            "display notification (item 2 of argv) with title (item 1 of argv)\n"
+            "end run\n"
+        )
+        subprocess.run(
+            ["osascript", "-", title, body],
+            input=script.encode("utf-8"),
+            capture_output=True,
+            timeout=10,
+            check=True,
+        )
+        return
+    if sys.platform == "win32":
         script = (
             "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, "
             "ContentType = WindowsRuntime] | Out-Null; "
@@ -238,7 +244,7 @@ def _deliver_desktop(title, body):
         command = ["powershell", "-NoProfile", "-NonInteractive", "-Command", script]
         environment = dict(os.environ, TANGRAM_NOTIFY_TITLE=title, TANGRAM_NOTIFY_BODY=body)
     else:
-        command = ["notify-send", title, body]
+        command = ["notify-send", "--", title, body]
         environment = None
     subprocess.run(command, env=environment, capture_output=True, timeout=10, check=True)
 
@@ -262,8 +268,20 @@ class _Notifications:
         self._dedupe = {}
         self._counter = 0
 
+    @staticmethod
+    def _copy_envelope(envelope, **extra):
+        copy = {
+            "id": envelope["id"],
+            "queued": list(envelope["queued"]),
+            "skipped": [dict(item) for item in envelope["skipped"]],
+        }
+        copy.update(extra)
+        return copy
+
     def send(self, to, subject, body, link=None, channel="auto", dedupe_key=None):
-        recipients = [item for item in (to or [])]
+        if not isinstance(to, (list, tuple)):
+            raise ActionError("invalid_request", "to must be a non-empty list of member account ids")
+        recipients = list(to)
         if not recipients or not all(isinstance(item, str) and item for item in recipients):
             raise ActionError("invalid_request", "to must be a non-empty list of member account ids")
         for item in recipients:
@@ -292,7 +310,7 @@ class _Notifications:
                     raise ActionError(
                         "invalid_request", "dedupe_key was already used with different content"
                     )
-                return dict(envelope, deduped=True)
+                return self._copy_envelope(envelope, deduped=True)
             self._counter += 1
             identifier = f"local-{self._counter}"
 
@@ -323,11 +341,11 @@ class _Notifications:
                         "subject": subject,
                     }
                 )
-        return envelope
+            return self._copy_envelope(envelope)
 
     def list(self, limit=20):
         with self._lock:
-            return list(reversed(self._records))[: max(0, int(limit))]
+            return [dict(row) for row in reversed(self._records)][: max(0, int(limit))]
 
 
 notifications = _Notifications()
