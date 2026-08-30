@@ -7,18 +7,22 @@ description: Build and test a Tangram app end-to-end on this machine with the Py
 
 A Tangram app is a **manifest package**: Pkl manifests declaring what the app
 is, exposes, and needs, plus a canonical Python (FastAPI) backend and optional
-React UI. The Python SDK (`python-sdk/`) validates, compiles, runs, and
-invokes it entirely on loopback — no Tangram OS.
-
-Ground truth lives in `spec/` (manifest spec) and `python-sdk/docs/`
-(SDK + runtime + ABI). A working minimal package you can copy as a seed:
-`python-sdk/tests/fixtures/minimal-app/`. Examples: `examples/`.
+React UI. The Python SDK (pip package `tangram-app-sdk`, module
+`tangram_app`) validates, compiles, runs, and invokes it entirely on
+loopback — no Tangram OS. This skill is self-contained: the templates below
+are complete and verified; you do NOT need the tangram-app-manifest repo.
 
 ## Prerequisites
 
+Check before installing anything:
+
+- SDK: `python3 -m tangram_app --help` (or `tangram-app --help`) already
+  works in many environments. If missing: `pip install tangram-app-sdk`
+  once it is on PyPI; until then install from a checkout or wheel of
+  `github.com/tangram-data/tangram-app-manifest`
+  (`pip install ./python-sdk` from the repo root). Backends themselves
+  need Python 3.12+ on the machine; the SDK itself runs on 3.11+.
 - Pkl CLI on PATH (`pkl --version`) — needed to load source manifests.
-- Python 3.11+ with the SDK importable: `pip install -e python-sdk` (or
-  `PYTHONPATH=python-sdk/src`). Backends themselves need Python 3.12+.
 - Host PostgreSQL toolchain (`initdb`/`pg_ctl`) only if the app declares a
   database claim.
 
@@ -177,8 +181,8 @@ Know these before debugging "failures" that are actually policy:
 ## In-backend `tangram` module
 
 Backend code imports `tangram` — same signatures locally and on Tangram OS
-(conformance-pinned; see `python-sdk/docs/sdk-host-abi.md` for exact
-request/response shapes and error codes):
+(conformance-pinned; exact request/response shapes and error codes are in
+`docs/sdk-host-abi.md` of the tangram-app-manifest repo):
 
 | Surface | Standalone behavior |
 |---|---|
@@ -201,7 +205,9 @@ on `code`, never message text.
 
 ## Going deeper
 
-`python-sdk/docs/sdk-guide.md` (map) → `manifest-authoring.md`,
-`local-runtime.md`, `actions-and-agents.md` (policy/audit/skills),
-`cli-reference.md` (envelope shape), `security-and-operations.md`,
-`sdk-host-abi.md` (wire truth). Manifest semantics: `spec/*.md`.
+These live in the `tangram-data/tangram-app-manifest` repo (clone or browse
+only if this skill doesn't answer the question): `python-sdk/docs/` —
+`sdk-guide.md` (map), `manifest-authoring.md`, `local-runtime.md`,
+`actions-and-agents.md` (policy/audit/skills), `cli-reference.md`
+(envelope shape), `sdk-host-abi.md` (wire truth); manifest semantics in
+`spec/*.md`; a seed package at `python-sdk/tests/fixtures/minimal-app/`.
