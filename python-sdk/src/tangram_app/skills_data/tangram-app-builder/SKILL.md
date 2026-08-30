@@ -31,8 +31,8 @@ Check before installing anything:
 ```text
 my-app/
 └── manifests/
-    ├── PklProject              # amends "pkl:Project"
-    ├── PklProject.deps.json    # {} unless using Pkl packages
+    ├── PklProject              # depends on the published schema package
+    ├── PklProject.deps.json    # generated: run `pkl project resolve` here
     ├── app.pkl                 # identity: group/name/version/appType
     ├── api/
     │   ├── resources.pkl       # resource types → versions → actions
@@ -53,7 +53,24 @@ commit it.
 
 ## Minimal manifests
 
-`manifests/app.pkl`:
+Author against the TYPED schema package — Pkl then type-checks fields and
+enum values at eval time instead of failing later in validation.
+`manifests/PklProject`:
+
+```pkl
+amends "pkl:Project"
+
+dependencies {
+  ["tangram-app-manifest"] {
+    uri = "package://pkg.pkl-lang.org/github.com/tangram-data/tangram-app-manifest/tangram-app-manifest@1.0.0"
+  }
+}
+```
+
+Then run `pkl project resolve` inside `manifests/` once (network on first
+use; cached afterwards) to generate `PklProject.deps.json`.
+
+`manifests/app.pkl` (top-level scalars, no class):
 
 ```pkl
 manifestSpecVersion = "v1"
@@ -69,27 +86,29 @@ tags = List("demo")
 `openApiMapping` (actions without one validate but are not executable):
 
 ```pkl
+import "@tangram-app-manifest/resources.pkl" as resources
+
 types = List(
-  new Dynamic {
+  new resources.ResourceTypeDefinition {
     name = "Order"
     doc = "An order"
     activeVersion = "v1"
     versions = List(
-      new Dynamic {
+      new resources.ResourceTypeVersion {
         version = "v1"
         served = true
         actions = List(
-          new Dynamic {
+          new resources.Action {
             name = "List"
             doc = "List orders"
             privilege = "Read"        // Read | Write | ...
-            effect = "Stateless"      // Stateless | Reversible | Irreversible
+            effect = "Stateless"      // ActionEffect: Stateless | Reversible | Irreversible
             idempotent = true
-            openApiMapping = new Dynamic { operationId = "listOrders" }
+            openApiMapping = new resources.OpenApiMapping { operationId = "listOrders" }
           }
         )
         presetRoles = List(
-          new Dynamic { name = "reader"; permissions = List("Read"); description = "Can list" }
+          new resources.Role { name = "reader"; permissions = List("Read"); description = "Can list" }
         )
       }
     )
@@ -100,9 +119,14 @@ types = List(
 `manifests/api/spec.pkl`:
 
 ```pkl
+import "@tangram-app-manifest/api.pkl" as api
+
 apiSpecFile = "open_api.yml"
-backend = new Dynamic { serviceName = "orders"; port = 8080 }
+backend = new api.ServiceBackend { serviceName = "orders"; port = 8080 }
 ```
+
+(Schema-less `new Dynamic { ... }` blocks with the same fields also load,
+but skip Pkl's type checking — prefer the typed classes above.)
 
 `open_api.yml` declares the paths; each `operationId` referenced by an
 `openApiMapping` must exist there — input/output schemas come from it.
