@@ -1,0 +1,6 @@
+{
+  "name": "tangram-app-builder",
+  "description": "Build and test Tangram apps locally with the Python SDK: manifest scaffolding, the validate/run/call loop, and platform-parity gotchas.",
+  "version": "0.1.0",
+  "author": { "name": "Tangram" }
+}

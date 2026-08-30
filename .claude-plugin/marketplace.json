@@ -1,0 +1,11 @@
+{
+  "name": "tangram",
+  "owner": { "name": "Tangram" },
+  "plugins": [
+    {
+      "name": "tangram-app-builder",
+      "source": "./",
+      "description": "Build and test Tangram apps locally with the Python SDK: manifest scaffolding, the validate/run/call loop, and platform-parity gotchas."
+    }
+  ]
+}

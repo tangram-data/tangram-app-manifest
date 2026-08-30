@@ -18,6 +18,7 @@ Both `tangram-app` and `python -m tangram_app` use the same implementation.
 | `call TARGET ID --local` | Start source, invoke once, stop |
 | `call TARGET ID --backend URL` | Invoke an already-running loopback backend |
 | `skill generate TARGET --output DIR` | Generate an integrity-locked agent skill |
+| `skill install-builder [--project DIR \| --user] [--force]` | Install the bundled app-authoring skill into `.claude/skills/` |
 
 `TARGET` is a package directory or a capability graph JSON file. `--local`
 requires a source package directory.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from importlib.resources import files
 import json
 from pathlib import Path
 import re
@@ -15,6 +16,27 @@ from .models import CapabilityGraph
 
 SKILL_FORMAT_VERSION = "1"
 _SKILL_NAME = re.compile(r"[^a-z0-9-]+")
+BUILDER_SKILL_NAME = "tangram-app-builder"
+
+
+def builder_skill_text() -> str:
+    """The bundled app-authoring skill, exactly as shipped in this release."""
+    return (
+        files("tangram_app")
+        .joinpath(f"skills_data/{BUILDER_SKILL_NAME}/SKILL.md")
+        .read_text(encoding="utf-8")
+    )
+
+
+def install_builder_skill(skills_root: str | Path, *, force: bool = False) -> Path:
+    """Copy the bundled authoring skill under `skills_root` (a `.claude/skills`
+    directory). Never overwrites unless `force`."""
+    target = Path(skills_root) / BUILDER_SKILL_NAME / "SKILL.md"
+    if target.exists() and not force:
+        raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(builder_skill_text(), encoding="utf-8")
+    return target
 
 
 def generate_skill(

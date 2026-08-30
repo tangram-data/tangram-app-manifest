@@ -32,7 +32,7 @@ from .errors import (
     UnknownBindingError,
     UnsupportedRequirementError,
 )
-from .skills import generate_skill, verify_skill
+from .skills import generate_skill, install_builder_skill, verify_skill
 from .project import TangramProject
 
 
@@ -197,6 +197,11 @@ def _parser() -> _Parser:
     generate.add_argument("target")
     generate.add_argument("--output", required=True)
     generate.add_argument("--name")
+    install = skill_commands.add_parser("install-builder")
+    scope = install.add_mutually_exclusive_group()
+    scope.add_argument("--project", default=".")
+    scope.add_argument("--user", action="store_true")
+    install.add_argument("--force", action="store_true")
     return parser
 
 
@@ -283,6 +288,15 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             "packageDigest": app.graph.package.digest,
             "bindings": len(app.tools()),
         }
+    if args.command == "skill" and args.skill_command == "install-builder":
+        if args.user:
+            skills_root = Path.home() / ".claude" / "skills"
+            scope = "user"
+        else:
+            skills_root = Path(args.project) / ".claude" / "skills"
+            scope = "project"
+        target = install_builder_skill(skills_root, force=args.force)
+        return {"skill": str(target.resolve()), "scope": scope}
     raise CliArgumentsError("unsupported command")
 
 
