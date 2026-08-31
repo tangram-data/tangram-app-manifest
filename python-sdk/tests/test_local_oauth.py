@@ -221,7 +221,7 @@ oauth = new Dynamic {{
         )
         header = _TokenEndpoint.auth_headers[-1]
         decoded = base64.b64decode(header.removeprefix("Basic ")).decode()
-        self.assertEqual(decoded, "id%3Awith%2Fodd%20chars:s%25cr%3At")
+        self.assertEqual(decoded, "id%3Awith%2Fodd+chars:s%25cr%3At")
 
     def test_https_required_for_remote_authorization_url(self):
         oauth = dict(_oauth_spec(self.token_url), authorizationUrl="http://vendor.example.com/auth")

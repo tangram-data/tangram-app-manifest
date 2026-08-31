@@ -185,11 +185,12 @@ def _token_request(oauth: dict, form: dict[str, str], client: dict) -> dict:
     method = oauth.get("tokenAuthMethod") or "ClientSecretPost"
     secret = client.get("clientSecret")
     if method == "ClientSecretBasic" and secret:
-        # RFC 6749 §2.3.1: each component is form-urlencoded BEFORE the colon join.
+        # RFC 6749 §2.3.1: each component is form-urlencoded (space → '+')
+        # BEFORE the colon join.
         encoded = (
-            urllib.parse.quote(client["clientId"], safe="")
+            urllib.parse.quote_plus(client["clientId"])
             + ":"
-            + urllib.parse.quote(secret, safe="")
+            + urllib.parse.quote_plus(secret)
         )
         headers["Authorization"] = "Basic " + base64.b64encode(encoded.encode()).decode()
     else:
