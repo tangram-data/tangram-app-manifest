@@ -73,6 +73,20 @@ class InstallBuilderSkillTest(unittest.TestCase):
                 self.assertEqual(Path(envelope["data"]["skill"]), expected.resolve())
                 self.assertTrue(expected.is_file())
 
+    def test_codex_scope_is_claude_free(self):
+        from tangram_app import cli, skills
+
+        with tempfile.TemporaryDirectory() as directory:
+            fake_home = Path(directory)
+            with mock.patch.object(cli.Path, "home", return_value=fake_home), mock.patch.object(
+                skills.Path, "home", return_value=fake_home
+            ):
+                code = cli.main(["skill", "install-builder", "--codex"])
+            self.assertEqual(code, 0)
+            installed = fake_home / ".codex" / "prompts" / f"{BUILDER_SKILL_NAME}.md"
+            self.assertEqual(installed.read_text(encoding="utf-8"), builder_skill_text())
+            self.assertFalse((fake_home / ".claude").exists())
+
     def test_user_scope_targets_home(self):
         from tangram_app import cli
 

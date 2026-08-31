@@ -32,7 +32,12 @@ from .errors import (
     UnknownBindingError,
     UnsupportedRequirementError,
 )
-from .skills import generate_skill, install_builder_skill, verify_skill
+from .skills import (
+    generate_skill,
+    install_builder_skill,
+    install_builder_skill_codex,
+    verify_skill,
+)
 from .project import TangramProject
 
 
@@ -201,6 +206,7 @@ def _parser() -> _Parser:
     scope = install.add_mutually_exclusive_group()
     scope.add_argument("--project", default=".")
     scope.add_argument("--user", action="store_true")
+    scope.add_argument("--codex", action="store_true")
     install.add_argument("--force", action="store_true")
     return parser
 
@@ -289,6 +295,14 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             "bindings": len(app.tools()),
         }
     if args.command == "skill" and args.skill_command == "install-builder":
+        if args.codex:
+            target = install_builder_skill_codex(force=args.force)
+            return {
+                "skill": str(target.resolve()),
+                "scope": "codex",
+                "hint": "invoke as /tangram-app-builder; for automatic use, tell "
+                "~/.codex/AGENTS.md to read this file for Tangram app tasks",
+            }
         if args.user:
             skills_root = Path.home() / ".claude" / "skills"
             scope = "user"

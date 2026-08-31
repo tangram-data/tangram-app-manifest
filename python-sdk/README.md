@@ -234,15 +234,25 @@ validate/run/call loop, and the platform-parity gotchas). Install it where
 Claude Code discovers skills:
 
 ```sh
-python -m tangram_app skill install-builder --project .   # ./.claude/skills/
-python -m tangram_app skill install-builder --user        # ~/.claude/skills/
+python -m tangram_app skill install-builder --project .   # ./.claude/skills/  (Claude Code, this repo)
+python -m tangram_app skill install-builder --user        # ~/.claude/skills/  (Claude Code, all repos)
+python -m tangram_app skill install-builder --codex       # ~/.codex/prompts/  (Codex, no Claude needed)
 ```
 
 Claude Code users can instead install it as a plugin without the SDK:
 `/plugin marketplace add tangram-data/tangram-app-manifest` then
-`/plugin install tangram-app-builder`. For agents without a skill system
-(e.g. Codex), reference the installed `SKILL.md` from your instructions
-file. The packaged copy is release-authoritative; the repo mirrors are
+`/plugin install tangram-app-builder`.
+
+For **Codex-only** machines, `--codex` installs the full skill as the
+custom prompt `/tangram-app-builder`. To make Codex apply it automatically
+instead of on invocation, add to `~/.codex/AGENTS.md`:
+
+```markdown
+When asked to create, modify, or debug a Tangram app, first read
+~/.codex/prompts/tangram-app-builder.md and follow it.
+```
+
+The packaged copy is release-authoritative; the repo mirrors are
 sha-checked against it in CI.
 
 ## Generating an agent skill

@@ -31,7 +31,18 @@ def builder_skill_text() -> str:
 def install_builder_skill(skills_root: str | Path, *, force: bool = False) -> Path:
     """Copy the bundled authoring skill under `skills_root` (a `.claude/skills`
     directory). Never overwrites unless `force`."""
-    target = Path(skills_root) / BUILDER_SKILL_NAME / "SKILL.md"
+    return _write_skill(Path(skills_root) / BUILDER_SKILL_NAME / "SKILL.md", force=force)
+
+
+def install_builder_skill_codex(codex_home: str | Path | None = None, *, force: bool = False) -> Path:
+    """Install the authoring skill for Codex: the FULL skill content as a
+    custom prompt (`/tangram-app-builder`) under `<codex-home>/prompts/`.
+    Standalone — no Claude Code installation is assumed or referenced."""
+    home = Path(codex_home) if codex_home is not None else Path.home() / ".codex"
+    return _write_skill(home / "prompts" / f"{BUILDER_SKILL_NAME}.md", force=force)
+
+
+def _write_skill(target: Path, *, force: bool) -> Path:
     if target.exists() and not force:
         raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
     target.parent.mkdir(parents=True, exist_ok=True)
