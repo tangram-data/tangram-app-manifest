@@ -15,13 +15,21 @@ Both `tangram-app` and `python -m tangram_app` use the same implementation.
 | `build PACKAGE [--output FILE]` | Compile and write a capability graph |
 | `inspect TARGET [--tools | --action ID]` | Inspect a package or graph |
 | `run PACKAGE` | Run backend/database/UI until interrupted |
+| `open TARGET [--no-browser]` | Run like `run`, then open the app UI in the browser |
+| `app install SOURCE [--force]` | Validate + install a package (dir, tar.gz/zip, https URL) into `~/.tangram/apps/` |
+| `app list` | List installed apps |
+| `app uninstall REF` | Remove an installed app |
 | `call TARGET ID --local` | Start source, invoke once, stop |
 | `call TARGET ID --backend URL` | Invoke an already-running loopback backend |
 | `skill generate TARGET --output DIR` | Generate an integrity-locked agent skill |
 | `skill install-builder [--project DIR \| --user] [--force]` | Install the bundled app-authoring skill into `.claude/skills/` |
 
-`TARGET` is a package directory or a capability graph JSON file. `--local`
-requires a source package directory.
+`TARGET` is a package directory, a capability graph JSON file, or an
+installed app reference — the app id (`com.example/orders`) or its bare
+name when unique. Installed apps live under `~/.tangram/apps/` (override
+with `TANGRAM_HOME`); `install` validates the package before copying and
+records id/version/source in `.install.json`. `--local` requires a source
+package directory (installed apps qualify).
 
 Action input is a JSON object supplied by `--input-json` or stdin:
 

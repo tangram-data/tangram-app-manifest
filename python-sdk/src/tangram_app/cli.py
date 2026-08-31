@@ -32,6 +32,7 @@ from .errors import (
     UnknownBindingError,
     UnsupportedRequirementError,
 )
+from .local_store import install_app, list_installed, resolve_target, uninstall_app
 from .skills import (
     generate_skill,
     install_builder_skill,
@@ -80,7 +81,7 @@ class _Parser(argparse.ArgumentParser):
 def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = _parser().parse_args(argv)
-        if args.command == "run":
+        if args.command in ("run", "open"):
             return _run_local_foreground(args)
         data = _run(args)
         _emit({"schemaVersion": COMMAND_SCHEMA_VERSION, "ok": True, "data": data})
@@ -196,6 +197,23 @@ def _parser() -> _Parser:
     call.add_argument("--startup-timeout", type=float, default=30.0)
     call.add_argument("--python")
 
+    app_group = commands.add_parser("app")
+    app_commands = app_group.add_subparsers(dest="app_command", required=True)
+    app_install = app_commands.add_parser("install")
+    app_install.add_argument("source")
+    app_install.add_argument("--force", action="store_true")
+    app_commands.add_parser("list")
+    app_uninstall = app_commands.add_parser("uninstall")
+    app_uninstall.add_argument("ref")
+
+    open_cmd = commands.add_parser("open")
+    open_cmd.add_argument("package")
+    open_cmd.add_argument("--no-browser", action="store_true")
+    open_cmd.add_argument("--audit-path")
+    open_cmd.add_argument("--timeout", type=float, default=30.0)
+    open_cmd.add_argument("--startup-timeout", type=float, default=60.0)
+    open_cmd.add_argument("--python")
+
     skill = commands.add_parser("skill")
     skill_commands = skill.add_subparsers(dest="skill_command", required=True)
     generate = skill_commands.add_parser("generate")
@@ -230,13 +248,13 @@ def _skill_parser() -> _Parser:
 
 def _run(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "validate":
-        result = TangramProject.open(args.package).validate()
+        result = TangramProject.open(resolve_target(args.package)).validate()
         return {
             "valid": result.valid,
             "findings": [_finding(item) for item in result.findings],
         }
     if args.command == "build":
-        app = TangramApp.from_package(args.package)
+        app = TangramApp.from_package(resolve_target(args.package))
         output = (
             Path(args.output)
             if args.output
@@ -285,6 +303,12 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             result = asyncio.run(bound.call(args.binding, arguments))
             binding_id = bound.graph.resolve(args.binding)[1].id
         return {"bindingId": binding_id, "result": result}
+    if args.command == "app" and args.app_command == "install":
+        return {"installed": install_app(args.source, force=args.force)}
+    if args.command == "app" and args.app_command == "list":
+        return {"apps": list_installed()}
+    if args.command == "app" and args.app_command == "uninstall":
+        return {"uninstalled": uninstall_app(args.ref)}
     if args.command == "skill" and args.skill_command == "generate":
         app = _load_app(args.target)
         root = generate_skill(app, args.output, skill_name=args.name)
@@ -315,7 +339,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _run_local_foreground(args: argparse.Namespace) -> int:
-    app = TangramApp.from_package(args.package)
+    app = TangramApp.from_package(resolve_target(args.package))
     session = app.run_local(
         python=args.python,
         startup_timeout_seconds=args.startup_timeout,
@@ -342,6 +366,10 @@ def _run_local_foreground(args: argparse.Namespace) -> int:
                 },
             }
         )
+        if args.command == "open" and not args.no_browser:
+            import webbrowser
+
+            webbrowser.open(session.ui_url or session.backend_url)
         while session.process.poll() is None:
             time.sleep(0.25)
         return 3
@@ -353,9 +381,11 @@ def _run_local_foreground(args: argparse.Namespace) -> int:
 
 
 def _load_app(target: str | Path) -> TangramApp:
-    path = Path(target)
+    path = resolve_target(target)
     if not path.exists():
-        raise FileNotFoundError(f"Tangram package or graph does not exist: {path}")
+        raise FileNotFoundError(
+            f"Tangram package, graph, or installed app does not exist: {path}"
+        )
     return (
         TangramApp.from_package(path) if path.is_dir() else TangramApp.from_graph(path)
     )

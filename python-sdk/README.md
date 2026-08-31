@@ -255,6 +255,25 @@ When asked to create, modify, or debug a Tangram app, first read
 The packaged copy is release-authoritative; the repo mirrors are
 sha-checked against it in CI.
 
+## Installing and opening apps locally
+
+Agents (or humans) can install a built app — a generated source package,
+or an App Hub tarball — into the user-level store at `~/.tangram/apps/`,
+then address it by id everywhere a package path is accepted:
+
+```sh
+tangram-app app install ./my-app            # or app.tar.gz, or an https URL
+tangram-app app list
+tangram-app open my-app                     # run + open the UI in a browser
+printf '{}' | tangram-app call my-app 'com.example/my-app#Todo.List@listTodos' \
+  --local --input-json -
+tangram-app app uninstall my-app
+```
+
+`install` validates the package first and refuses stale layouts with
+actionable findings. Runtime state stays under the installed app's own
+`.preview/`. Override the store root with `TANGRAM_HOME`.
+
 ## Generating an agent skill
 
 Generate a portable, graph-backed skill for Codex, Claude, or another
