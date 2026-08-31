@@ -45,10 +45,13 @@ application types — every application is an `App`, `Connector`, or `Agent`
 
 ## Installing the app-builder skill (Claude, Codex, others)
 
-The repo ships `tangram-app-builder` — an agent-facing skill encoding the
-golden path for building a Tangram app with the Python SDK (package layout,
-typed Pkl templates, the validate/run/call loop, and the gotchas). One
-canonical skill, three install lanes:
+The repo ships two agent-facing skills: `tangram-app-builder` (build an
+app with the Python SDK: package layout, typed Pkl templates, the
+validate/run/call loop, and the gotchas) and `tangram-connector-builder`
+(build a connector to an external SaaS API — Gmail/Slack style — with
+platform-managed OAuth). Canonical skills, three install lanes
+(`/plugin install tangram-app-builder` ships both; via the SDK use
+`tangram-app skill install <name>` with any scope below):
 
 **Claude Code — plugin (no SDK needed):**
 
