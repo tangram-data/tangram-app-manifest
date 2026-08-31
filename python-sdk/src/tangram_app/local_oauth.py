@@ -37,6 +37,16 @@ from .local_store import tangram_home
 
 CALLBACK_PATH = "/oauth/callback"
 _DONE_PAGE = b"<html><body>Connected. You can close this tab.</body></html>"
+# Names the SDK itself sets on the authorize URL; manifests must not shadow
+# them (vendor first/last-value behavior would undermine state/PKCE).
+_RESERVED_AUTHORIZE_PARAMS = frozenset(
+    ("response_type", "client_id", "redirect_uri", "state", "scope", "code_challenge", "code_challenge_method")
+)
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # token endpoints must answer directly; never re-send credentials
 
 
 class LocalOAuthError(LocalConnectionError):
@@ -139,6 +149,10 @@ def run_authorization(
             query += [("code_challenge", challenge), ("code_challenge_method", "S256")]
         for param in oauth.get("additionalAuthorizeParams") or []:
             if isinstance(param, dict) and param.get("name"):
+                if param["name"] in _RESERVED_AUTHORIZE_PARAMS:
+                    raise LocalOAuthError(
+                        f"additionalAuthorizeParams must not shadow {param['name']!r}"
+                    )
                 query.append((param["name"], param.get("value", "")))
         on_url(oauth["authorizationUrl"] + "?" + urllib.parse.urlencode(query))
         if not server.event.wait(timeout_seconds):  # type: ignore[attr-defined]
@@ -171,8 +185,13 @@ def _token_request(oauth: dict, form: dict[str, str], client: dict) -> dict:
     method = oauth.get("tokenAuthMethod") or "ClientSecretPost"
     secret = client.get("clientSecret")
     if method == "ClientSecretBasic" and secret:
-        credentials = base64.b64encode(f"{client['clientId']}:{secret}".encode()).decode()
-        headers["Authorization"] = f"Basic {credentials}"
+        # RFC 6749 §2.3.1: each component is form-urlencoded BEFORE the colon join.
+        encoded = (
+            urllib.parse.quote(client["clientId"], safe="")
+            + ":"
+            + urllib.parse.quote(secret, safe="")
+        )
+        headers["Authorization"] = "Basic " + base64.b64encode(encoded.encode()).decode()
     else:
         form["client_id"] = client["clientId"]
         if secret:
@@ -183,10 +202,16 @@ def _token_request(oauth: dict, form: dict[str, str], client: dict) -> dict:
         headers=headers,
         method="POST",
     )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with opener.open(request, timeout=60) as response:
             payload = json.loads(response.read())
     except urllib.error.HTTPError as error:
+        if 300 <= error.code < 400:
+            raise LocalOAuthError(
+                f"token endpoint answered a redirect ({error.code}); refusing to "
+                "re-send credentials to another location"
+            ) from None
         detail = error.read().decode("utf-8", "replace")[:500]
         raise LocalOAuthError(f"token endpoint answered {error.code}: {detail}") from None
     if not isinstance(payload, dict) or not payload.get("access_token"):
@@ -263,37 +288,60 @@ def oauth_connect(
     }
 
 
-def ensure_fresh(spec: dict, app_id: str, connection: dict) -> dict:
-    """Refresh the stored token when inside the manifest's refresh window."""
-    oauth = spec.get("oauth")
+def _needs_refresh(oauth: dict, connection: dict) -> bool:
     expires_at = connection.get("expiresAt")
-    refresh = connection.get("refreshToken")
-    if not (isinstance(oauth, dict) and oauth.get("tokenUrl") and expires_at and refresh):
-        return connection
+    if not (expires_at and connection.get("refreshToken")):
+        return False
     window = oauth.get("refreshWindowSeconds")
     window = window if isinstance(window, (int, float)) and window >= 0 else 60
     try:
         deadline = datetime.fromisoformat(expires_at) - timedelta(seconds=window)
     except ValueError:
-        return connection
-    if datetime.now(timezone.utc) < deadline:
-        return connection
-    client = load_dev_client(app_id)
-    if client is None:
-        raise LocalOAuthError(
-            "token expired and no developer OAuth client is stored — reconnect with "
-            "`tangram-app connect ... --oauth`"
-        )
-    payload = _token_request(
-        oauth, {"grant_type": "refresh_token", "refresh_token": refresh}, client
-    )
-    save_connection(
-        app_id,
-        payload["access_token"],
-        tenant=connection.get("tenant"),
-        refresh_token=payload.get("refresh_token") or refresh,
-        expires_at=_expires_at(payload),
-    )
-    from .local_connections import load_connection
+        return False
+    return datetime.now(timezone.utc) >= deadline
 
-    return load_connection(app_id) or connection
+
+def ensure_fresh(spec: dict, app_id: str, connection: dict) -> dict:
+    """Refresh the stored token when inside the manifest's refresh window.
+
+    The read-refresh-write transaction runs under an exclusive file lock and
+    RE-READS the stored connection first, so concurrent callers never race
+    token rotation (the second caller sees the first one's fresh token)."""
+    oauth = spec.get("oauth")
+    if not (isinstance(oauth, dict) and oauth.get("tokenUrl")):
+        return connection
+    if not _needs_refresh(oauth, connection):
+        return connection
+    from .local_connections import connections_root, load_connection
+
+    lock_path = connections_root() / f"{app_id.replace('/', '__')}.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "w") as lock_file:
+        try:
+            import fcntl
+
+            fcntl.flock(lock_file, fcntl.LOCK_EX)
+        except ImportError:  # Windows: best-effort, single-process guarantee only
+            pass
+        current = load_connection(app_id) or connection
+        if not _needs_refresh(oauth, current):
+            return current  # another caller already rotated it
+        client = load_dev_client(app_id)
+        if client is None:
+            raise LocalOAuthError(
+                "token expired and no developer OAuth client is stored — reconnect "
+                "with `tangram-app connect ... --oauth`"
+            )
+        payload = _token_request(
+            oauth,
+            {"grant_type": "refresh_token", "refresh_token": current["refreshToken"]},
+            client,
+        )
+        save_connection(
+            app_id,
+            payload["access_token"],
+            tenant=current.get("tenant"),
+            refresh_token=payload.get("refresh_token") or current["refreshToken"],
+            expires_at=_expires_at(payload),
+        )
+        return load_connection(app_id) or current

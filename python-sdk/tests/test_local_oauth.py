@@ -30,8 +30,17 @@ FIXTURE = Path(__file__).resolve().parent / "fixtures" / "minimal-connector"
 class _TokenEndpoint(BaseHTTPRequestHandler):
     exchanges: list = []
     challenge: str | None = None
+    auth_headers: list = []
+    redirect_next: bool = False
 
     def do_POST(self):
+        if _TokenEndpoint.redirect_next:
+            _TokenEndpoint.redirect_next = False
+            self.send_response(302)
+            self.send_header("Location", "http://evil.example.net/token")
+            self.end_headers()
+            return
+        _TokenEndpoint.auth_headers.append(self.headers.get("Authorization"))
         length = int(self.headers.get("Content-Length", "0"))
         form = dict(urllib.parse.parse_qsl(self.rfile.read(length).decode()))
         _TokenEndpoint.exchanges.append(form)
@@ -93,6 +102,8 @@ class LocalOAuthDanceTest(unittest.TestCase):
         self.addCleanup(os.environ.pop, "TANGRAM_HOME", None)
         _TokenEndpoint.exchanges = []
         _TokenEndpoint.challenge = None
+        _TokenEndpoint.auth_headers = []
+        _TokenEndpoint.redirect_next = False
         self.vendor = ThreadingHTTPServer(("127.0.0.1", 0), _TokenEndpoint)
         threading.Thread(target=self.vendor.serve_forever, daemon=True).start()
         self.addCleanup(self.vendor.shutdown)
@@ -176,6 +187,42 @@ oauth = new Dynamic {{
             run_authorization(oauth, "dev-client", on_url=vendor_denied, timeout_seconds=5)
         self.assertIn("access_denied", str(caught.exception))
 
+    def test_reserved_authorize_params_refuse(self):
+        oauth = dict(
+            _oauth_spec(self.token_url),
+            additionalAuthorizeParams=[{"name": "state", "value": "evil"}],
+        )
+        opened = []
+        with self.assertRaises(LocalOAuthError) as caught:
+            run_authorization(oauth, "c", on_url=opened.append, timeout_seconds=1)
+        self.assertIn("state", str(caught.exception))
+        self.assertEqual(opened, [])  # refused before any URL was surfaced
+
+    def test_token_endpoint_redirect_refuses(self):
+        from tangram_app.local_oauth import _token_request
+
+        _TokenEndpoint.redirect_next = True
+        with self.assertRaises(LocalOAuthError) as caught:
+            _token_request(
+                _oauth_spec(self.token_url),
+                {"grant_type": "refresh_token", "refresh_token": "rt-1"},
+                {"clientId": "dev-client", "clientSecret": "s"},
+            )
+        self.assertIn("redirect", str(caught.exception))
+
+    def test_client_secret_basic_form_encodes_components(self):
+        from tangram_app.local_oauth import _token_request
+
+        oauth = dict(_oauth_spec(self.token_url), tokenAuthMethod="ClientSecretBasic")
+        _token_request(
+            oauth,
+            {"grant_type": "refresh_token", "refresh_token": "rt-1"},
+            {"clientId": "id:with/odd chars", "clientSecret": "s%cr:t"},
+        )
+        header = _TokenEndpoint.auth_headers[-1]
+        decoded = base64.b64decode(header.removeprefix("Basic ")).decode()
+        self.assertEqual(decoded, "id%3Awith%2Fodd%20chars:s%25cr%3At")
+
     def test_https_required_for_remote_authorization_url(self):
         oauth = dict(_oauth_spec(self.token_url), authorizationUrl="http://vendor.example.com/auth")
         with self.assertRaises(LocalOAuthError):
@@ -197,10 +244,18 @@ oauth = new Dynamic {{
         save_connection(
             "com.example/echo", "at-1", refresh_token="rt-1", expires_at=soon
         )
-        refreshed = ensure_fresh(spec, "com.example/echo", load_connection("com.example/echo"))
+        stale = load_connection("com.example/echo")  # still expiring soon, token at-1
+        refreshed = ensure_fresh(spec, "com.example/echo", stale)
         self.assertEqual(refreshed["token"], "at-2")
         self.assertEqual(refreshed["refreshToken"], "rt-1")  # kept when not rotated
         self.assertEqual(_TokenEndpoint.exchanges[-1]["grant_type"], "refresh_token")
+
+        # A racer holding the STALE snapshot re-reads under the lock and sees
+        # the rotation instead of refreshing again.
+        exchange_count = len(_TokenEndpoint.exchanges)
+        again = ensure_fresh(spec, "com.example/echo", stale)
+        self.assertEqual(again["token"], "at-2")
+        self.assertEqual(len(_TokenEndpoint.exchanges), exchange_count)
 
 
 if __name__ == "__main__":
