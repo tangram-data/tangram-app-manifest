@@ -32,6 +32,13 @@ from .errors import (
     UnknownBindingError,
     UnsupportedRequirementError,
 )
+from .local_connections import (
+    delete_connection,
+    load_connection,
+    load_connector_spec,
+    render_connection,
+    save_connection,
+)
 from .local_store import install_app, list_installed, resolve_target, uninstall_app
 from .skills import (
     BUILDER_SKILL_NAME,
@@ -192,6 +199,8 @@ def _parser() -> _Parser:
     execution = call.add_mutually_exclusive_group(required=True)
     execution.add_argument("--backend")
     execution.add_argument("--local", action="store_true")
+    execution.add_argument("--connected", action="store_true")
+    call.add_argument("--endpoint")
     call.add_argument("--input-json", default="-")
     call.add_argument("--audit-path")
     call.add_argument("--timeout", type=float, default=30.0)
@@ -206,6 +215,12 @@ def _parser() -> _Parser:
     app_commands.add_parser("list")
     app_uninstall = app_commands.add_parser("uninstall")
     app_uninstall.add_argument("ref")
+
+    connect = commands.add_parser("connect")
+    connect.add_argument("target")
+    connect.add_argument("--token", required=True)
+    connect.add_argument("--tenant")
+    commands.add_parser("disconnect").add_argument("target")
 
     open_cmd = commands.add_parser("open")
     open_cmd.add_argument("package")
@@ -284,9 +299,42 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         if args.tools:
             data["tools"] = [tool.to_dict() for tool in app.tools()]
         return data
+    if args.command == "connect":
+        root = resolve_target(args.target)
+        app = _load_app(root)
+        token = sys.stdin.read() if args.token == "-" else args.token
+        load_connector_spec(root)  # refuse non-connector packages up front
+        stored = save_connection(app.graph.package.id, token, tenant=args.tenant)
+        return {"connected": app.graph.package.id, "connection": str(stored)}
+    if args.command == "disconnect":
+        app = _load_app(resolve_target(args.target))
+        removed = delete_connection(app.graph.package.id)
+        return {"disconnected": app.graph.package.id, "removed": removed}
     if args.command == "call":
         arguments = _read_json_input(args.input_json)
         app = _load_app(args.target)
+        if args.connected:
+            root = resolve_target(args.target)
+            spec = load_connector_spec(root)
+            connection = load_connection(app.graph.package.id)
+            if connection is None:
+                raise CliArgumentsError(
+                    f"no developer connection for {app.graph.package.id}; run "
+                    f"`tangram-app connect {args.target} --token ...` first"
+                )
+            endpoint, auth_headers = render_connection(
+                spec, connection, endpoint_override=args.endpoint
+            )
+            bound = app.bind(
+                backend=endpoint,
+                headers=auth_headers,
+                audit_path=args.audit_path,
+                timeout_seconds=args.timeout,
+                allow_remote=True,
+            )
+            result = asyncio.run(bound.call(args.binding, arguments))
+            binding_id = bound.graph.resolve(args.binding)[1].id
+            return {"bindingId": binding_id, "result": result, "endpoint": endpoint}
         if args.local:
             if app.source_root is None:
                 raise CliArgumentsError("--local requires a source package directory")

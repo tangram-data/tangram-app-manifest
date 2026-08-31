@@ -9,7 +9,7 @@ from typing import Any, Mapping
 from .compiler import CompilationResult, compile_manifest
 from .errors import UnsupportedRequirementError
 from .host import AuditSink, JsonlAuditSink, TangramHost
-from .http_driver import LocalHttpDriver
+from .http_driver import HttpExecutionDriver, LocalHttpDriver
 from .models import CapabilityGraph
 from .policy import AuthorizationPolicy, LocalDevelopmentPolicy
 from .validation import ValidationFinding
@@ -88,6 +88,7 @@ class TangramApp:
         audit_path: str | Path | None = None,
         headers: Mapping[str, str] | None = None,
         timeout_seconds: float = 30.0,
+        allow_remote: bool = False,
     ) -> "TangramApp":
         unsupported = _unsupported_runtime_requirements(self.graph)
         if unsupported:
@@ -108,7 +109,16 @@ class TangramApp:
         )
         host = TangramHost(
             self.graph,
-            driver=LocalHttpDriver(
+            # Loopback-locked by default; the remote base class is reserved
+            # for explicitly trusted connector endpoints (call --connected).
+            driver=HttpExecutionDriver(
+                backend,
+                headers=headers,
+                timeout_seconds=timeout_seconds,
+                allow_remote=True,
+            )
+            if allow_remote
+            else LocalHttpDriver(
                 backend,
                 headers=headers,
                 timeout_seconds=timeout_seconds,

@@ -1,0 +1,12 @@
+{
+  "openapi": "3.1.0",
+  "info": {"title": "Echo", "version": "0.1.0"},
+  "paths": {
+    "/echo": {
+      "get": {
+        "operationId": "listEcho",
+        "responses": {"200": {"description": "Echoes"}}
+      }
+    }
+  }
+}

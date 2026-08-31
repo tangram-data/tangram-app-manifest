@@ -171,11 +171,28 @@ python3 -m tangram_app validate .          # structured findings
 python3 -m tangram_app inspect . --tools   # actions as the agent will see them
 ```
 
-HONEST LIMITS: a connector cannot execute standalone — OAuth lives in
-Tangram OS, so `call --local` is unavailable. Full e2e = install on a
-Tangram OS workspace, connect an account, invoke through the gateway. The
-native `tangram` CLI (`tangram app manifest validate .`) is the publishing
-conformance authority when available.
+Live-fire against the real vendor API with a developer connection —
+bring your own access token (any token valid for the declared scopes; for
+Google APIs `gcloud auth print-access-token` mints one):
+
+```sh
+python3 -m tangram_app connect . --token "$(gcloud auth print-access-token)"
+printf '{}' | python3 -m tangram_app call . \
+  'com.google/gmail#Message.List@listMessages' --connected --input-json -
+```
+
+`--connected` renders the manifest's auth header templates with the stored
+token and executes directly against `endpoint` — enforcing https, the
+`endpointHostAllowlist`, and the same read-only default policy (mutating
+actions refuse without explicit grants; a wise default when the target is
+a real account). `connect --tenant` supplies `{{oauth.tenantId}}`.
+
+HONEST LIMITS: the OAuth *flow* itself (consent, refresh, tenant capture),
+publisher credentials, and multi-user connections are platform-only — a
+pasted token tests your API modeling, not the oauth block. Full e2e =
+install on a Tangram OS workspace, connect an account, invoke through the
+gateway. The native `tangram` CLI (`tangram app manifest validate .`) is
+the publishing conformance authority when available.
 
 ## Gotchas
 

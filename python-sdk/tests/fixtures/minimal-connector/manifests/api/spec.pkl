@@ -1,0 +1,10 @@
+apiSpecFile = "open_api.yml"
+endpoint = "https://api.example.com"
+endpointOverridable = true
+endpointRequired = false
+endpointHostAllowlist = List("api.example.com", "*.svc.example.com")
+auth = new Dynamic {
+  httpHeaders = Map(
+    "Authorization", new Dynamic { template = "Bearer {{oauth.accessToken}}" }
+  )
+}

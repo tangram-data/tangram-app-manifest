@@ -21,6 +21,9 @@ Both `tangram-app` and `python -m tangram_app` use the same implementation.
 | `app uninstall REF` | Remove an installed app |
 | `call TARGET ID --local` | Start source, invoke once, stop |
 | `call TARGET ID --backend URL` | Invoke an already-running loopback backend |
+| `connect TARGET --token T [--tenant X]` | Store a developer OAuth token for a connector (`--token -` reads stdin) |
+| `call TARGET ID --connected [--endpoint URL]` | Execute a connector action against its vendor endpoint with the stored token |
+| `disconnect TARGET` | Remove the stored developer connection |
 | `skill generate TARGET --output DIR` | Generate an integrity-locked agent skill |
 | `skill install-builder [--project DIR \| --user] [--force]` | Install the bundled app-authoring skill into `.claude/skills/` |
 

@@ -1,0 +1,7 @@
+manifestSpecVersion = "v1"
+group = "com.example"
+name = "echo"
+version = "0.1.0"
+appType = "Connector"
+description = "Echo connector fixture"
+tags = List("fixture")
