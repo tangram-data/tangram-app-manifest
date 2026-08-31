@@ -176,7 +176,8 @@ bring your own access token (any token valid for the declared scopes; for
 Google APIs `gcloud auth print-access-token` mints one):
 
 ```sh
-python3 -m tangram_app connect . --token "$(gcloud auth print-access-token)"
+# --token - reads stdin so the live token never appears in process argv
+gcloud auth print-access-token | python3 -m tangram_app connect . --token -
 printf '{}' | python3 -m tangram_app call . \
   'com.google/gmail#Message.List@listMessages' --connected --input-json -
 ```

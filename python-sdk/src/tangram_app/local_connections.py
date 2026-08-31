@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
 import stat
@@ -47,8 +48,13 @@ def save_connection(app_id: str, token: str, tenant: str | None = None) -> Path:
     }
     if tenant is not None:
         entry["tenant"] = tenant
-    target.write_text(json.dumps(entry), encoding="utf-8")
-    target.chmod(stat.S_IRUSR | stat.S_IWUSR)  # the token is a live credential
+    # The token is a live credential: the file is BORN 0600 (no chmod window).
+    descriptor = os.open(
+        target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR
+    )
+    with os.fdopen(descriptor, "w", encoding="utf-8") as sink:
+        sink.write(json.dumps(entry))
+    target.chmod(stat.S_IRUSR | stat.S_IWUSR)  # O_CREAT mode ignores pre-existing files
     return target
 
 
@@ -103,7 +109,9 @@ def render_connection(
     if scheme != "https" and not loopback:
         raise LocalConnectionError(f"connector endpoint must be https, got {endpoint!r}")
     allowlist = spec.get("endpointHostAllowlist") or []
-    if endpoint_override is None and allowlist and not _host_allowed(host, allowlist):
+    # The allowlist governs overrides too — credentials must never travel to
+    # an arbitrary host. Loopback is exempt (fake-vendor test harnesses).
+    if allowlist and not loopback and not _host_allowed(host, allowlist):
         raise LocalConnectionError(
             f"endpoint host {host!r} is not in endpointHostAllowlist {allowlist}"
         )

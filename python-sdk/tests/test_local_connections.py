@@ -76,6 +76,16 @@ class RenderConnectionTest(unittest.TestCase):
         with self.assertRaises(LocalConnectionError):
             render_connection(pinned, {"token": "t"}, endpoint_override="https://x.example.com")
 
+    def test_override_still_enforces_allowlist_for_remote_hosts(self):
+        with self.assertRaises(LocalConnectionError):
+            render_connection(
+                SPEC, {"token": "t"}, endpoint_override="https://attacker.example.net"
+            )
+        endpoint, _ = render_connection(
+            SPEC, {"token": "t"}, endpoint_override="https://b.svc.example.com"
+        )
+        self.assertEqual(endpoint, "https://b.svc.example.com")
+
     def test_unknown_placeholder_and_tenant(self):
         spec = dict(
             SPEC,
