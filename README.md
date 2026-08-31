@@ -43,6 +43,55 @@ package vocabulary) together with the `NativeApp`/`ConnectorApp`/`PlatformApp`
 application types — every application is an `App`, `Connector`, or `Agent`
 (see `docs/app-manifest-unification-design.md` in the tangram repo).
 
+## Installing the app-builder skill (Claude, Codex, others)
+
+The repo ships `tangram-app-builder` — an agent-facing skill encoding the
+golden path for building a Tangram app with the Python SDK (package layout,
+typed Pkl templates, the validate/run/call loop, and the gotchas). One
+canonical skill, three install lanes:
+
+**Claude Code — plugin (no SDK needed):**
+
+```text
+/plugin marketplace add tangram-data/tangram-app-manifest
+/plugin install tangram-app-builder
+```
+
+**Claude Code — via the SDK:**
+
+```sh
+pip install tangram-app-sdk            # until PyPI: pip install ./python-sdk from a checkout
+tangram-app skill install-builder --project .   # this repo only  → ./.claude/skills/
+tangram-app skill install-builder --user        # all repos       → ~/.claude/skills/
+```
+
+Claude Code discovers the skill automatically; inside this repository it is
+already active with no installation at all.
+
+**Codex (no Claude installation assumed):**
+
+```sh
+pip install tangram-app-sdk
+tangram-app skill install-builder --codex       # → ~/.codex/prompts/tangram-app-builder.md
+```
+
+This makes it invocable as the `/tangram-app-builder` custom prompt. For
+automatic use, add to `~/.codex/AGENTS.md`:
+
+```markdown
+When asked to create, modify, or debug a Tangram app, first read
+~/.codex/prompts/tangram-app-builder.md and follow it.
+```
+
+**Any other agent:** the skill is plain markdown with no harness-specific
+content — install with any lane above (or copy
+`skills/tangram-app-builder/SKILL.md` from this repo) and point your
+agent's instructions file at it.
+
+Skill prerequisites (the Pkl CLI, Python, optional PostgreSQL) are listed
+inside the skill itself; agents check before installing. All copies are
+sha-pinned to the packaged one by `python-sdk/tests/test_builder_skill.py`.
+
 ## OAuth-backed connectors
 
 OAuth declarations live in the standalone `oauth.pkl` module. Connector
