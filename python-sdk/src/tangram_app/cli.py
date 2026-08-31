@@ -34,9 +34,10 @@ from .errors import (
 )
 from .local_store import install_app, list_installed, resolve_target, uninstall_app
 from .skills import (
+    BUILDER_SKILL_NAME,
     generate_skill,
-    install_builder_skill,
-    install_builder_skill_codex,
+    install_packaged_skill,
+    install_packaged_skill_codex,
     verify_skill,
 )
 from .project import TangramProject
@@ -220,12 +221,15 @@ def _parser() -> _Parser:
     generate.add_argument("target")
     generate.add_argument("--output", required=True)
     generate.add_argument("--name")
-    install = skill_commands.add_parser("install-builder")
-    scope = install.add_mutually_exclusive_group()
-    scope.add_argument("--project", default=".")
-    scope.add_argument("--user", action="store_true")
-    scope.add_argument("--codex", action="store_true")
-    install.add_argument("--force", action="store_true")
+    for verb, has_name in (("install", True), ("install-builder", False)):
+        install = skill_commands.add_parser(verb)
+        if has_name:
+            install.add_argument("name")
+        scope = install.add_mutually_exclusive_group()
+        scope.add_argument("--project", default=".")
+        scope.add_argument("--user", action="store_true")
+        scope.add_argument("--codex", action="store_true")
+        install.add_argument("--force", action="store_true")
     return parser
 
 
@@ -318,14 +322,15 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             "packageDigest": app.graph.package.digest,
             "bindings": len(app.tools()),
         }
-    if args.command == "skill" and args.skill_command == "install-builder":
+    if args.command == "skill" and args.skill_command in ("install", "install-builder"):
+        name = getattr(args, "name", None) or BUILDER_SKILL_NAME
         if args.codex:
-            target = install_builder_skill_codex(force=args.force)
+            target = install_packaged_skill_codex(name, force=args.force)
             return {
                 "skill": str(target.resolve()),
                 "scope": "codex",
-                "hint": "invoke as /tangram-app-builder; for automatic use, tell "
-                "~/.codex/AGENTS.md to read this file for Tangram app tasks",
+                "hint": f"invoke as /{name}; for automatic use, tell "
+                "~/.codex/AGENTS.md to read this file for Tangram tasks",
             }
         if args.user:
             skills_root = Path.home() / ".claude" / "skills"
@@ -333,7 +338,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         else:
             skills_root = Path(args.project) / ".claude" / "skills"
             scope = "project"
-        target = install_builder_skill(skills_root, force=args.force)
+        target = install_packaged_skill(name, skills_root, force=args.force)
         return {"skill": str(target.resolve()), "scope": scope}
     raise CliArgumentsError("unsupported command")
 

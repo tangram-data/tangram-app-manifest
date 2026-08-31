@@ -11,33 +11,43 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tangram_app.skills import BUILDER_SKILL_NAME, builder_skill_text, install_builder_skill
+from tangram_app.skills import (
+    BUILDER_SKILL_NAME,
+    PACKAGED_SKILLS,
+    builder_skill_text,
+    install_builder_skill,
+    packaged_skill_text,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class BuilderSkillSyncTest(unittest.TestCase):
     def test_all_shipped_copies_are_identical(self):
-        """Package data is the copy releases ship; the repo-autoload copy
-        (.claude/skills) and the plugin copy (skills/) must never drift."""
-        mirrors = [
-            REPO_ROOT / ".claude" / "skills" / BUILDER_SKILL_NAME / "SKILL.md",
-            REPO_ROOT / "skills" / BUILDER_SKILL_NAME / "SKILL.md",
-        ]
-        if not all(path.is_file() for path in mirrors):
-            self.skipTest("repo mirrors absent (running from an sdist)")
-        packaged = hashlib.sha256(builder_skill_text().encode("utf-8")).hexdigest()
-        for path in mirrors:
-            self.assertEqual(
-                hashlib.sha256(path.read_bytes()).hexdigest(),
-                packaged,
-                f"{path} drifted from the packaged skill copy",
-            )
+        """Package data is the copy releases ship; the repo-autoload copies
+        (.claude/skills) and the plugin copies (skills/) must never drift."""
+        for name in PACKAGED_SKILLS:
+            mirrors = [
+                REPO_ROOT / ".claude" / "skills" / name / "SKILL.md",
+                REPO_ROOT / "skills" / name / "SKILL.md",
+            ]
+            if not all(path.is_file() for path in mirrors):
+                self.skipTest("repo mirrors absent (running from an sdist)")
+            packaged = hashlib.sha256(packaged_skill_text(name).encode("utf-8")).hexdigest()
+            for path in mirrors:
+                self.assertEqual(
+                    hashlib.sha256(path.read_bytes()).hexdigest(),
+                    packaged,
+                    f"{path} drifted from the packaged skill copy",
+                )
 
-    def test_skill_has_frontmatter(self):
-        text = builder_skill_text()
-        self.assertTrue(text.startswith("---\n"))
-        self.assertIn(f"name: {BUILDER_SKILL_NAME}", text)
+    def test_skills_have_frontmatter(self):
+        for name in PACKAGED_SKILLS:
+            text = packaged_skill_text(name)
+            self.assertTrue(text.startswith("---\n"), name)
+            self.assertIn(f"name: {name}", text)
+        with self.assertRaises(ValueError):
+            packaged_skill_text("no-such-skill")
 
 
 class InstallBuilderSkillTest(unittest.TestCase):
@@ -86,6 +96,22 @@ class InstallBuilderSkillTest(unittest.TestCase):
             installed = fake_home / ".codex" / "prompts" / f"{BUILDER_SKILL_NAME}.md"
             self.assertEqual(installed.read_text(encoding="utf-8"), builder_skill_text())
             self.assertFalse((fake_home / ".claude").exists())
+
+    def test_install_by_name_and_unknown_name_refuses(self):
+        from tangram_app import cli
+
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            code = cli.main(
+                ["skill", "install", "tangram-connector-builder", "--project", str(project)]
+            )
+            self.assertEqual(code, 0)
+            installed = project / ".claude/skills/tangram-connector-builder/SKILL.md"
+            self.assertEqual(
+                installed.read_text(encoding="utf-8"),
+                packaged_skill_text("tangram-connector-builder"),
+            )
+            self.assertNotEqual(cli.main(["skill", "install", "bogus", "--project", str(project)]), 0)
 
     def test_user_scope_targets_home(self):
         from tangram_app import cli

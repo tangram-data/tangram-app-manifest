@@ -11,6 +11,8 @@ React UI. The Python SDK (pip package `tangram-app-sdk`, module
 `tangram_app`) validates, compiles, runs, and invokes it entirely on
 loopback — no Tangram OS. This skill is self-contained: the templates below
 are complete and verified; you do NOT need the tangram-app-manifest repo.
+For a CONNECTOR to an external SaaS API (Gmail/Slack style: vendor OAuth,
+no own backend) use the `tangram-connector-builder` skill instead.
 
 ## Prerequisites
 

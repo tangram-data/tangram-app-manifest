@@ -17,36 +17,55 @@ from .models import CapabilityGraph
 SKILL_FORMAT_VERSION = "1"
 _SKILL_NAME = re.compile(r"[^a-z0-9-]+")
 BUILDER_SKILL_NAME = "tangram-app-builder"
+PACKAGED_SKILLS = ("tangram-app-builder", "tangram-connector-builder")
 
 
-def builder_skill_text() -> str:
-    """The bundled app-authoring skill, exactly as shipped in this release."""
+def packaged_skill_text(name: str) -> str:
+    """A bundled authoring skill, exactly as shipped in this release."""
+    if name not in PACKAGED_SKILLS:
+        raise ValueError(f"unknown packaged skill {name!r}; available: {', '.join(PACKAGED_SKILLS)}")
     return (
         files("tangram_app")
-        .joinpath(f"skills_data/{BUILDER_SKILL_NAME}/SKILL.md")
+        .joinpath(f"skills_data/{name}/SKILL.md")
         .read_text(encoding="utf-8")
     )
 
 
+def install_packaged_skill(name: str, skills_root: str | Path, *, force: bool = False) -> Path:
+    """Copy a bundled skill under `skills_root` (a `.claude/skills` directory).
+    Never overwrites unless `force`."""
+    text = packaged_skill_text(name)
+    return _write_skill(Path(skills_root) / name / "SKILL.md", text, force=force)
+
+
+def install_packaged_skill_codex(
+    name: str, codex_home: str | Path | None = None, *, force: bool = False
+) -> Path:
+    """Install a bundled skill for Codex: the FULL content as a custom prompt
+    (`/<name>`) under `<codex-home>/prompts/`. Standalone — no Claude Code
+    installation is assumed or referenced."""
+    text = packaged_skill_text(name)
+    home = Path(codex_home) if codex_home is not None else Path.home() / ".codex"
+    return _write_skill(home / "prompts" / f"{name}.md", text, force=force)
+
+
+def builder_skill_text() -> str:
+    return packaged_skill_text(BUILDER_SKILL_NAME)
+
+
 def install_builder_skill(skills_root: str | Path, *, force: bool = False) -> Path:
-    """Copy the bundled authoring skill under `skills_root` (a `.claude/skills`
-    directory). Never overwrites unless `force`."""
-    return _write_skill(Path(skills_root) / BUILDER_SKILL_NAME / "SKILL.md", force=force)
+    return install_packaged_skill(BUILDER_SKILL_NAME, skills_root, force=force)
 
 
 def install_builder_skill_codex(codex_home: str | Path | None = None, *, force: bool = False) -> Path:
-    """Install the authoring skill for Codex: the FULL skill content as a
-    custom prompt (`/tangram-app-builder`) under `<codex-home>/prompts/`.
-    Standalone — no Claude Code installation is assumed or referenced."""
-    home = Path(codex_home) if codex_home is not None else Path.home() / ".codex"
-    return _write_skill(home / "prompts" / f"{BUILDER_SKILL_NAME}.md", force=force)
+    return install_packaged_skill_codex(BUILDER_SKILL_NAME, codex_home, force=force)
 
 
-def _write_skill(target: Path, *, force: bool) -> Path:
+def _write_skill(target: Path, text: str, *, force: bool) -> Path:
     if target.exists() and not force:
         raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(builder_skill_text(), encoding="utf-8")
+    target.write_text(text, encoding="utf-8")
     return target
 
 

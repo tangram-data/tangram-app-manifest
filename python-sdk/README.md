@@ -226,18 +226,23 @@ and esbuild; callers may instead set `TANGRAM_ESBUILD_BIN` and
 run directly; irreversible or confirmation-required actions require a browser
 confirmation before the exact frozen request is retried.
 
-## Installing the app-authoring skill
+## Installing the authoring skills
 
-The SDK bundles the `tangram-app-builder` authoring skill — the golden
-path for building an app with this SDK (layout, manifest templates, the
-validate/run/call loop, and the platform-parity gotchas). Install it where
-Claude Code discovers skills:
+The SDK bundles two authoring skills: `tangram-app-builder` (apps with
+their own backend/database/UI: layout, manifest templates, the
+validate/run/call loop, platform-parity gotchas) and
+`tangram-connector-builder` (connectors mapping an external SaaS API —
+Gmail/Slack style — into governed actions with platform-managed OAuth).
+Install either where your agent discovers instructions:
 
 ```sh
-python -m tangram_app skill install-builder --project .   # ./.claude/skills/  (Claude Code, this repo)
-python -m tangram_app skill install-builder --user        # ~/.claude/skills/  (Claude Code, all repos)
-python -m tangram_app skill install-builder --codex       # ~/.codex/prompts/  (Codex, no Claude needed)
+python -m tangram_app skill install NAME --project .   # ./.claude/skills/  (Claude Code, this repo)
+python -m tangram_app skill install NAME --user        # ~/.claude/skills/  (Claude Code, all repos)
+python -m tangram_app skill install NAME --codex       # ~/.codex/prompts/  (Codex, no Claude needed)
 ```
+
+`skill install-builder` remains an alias for
+`skill install tangram-app-builder`.
 
 Claude Code users can instead install it as a plugin without the SDK:
 `/plugin marketplace add tangram-data/tangram-app-manifest` then
