@@ -132,7 +132,8 @@ def _materialize(source: str, scratch: Path) -> Path:
         raise LocalStoreError("only https:// URLs are allowed")
     if source.startswith("https://"):
         archive = scratch / "download"
-        with urllib.request.urlopen(source, timeout=120) as response:
+        opener = urllib.request.build_opener(_HttpsOnlyRedirect)
+        with opener.open(source, timeout=120) as response:
             with archive.open("wb") as sink:
                 shutil.copyfileobj(response, sink)
         return _package_root(_extract(archive, scratch / "unpacked", label=source))
@@ -142,6 +143,15 @@ def _materialize(source: str, scratch: Path) -> Path:
     if path.is_file():
         return _package_root(_extract(path, scratch / "unpacked", label=str(path)))
     raise LocalStoreError(f"install source does not exist: {source}")
+
+
+class _HttpsOnlyRedirect(urllib.request.HTTPRedirectHandler):
+    """Refuse redirects off https so the https-only guarantee holds end-to-end."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not newurl.startswith("https://"):
+            raise LocalStoreError(f"refusing redirect to non-https URL {newurl!r}")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
 def _extract(archive: Path, into: Path, *, label: str) -> Path:

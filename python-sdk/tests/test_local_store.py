@@ -90,6 +90,17 @@ class LocalStoreTest(unittest.TestCase):
             with self.assertRaises(LocalStoreError):
                 install_app(source)
 
+    def test_https_redirect_to_http_refuses(self):
+        from tangram_app.local_store import _HttpsOnlyRedirect
+        from urllib.request import Request
+
+        handler = _HttpsOnlyRedirect()
+        with self.assertRaises(LocalStoreError):
+            handler.redirect_request(
+                Request("https://example.com/app.tar.gz"),
+                None, 302, "Found", {}, "http://evil.example.com/app.tar.gz",
+            )
+
     def test_cli_validate_accepts_installed_ref(self):
         install_app(str(FIXTURE))
         completed = subprocess.run(
