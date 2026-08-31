@@ -171,29 +171,40 @@ python3 -m tangram_app validate .          # structured findings
 python3 -m tangram_app inspect . --tools   # actions as the agent will see them
 ```
 
-Live-fire against the real vendor API with a developer connection —
-bring your own access token (any token valid for the declared scopes; for
-Google APIs `gcloud auth print-access-token` mints one):
+Live-fire against the real vendor API with a developer connection — two
+lanes:
 
 ```sh
-# --token - reads stdin so the live token never appears in process argv
+# Lane 1 — run the manifest's REAL OAuth dance (tests the oauth block
+# itself: consent, scopes, PKCE, tenant capture, refresh). Register your
+# own native/desktop OAuth client with the vendor first — loopback
+# redirect URIs are permitted for those.
+python3 -m tangram_app connect . --oauth --client-id YOUR_ID --client-secret -
+# (--no-browser prints the authorize URL instead of opening it — headless agents)
+
+# Lane 2 — quick token paste; tests API modeling only, not the oauth block.
 gcloud auth print-access-token | python3 -m tangram_app connect . --token -
+
 printf '{}' | python3 -m tangram_app call . \
   'com.google/gmail#Message.List@listMessages' --connected --input-json -
 ```
 
 `--connected` renders the manifest's auth header templates with the stored
 token and executes directly against `endpoint` — enforcing https, the
-`endpointHostAllowlist`, and the same read-only default policy (mutating
-actions refuse without explicit grants; a wise default when the target is
-a real account). `connect --tenant` supplies `{{oauth.tenantId}}`.
+`endpointHostAllowlist` (overrides included), and the same read-only
+default policy (mutating actions refuse without explicit grants; a wise
+default when the target is a real account). OAuth-lane tokens refresh
+automatically inside the manifest's `refreshWindowSeconds`;
+`connect --tenant` supplies `{{oauth.tenantId}}` in the token lane, the
+oauth lane captures it from the callback per the manifest's `tenant` rule.
 
-HONEST LIMITS: the OAuth *flow* itself (consent, refresh, tenant capture),
-publisher credentials, and multi-user connections are platform-only — a
-pasted token tests your API modeling, not the oauth block. Full e2e =
-install on a Tangram OS workspace, connect an account, invoke through the
-gateway. The native `tangram` CLI (`tangram app manifest validate .`) is
-the publishing conformance authority when available.
+HONEST LIMITS: publisher credentials and multi-user connections are
+platform-only, and the local dance runs under YOUR OAuth client — vendor
+verification status and consent screens may differ from the published
+connector's. Full e2e = install on a Tangram OS workspace, connect an
+account, invoke through the gateway. The native `tangram` CLI
+(`tangram app manifest validate .`) is the publishing conformance
+authority when available.
 
 ## Gotchas
 

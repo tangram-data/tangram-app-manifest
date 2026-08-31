@@ -36,7 +36,14 @@ def connections_root() -> Path:
     return tangram_home() / "connections"
 
 
-def save_connection(app_id: str, token: str, tenant: str | None = None) -> Path:
+def save_connection(
+    app_id: str,
+    token: str,
+    tenant: str | None = None,
+    *,
+    refresh_token: str | None = None,
+    expires_at: str | None = None,
+) -> Path:
     if not token or not token.strip():
         raise LocalConnectionError("token must be non-empty")
     target = connections_root() / f"{app_id.replace('/', '__')}.json"
@@ -48,6 +55,10 @@ def save_connection(app_id: str, token: str, tenant: str | None = None) -> Path:
     }
     if tenant is not None:
         entry["tenant"] = tenant
+    if refresh_token is not None:
+        entry["refreshToken"] = refresh_token
+    if expires_at is not None:
+        entry["expiresAt"] = expires_at
     # The token is a live credential: the file is BORN 0600 (no chmod window).
     descriptor = os.open(
         target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR

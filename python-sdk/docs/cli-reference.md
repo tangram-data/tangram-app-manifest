@@ -21,6 +21,7 @@ Both `tangram-app` and `python -m tangram_app` use the same implementation.
 | `app uninstall REF` | Remove an installed app |
 | `call TARGET ID --local` | Start source, invoke once, stop |
 | `call TARGET ID --backend URL` | Invoke an already-running loopback backend |
+| `connect TARGET --oauth [--client-id ID --client-secret S] [--no-browser]` | Run the connector's real OAuth dance with a developer-registered client (loopback callback, PKCE, tenant capture; auto-refresh on later calls) |
 | `connect TARGET --token T [--tenant X]` | Store a developer OAuth token for a connector (`--token -` reads stdin) |
 | `call TARGET ID --connected [--endpoint URL]` | Execute a connector action against its vendor endpoint with the stored token |
 | `disconnect TARGET` | Remove the stored developer connection |
