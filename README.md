@@ -63,7 +63,7 @@ platform-managed OAuth). Canonical skills, three install lanes
 **Claude Code — via the SDK:**
 
 ```sh
-pip install tangram-app-sdk            # until PyPI: pip install ./python-sdk from a checkout
+pip install tangram-app-sdk
 tangram-app skill install-builder --project .   # this repo only  → ./.claude/skills/
 tangram-app skill install-builder --user        # all repos       → ~/.claude/skills/
 ```
