@@ -19,11 +19,9 @@ no own backend) use the `tangram-connector-builder` skill instead.
 Check before installing anything:
 
 - SDK: `python3 -m tangram_app --help` (or `tangram-app --help`) already
-  works in many environments. If missing: `pip install tangram-app-sdk`
-  once it is on PyPI; until then install from a checkout or wheel of
-  `github.com/tangram-data/tangram-app-manifest`
-  (`pip install ./python-sdk` from the repo root). Backends themselves
-  need Python 3.12+ on the machine; the SDK itself runs on 3.11+.
+  works in many environments. If missing: `pip install tangram-app-sdk`.
+  Backends themselves need Python 3.12+ on the machine; the SDK itself
+  runs on 3.11+.
 - Pkl CLI on PATH (`pkl --version`) — needed to load source manifests.
 - Host PostgreSQL toolchain (`initdb`/`pg_ctl`) only if the app declares a
   database claim.

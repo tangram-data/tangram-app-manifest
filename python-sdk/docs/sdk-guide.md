@@ -15,7 +15,8 @@ Tangram OS.
 
 ## Status and compatibility
 
-The package is currently `0.1.0.dev0` and requires Python 3.11 or newer. Local
+The package is `0.1.0` (`pip install tangram-app-sdk`) and requires Python
+3.11 or newer. Local
 agent-built Python backends declare the `python-3.12` runtime and therefore
 require a Python 3.12-or-newer interpreter.
 
