@@ -9,9 +9,11 @@ booting a backend per call.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 from pathlib import Path
+import urllib.parse
 import urllib.request
 
 
@@ -83,8 +85,12 @@ def attach_url(package_root: Path) -> str | None:
         return None
     except PermissionError:
         pass  # alive, owned elsewhere
-    if not backend_url.startswith("http://127.0.0.1"):
-        return None
+    host = urllib.parse.urlsplit(backend_url).hostname or ""
+    try:
+        if not ipaddress.ip_address(host).is_loopback:
+            return None
+    except ValueError:
+        return None  # hostnames (incl. 127.0.0.1.evil.com tricks) never attach
     try:
         with urllib.request.urlopen(f"{backend_url}/openapi.json", timeout=2):
             return backend_url

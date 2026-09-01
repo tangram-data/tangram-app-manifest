@@ -96,6 +96,8 @@ class WarmSessionTest(unittest.TestCase):
             self.assertIsNone(attach_url(root))
             record_session(preview, "http://10.0.0.9:1", os.getpid())  # non-loopback
             self.assertIsNone(attach_url(root))
+            record_session(preview, "http://127.0.0.1.evil.com:1", os.getpid())
+            self.assertIsNone(attach_url(root))  # prefix-trick hostname
             record_session(preview, f"http://127.0.0.1:1", os.getpid())  # not serving
             self.assertIsNone(attach_url(root))
 
