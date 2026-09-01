@@ -180,4 +180,4 @@ try:  # single source of truth: installed package metadata
 
     __version__ = _pkg_version("tangram-app-sdk")
 except Exception:  # editable/uninstalled checkouts
-    __version__ = "0.1.0.dev0"
+    __version__ = "0.1.0"

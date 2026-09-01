@@ -30,6 +30,10 @@ jobs:
           version=$(python -c "import tomllib;print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
           test "tangram-app-sdk@${version}" = "${GITHUB_REF_NAME}" || {
             echo "tag ${GITHUB_REF_NAME} != pyproject version ${version}"; exit 1; }
+          staged=$(PYTHONPATH=src python -c "import importlib.util as u; s=u.spec_from_file_location('m','src/tangram_app/backend_runtime_sdk.py'); m=u.module_from_spec(s); s.loader.exec_module(m); print(m.__version__)")
+          fallback=$(grep -A1 'editable/uninstalled' src/tangram_app/__init__.py | grep -o '"[^"]*"' | tr -d '"')
+          test "${staged}" = "${version}" -a "${fallback}" = "${version}" || {
+            echo "module versions (staged=${staged}, fallback=${fallback}) != ${version}"; exit 1; }
       - name: Build sdist and wheel
         run: pipx run build --sdist --wheel --outdir dist python-sdk
       - name: Check metadata
