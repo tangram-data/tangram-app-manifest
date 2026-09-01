@@ -85,9 +85,11 @@ def attach_url(package_root: Path) -> str | None:
         return None
     except PermissionError:
         pass  # alive, owned elsewhere
-    host = urllib.parse.urlsplit(backend_url).hostname or ""
+    parts = urllib.parse.urlsplit(backend_url)
+    if parts.scheme != "http":
+        return None
     try:
-        if not ipaddress.ip_address(host).is_loopback:
+        if not ipaddress.ip_address(parts.hostname or "").is_loopback:
             return None
     except ValueError:
         return None  # hostnames (incl. 127.0.0.1.evil.com tricks) never attach
