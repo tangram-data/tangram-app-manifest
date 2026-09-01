@@ -221,13 +221,13 @@ Backend code imports `tangram` — same signatures locally and on Tangram OS
 Errors surface as `tangram.ActionError(code, message, retryable)` — branch
 on `code`, never message text.
 
-## Install and use locally (the app store)
+## Install: user store or Tangram OS
 
-"Install the app locally" means the USER-LEVEL APP STORE at `~/.tangram`
-— it does NOT mean deploying into a Tangram OS instance. (The native
-CLI's `tangram app pkg install --workspace ...` deploys to a running
-Tangram OS; use that lane only when the ask names a workspace, an
-instance, or "Tangram OS" explicitly.)
+`app install` has two targets. Plain "install (the app) locally" means the
+USER-LEVEL STORE at `~/.tangram`; deploy into a Tangram OS environment
+only when the ask names a workspace, an instance, or Tangram OS.
+
+**User store (default):**
 
 ```sh
 python -m tangram_app app install ./my-app     # validate + copy into ~/.tangram/apps/
@@ -239,9 +239,23 @@ python -m tangram_app app uninstall my-app
 ```
 
 Installed apps are addressable by app id (or unique bare name) everywhere
-a package path is accepted; their runtime state lives under the installed
+a package path is accepted; runtime state lives under the installed
 copy's own `.preview/`. `app install` also accepts a `.tar.gz`/`.zip` or
 an https URL.
+
+**Tangram OS (local `localhost:8081` or remote):**
+
+```sh
+python -m tangram_app app install ./my-app --workspace demo --dry-run   # server's plan
+python -m tangram_app app install ./my-app --workspace demo --upgrade   # apply
+```
+
+This posts the package through the OS's governed workspace-app install
+endpoint, reusing the native CLI's stored login (`tangram use <instance>`
+selects the target; or `--instance NAME`, or explicit
+`--os-url URL --token -`). Always `--dry-run` first and show the plan.
+Note: this lane is for WORKSPACE-APP packages (sandboxed `UIComponent`
+UI); a backend-only/native App registers via the native CLI instead.
 
 ## Ship it
 

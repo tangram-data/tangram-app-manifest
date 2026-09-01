@@ -33,6 +33,7 @@ from .errors import (
     UnsupportedRequirementError,
 )
 from .cli_connections import connected_call, handle_connect, handle_disconnect
+from .local_os import os_install
 from .local_store import install_app, list_installed, resolve_target, uninstall_app
 from .skills import (
     BUILDER_SKILL_NAME,
@@ -206,6 +207,12 @@ def _parser() -> _Parser:
     app_install = app_commands.add_parser("install")
     app_install.add_argument("source")
     app_install.add_argument("--force", action="store_true")
+    app_install.add_argument("--workspace")
+    app_install.add_argument("--instance")
+    app_install.add_argument("--os-url")
+    app_install.add_argument("--token")
+    app_install.add_argument("--dry-run", action="store_true")
+    app_install.add_argument("--upgrade", action="store_true")
     app_commands.add_parser("list")
     app_uninstall = app_commands.add_parser("uninstall")
     app_uninstall.add_argument("ref")
@@ -332,6 +339,19 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             binding_id = bound.graph.resolve(args.binding)[1].id
         return {"bindingId": binding_id, "result": result}
     if args.command == "app" and args.app_command == "install":
+        if args.workspace:
+            token = sys.stdin.read().strip() if args.token == "-" else args.token
+            return {
+                "deployed": os_install(
+                    resolve_target(args.source),
+                    args.workspace,
+                    instance=args.instance,
+                    token=token,
+                    url=args.os_url,
+                    dry_run=args.dry_run,
+                    upgrade=args.upgrade,
+                )
+            }
         return {"installed": install_app(args.source, force=args.force)}
     if args.command == "app" and args.app_command == "list":
         return {"apps": list_installed()}

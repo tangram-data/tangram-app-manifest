@@ -17,6 +17,7 @@ Both `tangram-app` and `python -m tangram_app` use the same implementation.
 | `run PACKAGE` | Run backend/database/UI until interrupted |
 | `open TARGET [--no-browser]` | Run like `run`, then open the app UI in the browser |
 | `app install SOURCE [--force]` | Validate + install a package (dir, tar.gz/zip, https URL) into `~/.tangram/apps/` |
+| `app install SOURCE --workspace WS [--instance N \| --os-url URL --token T] [--dry-run] [--upgrade]` | Deploy the package into a Tangram OS workspace (native-CLI credentials reused) |
 | `app list` | List installed apps |
 | `app uninstall REF` | Remove an installed app |
 | `call TARGET ID --local` | Start source, invoke once, stop |
