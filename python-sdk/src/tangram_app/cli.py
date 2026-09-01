@@ -32,6 +32,7 @@ from .errors import (
     UnknownBindingError,
     UnsupportedRequirementError,
 )
+from .cli_actions import actions_catalog, attach_url, resolve_action_ref
 from .cli_connections import connected_call, handle_connect, handle_disconnect
 from .local_os import os_install
 from .local_store import install_app, list_installed, resolve_target, uninstall_app
@@ -217,6 +218,9 @@ def _parser() -> _Parser:
     app_uninstall = app_commands.add_parser("uninstall")
     app_uninstall.add_argument("ref")
 
+    actions = commands.add_parser("actions")
+    actions.add_argument("target")
+
     connect = commands.add_parser("connect")
     connect.add_argument("target")
     mode = connect.add_mutually_exclusive_group(required=True)
@@ -313,11 +317,31 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "disconnect":
         app = _load_app(resolve_target(args.target))
         return handle_disconnect(app.graph.package.id)
+    if args.command == "actions":
+        app = _load_app(args.target)
+        return {"app": app.graph.package.id, "actions": actions_catalog(app)}
     if args.command == "call":
         arguments = _read_json_input(args.input_json)
         app = _load_app(args.target)
+        args.binding = resolve_action_ref(app, args.binding)
         if args.connected:
             return connected_call(args, app, resolve_target(args.target), arguments)
+        if args.local:
+            attached = attach_url(resolve_target(args.target))
+            if attached is not None:
+                # `run`/`open` already holds a live session — reuse it instead
+                # of booting a backend per call.
+                bound = app.bind(
+                    backend=attached,
+                    audit_path=args.audit_path,
+                    timeout_seconds=args.timeout,
+                )
+                result = asyncio.run(bound.call(args.binding, arguments))
+                return {
+                    "bindingId": bound.graph.resolve(args.binding)[1].id,
+                    "result": result,
+                    "session": "attached",
+                }
         if args.local:
             if app.source_root is None:
                 raise CliArgumentsError("--local requires a source package directory")

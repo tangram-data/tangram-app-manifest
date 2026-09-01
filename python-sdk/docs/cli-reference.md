@@ -20,7 +20,8 @@ Both `tangram-app` and `python -m tangram_app` use the same implementation.
 | `app install SOURCE --workspace WS [--instance N \| --os-url URL --token T] [--dry-run] [--upgrade]` | Deploy the package into a Tangram OS workspace (native-CLI credentials reused) |
 | `app list` | List installed apps |
 | `app uninstall REF` | Remove an installed app |
-| `call TARGET ID --local` | Start source, invoke once, stop |
+| `actions TARGET` | Compact action catalog (short refs, effects, bindings) |
+| `call TARGET REF --local` | Invoke once (`REF` = `Action`, `ResourceType.Action`, or full id); attaches to a live `run`/`open` session when one exists, else boots and stops |
 | `call TARGET ID --backend URL` | Invoke an already-running loopback backend |
 | `connect TARGET --oauth [--client-id ID --client-secret S] [--no-browser]` | Run the connector's real OAuth dance with a developer-registered client (loopback callback, PKCE, tenant capture; auto-refresh on later calls) |
 | `connect TARGET --token T [--tenant X]` | Store a developer OAuth token for a connector (`--token -` reads stdin) |

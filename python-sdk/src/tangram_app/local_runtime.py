@@ -211,6 +211,10 @@ class LocalAppSession:
         if self._closed:
             return
         self._closed = True
+        if getattr(self, "_preview_dir", None) is not None:
+            from .cli_actions import clear_session
+
+            clear_session(self._preview_dir)
         if self._actions_server is not None:
             self._actions_server.close()
         if self._ui_server is not None:
@@ -374,6 +378,10 @@ class LocalSourceRuntime:
                 actions_server=actions_server,
                 audit_path=self.audit_path,
             )
+            from .cli_actions import record_session
+
+            record_session(preview, backend_url, process.pid)
+            session._preview_dir = preview
             actions_server.attach(session)
             session._attach_ui(
                 LocalUiServer.start(

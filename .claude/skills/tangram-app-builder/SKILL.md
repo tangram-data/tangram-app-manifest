@@ -181,14 +181,19 @@ don't scrape logs.
 
 ```sh
 python -m tangram_app validate my-app                 # structured findings
-python -m tangram_app inspect my-app --tools          # actions as agent tools
+python -m tangram_app actions my-app                  # compact action catalog (refs)
 python -m tangram_app run my-app                      # backend+db+ui until Ctrl-C
-printf '%s' '{}' | python -m tangram_app call my-app \
-  'com.example/orders#Order.List@listOrders' --local --input-json -
+printf '%s' '{}' | python -m tangram_app call my-app Order.List --local --input-json -
 ```
 
-Action id format: `{group}/{name}#{ResourceType}.{Action}`; the binding id
-appends `@{operationId}`.
+`call` accepts short action refs — `Order.List` (or just `List` when
+unambiguous) — as well as the full id
+`{group}/{name}#{ResourceType}.{Action}[@{operationId}]`. Invoke actions
+ONLY through `call` (schema validation, policy, audit) — never raw
+curl/HTTP against the backend. While `run`/`open` holds a session,
+`call --local` attaches to it automatically (sub-second repeat calls
+instead of booting a backend each time); input/output schemas are in
+`inspect --tools`.
 
 Know these before debugging "failures" that are actually policy:
 
