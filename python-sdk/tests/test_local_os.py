@@ -109,6 +109,30 @@ class LocalOsTest(unittest.TestCase):
         self.assertTrue(body["upgrade"])
         self.assertIn("manifests/app.pkl", body["source"]["files"])
 
+    def test_redirecting_os_refuses(self):
+        class _Redirector(BaseHTTPRequestHandler):
+            def do_POST(self):
+                self.send_response(302)
+                self.send_header("Location", "http://evil.example.net/steal")
+                self.end_headers()
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), _Redirector)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.shutdown)
+        self._write_credentials(f"http://127.0.0.1:{server.server_port}")
+        with self.assertRaises(LocalOsError) as caught:
+            os_install(FIXTURE, "demo")
+        self.assertIn("redirect", str(caught.exception))
+
+    def test_cli_refuses_os_flags_without_workspace(self):
+        from tangram_app import cli
+
+        code = cli.main(["app", "install", str(FIXTURE), "--dry-run"])
+        self.assertNotEqual(code, 0)
+
     def test_explicit_token_requires_url_and_vice_versa(self):
         with self.assertRaises(LocalOsError):
             os_install(FIXTURE, "demo", token="t")

@@ -339,6 +339,13 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             binding_id = bound.graph.resolve(args.binding)[1].id
         return {"bindingId": binding_id, "result": result}
     if args.command == "app" and args.app_command == "install":
+        if not args.workspace and any(
+            (args.instance, args.os_url, args.token, args.dry_run, args.upgrade)
+        ):
+            raise CliArgumentsError(
+                "--instance/--os-url/--token/--dry-run/--upgrade target a Tangram OS "
+                "workspace; add --workspace WS (or drop them for a user-store install)"
+            )
         if args.workspace:
             token = sys.stdin.read().strip() if args.token == "-" else args.token
             return {

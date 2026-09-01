@@ -31,6 +31,11 @@ class LocalOsError(ValueError):
     """An OS-install operation failed for a caller-actionable reason."""
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None  # never re-send the bearer token to a redirected host
+
+
 def load_os_credential(instance: str | None = None) -> dict:
     """The native CLI's stored credential for `instance` (default: `.HEAD`)."""
     home = tangram_home()
@@ -141,10 +146,16 @@ def os_install(
         },
         method="POST",
     )
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     try:
-        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+        with opener.open(request, timeout=timeout_seconds) as response:
             result = json.loads(response.read())
     except urllib.error.HTTPError as error:
+        if 300 <= error.code < 400:
+            raise LocalOsError(
+                f"OS install answered a redirect ({error.code}); refusing to re-send "
+                "credentials to another location"
+            ) from None
         detail = error.read().decode("utf-8", "replace")[:1000]
         raise LocalOsError(f"OS install answered {error.code}: {detail}") from None
     except urllib.error.URLError as error:
