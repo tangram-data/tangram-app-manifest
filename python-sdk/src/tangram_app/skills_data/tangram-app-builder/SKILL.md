@@ -1,6 +1,6 @@
 ---
 name: tangram-app-builder
-description: Build and test a Tangram app end-to-end on this machine with the Python SDK — scaffold the manifest package, author Pkl + OpenAPI + FastAPI backend, then drive the validate → run → call loop. Use when asked to create, modify, or debug a Tangram app, its manifests, actions, backend, or local runtime behavior, without a Tangram OS deployment.
+description: Build and test a Tangram app end-to-end on this machine with the Python SDK — scaffold the manifest package, author Pkl + OpenAPI + FastAPI backend, then drive the validate → run → call loop. Use when asked to create, modify, or debug a Tangram app, its manifests, actions, backend, or local runtime behavior — or to install, run, open, or invoke a built Tangram app locally (the ~/.tangram user-level app store), all without a Tangram OS deployment.
 ---
 
 # Build a Tangram app locally
@@ -220,6 +220,28 @@ Backend code imports `tangram` — same signatures locally and on Tangram OS
 
 Errors surface as `tangram.ActionError(code, message, retryable)` — branch
 on `code`, never message text.
+
+## Install and use locally (the app store)
+
+"Install the app locally" means the USER-LEVEL APP STORE at `~/.tangram`
+— it does NOT mean deploying into a Tangram OS instance. (The native
+CLI's `tangram app pkg install --workspace ...` deploys to a running
+Tangram OS; use that lane only when the ask names a workspace, an
+instance, or "Tangram OS" explicitly.)
+
+```sh
+python -m tangram_app app install ./my-app     # validate + copy into ~/.tangram/apps/
+python -m tangram_app app list
+python -m tangram_app open my-app              # run + open the app UI in the browser
+printf '{}' | python -m tangram_app call my-app \
+  'com.example/my-app#Todo.List@listTodos' --local --input-json -
+python -m tangram_app app uninstall my-app
+```
+
+Installed apps are addressable by app id (or unique bare name) everywhere
+a package path is accepted; their runtime state lives under the installed
+copy's own `.preview/`. `app install` also accepts a `.tar.gz`/`.zip` or
+an https URL.
 
 ## Ship it
 
