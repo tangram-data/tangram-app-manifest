@@ -198,9 +198,18 @@ instead of booting a backend each time); input/output schemas are in
 Know these before debugging "failures" that are actually policy:
 
 - **CLI default policy is read-only.** A mutating `call` returns
-  `policy_denied` by design. Grant mutations via the Python API
-  (`LocalDevelopmentPolicy(allow_mutations={action_id})` /
-  `project.run_local(policy=...)`), not by weakening the manifest.
+  `policy_denied` by design. Grant per call with flags — never raw HTTP,
+  never by weakening the manifest:
+
+  ```sh
+  printf '{"title":"Buy milk"}' | python -m tangram_app call my-app Todo.Create \
+    --local --allow-mutation --confirm --input-json -
+  ```
+
+  `--allow-mutation` permits that ONE action's non-Stateless effect;
+  `--confirm` records you (the human running the command) as the approver
+  of its confirmation gate. The Python API
+  (`LocalDevelopmentPolicy(allow_mutations=...)`) remains for embedding.
 - **Irreversible or confirmation-gated actions refuse unattended** —
   from backend code (`tangram.actions.invoke`) and from schedules. That
   refusal is platform parity, not a bug.

@@ -54,7 +54,7 @@ def handle_disconnect(app_id: str) -> dict:
     return {"disconnected": app_id, "removed": delete_connection(app_id)}
 
 
-def connected_call(args, app, root, arguments) -> dict:
+def connected_call(args, app, root, arguments, *, policy=None) -> dict:
     spec = load_connector_spec(root)
     connection = load_connection(app.graph.package.id)
     if connection is None:
@@ -69,6 +69,7 @@ def connected_call(args, app, root, arguments) -> dict:
     bound = app.bind(
         backend=endpoint,
         headers=auth_headers,
+        policy=policy,
         audit_path=args.audit_path,
         timeout_seconds=args.timeout,
         allow_remote=True,

@@ -57,6 +57,28 @@ class ResolveActionRefTest(unittest.TestCase):
         self.assertIn("declared:", str(caught.exception))
 
 
+class CallPolicyTest(unittest.TestCase):
+    def test_flags_scope_to_the_one_action(self):
+        from tangram_app.app import TangramApp
+        from tangram_app.cli_actions import call_policy
+
+        app = TangramApp.from_package(FIXTURE)
+        self.assertIsNone(
+            call_policy(app, "Order.List", allow_mutation=False, confirm=False)
+        )
+        policy = call_policy(
+            app, "com.example/orders#Order.List", allow_mutation=True, confirm=True
+        )
+        self.assertEqual(policy._allow_mutations, frozenset({"com.example/orders#Order.List"}))
+        self.assertEqual(
+            policy._preauthorized_confirmations, frozenset({"com.example/orders#Order.List"})
+        )
+        confirm_only = call_policy(
+            app, "com.example/orders#Order.List", allow_mutation=False, confirm=True
+        )
+        self.assertEqual(confirm_only._allow_mutations, frozenset())
+
+
 class _Backend(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/openapi.json":

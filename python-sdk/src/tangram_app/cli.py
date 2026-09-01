@@ -32,7 +32,7 @@ from .errors import (
     UnknownBindingError,
     UnsupportedRequirementError,
 )
-from .cli_actions import actions_catalog, attach_url, resolve_action_ref
+from .cli_actions import actions_catalog, attach_url, call_policy, resolve_action_ref
 from .cli_connections import connected_call, handle_connect, handle_disconnect
 from .local_os import os_install
 from .local_store import install_app, list_installed, resolve_target, uninstall_app
@@ -197,6 +197,8 @@ def _parser() -> _Parser:
     execution.add_argument("--local", action="store_true")
     execution.add_argument("--connected", action="store_true")
     call.add_argument("--endpoint")
+    call.add_argument("--allow-mutation", action="store_true")
+    call.add_argument("--confirm", action="store_true")
     call.add_argument("--input-json", default="-")
     call.add_argument("--audit-path")
     call.add_argument("--timeout", type=float, default=30.0)
@@ -324,8 +326,13 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         arguments = _read_json_input(args.input_json)
         app = _load_app(args.target)
         args.binding = resolve_action_ref(app, args.binding)
+        policy = call_policy(
+            app, args.binding, allow_mutation=args.allow_mutation, confirm=args.confirm
+        )
         if args.connected:
-            return connected_call(args, app, resolve_target(args.target), arguments)
+            return connected_call(
+                args, app, resolve_target(args.target), arguments, policy=policy
+            )
         if args.local:
             attached = attach_url(resolve_target(args.target))
             if attached is not None:
@@ -333,6 +340,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
                 # of booting a backend per call.
                 bound = app.bind(
                     backend=attached,
+                    policy=policy,
                     audit_path=args.audit_path,
                     timeout_seconds=args.timeout,
                 )
@@ -347,6 +355,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
                 raise CliArgumentsError("--local requires a source package directory")
             with app.run_local(
                 python=args.python,
+                policy=policy,
                 startup_timeout_seconds=args.startup_timeout,
                 request_timeout_seconds=args.timeout,
                 audit_path=args.audit_path,
@@ -356,6 +365,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         else:
             bound = app.bind(
                 backend=args.backend,
+                policy=policy,
                 audit_path=args.audit_path,
                 timeout_seconds=args.timeout,
             )

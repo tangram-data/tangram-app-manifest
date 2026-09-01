@@ -41,6 +41,23 @@ def resolve_action_ref(app, ref: str) -> str:
     raise ActionRefError(f"{ref!r} is ambiguous: {choices} — use ResourceType.Action")
 
 
+def call_policy(app, binding_ref: str, *, allow_mutation: bool, confirm: bool):
+    """The per-call policy for `call` flags; None keeps the read-only default.
+
+    Grants are scoped to the ONE action being invoked: `--allow-mutation`
+    permits its non-Stateless effect, `--confirm` records the human running
+    the command as the approver of its confirmation gate."""
+    if not (allow_mutation or confirm):
+        return None
+    from .policy import LocalDevelopmentPolicy
+
+    action = app.graph.resolve(binding_ref)[0]
+    return LocalDevelopmentPolicy(
+        allow_mutations={action.id} if allow_mutation else frozenset(),
+        preauthorized_confirmations={action.id} if confirm else frozenset(),
+    )
+
+
 def actions_catalog(app) -> list[dict]:
     """Compact, agent-facing listing of an app's actions."""
     rows = []
