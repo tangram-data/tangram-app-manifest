@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 
 # Kept in lockstep with the SDK package version that stages this module.
-__version__ = "0.1.0"
+__version__ = "0.1.0rc1"
 # SDK<->host wire protocol MAJOR (docs/sdk-host-abi.md). Hosts that answer
 # with a different major are refused loudly at the first call.
 PROTOCOL = "1"
