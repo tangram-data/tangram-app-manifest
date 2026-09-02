@@ -47,9 +47,15 @@ class PklEvaluator:
         self, executable: str | Path = "pkl", *, timeout_seconds: float = 30.0
     ) -> None:
         resolved = shutil.which(str(executable))
+        if resolved is None and str(executable) == "pkl":
+            # Fall back to the doctor-managed copy (no PATH edits needed).
+            from .local_doctor import find_pkl
+
+            resolved = find_pkl()
         if resolved is None:
             raise PklNotFoundError(
-                f"Pkl executable {str(executable)!r} was not found; install it from pkl-lang.org"
+                f"Pkl executable {str(executable)!r} was not found; run "
+                "`tangram-app doctor --fix` to install it, or get it from pkl-lang.org"
             )
         self.executable = resolved
         self.timeout_seconds = timeout_seconds

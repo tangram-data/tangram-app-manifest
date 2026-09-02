@@ -11,6 +11,7 @@ Both `tangram-app` and `python -m tangram_app` use the same implementation.
 
 | Command | Purpose |
 |---|---|
+| `doctor [--fix]` | Diagnose prerequisites (Python, Pkl, PostgreSQL, Node) with hints; `--fix` auto-installs the Pkl CLI into `~/.tangram/bin` |
 | `validate PACKAGE` | Return structured validation findings |
 | `build PACKAGE [--output FILE]` | Compile and write a capability graph |
 | `inspect TARGET [--tools | --action ID]` | Inspect a package or graph |

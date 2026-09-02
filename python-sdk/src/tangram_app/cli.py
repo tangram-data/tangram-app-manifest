@@ -223,6 +223,9 @@ def _parser() -> _Parser:
     actions = commands.add_parser("actions")
     actions.add_argument("target")
 
+    doctor = commands.add_parser("doctor")
+    doctor.add_argument("--fix", action="store_true")
+
     connect = commands.add_parser("connect")
     connect.add_argument("target")
     mode = connect.add_mutually_exclusive_group(required=True)
@@ -322,6 +325,12 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "actions":
         app = _load_app(args.target)
         return {"app": app.graph.package.id, "actions": actions_catalog(app)}
+    if args.command == "doctor":
+        from .local_doctor import diagnose, fix
+
+        applied = fix() if args.fix else []
+        report = diagnose()
+        return {**report, "applied": applied}
     if args.command == "call":
         arguments = _read_json_input(args.input_json)
         app = _load_app(args.target)

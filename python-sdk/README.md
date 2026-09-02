@@ -260,6 +260,20 @@ When asked to create, modify, or debug a Tangram app, first read
 The packaged copy is release-authoritative; the repo mirrors are
 sha-checked against it in CI.
 
+## Prerequisites
+
+```sh
+pip install tangram-app-sdk
+tangram-app doctor --fix     # diagnose everything; auto-install the Pkl CLI
+```
+
+`doctor` reports each prerequisite with an actionable hint. `--fix`
+installs what is safe to install without sudo (the Pkl CLI, into
+`~/.tangram/bin/`; the SDK finds it there with no PATH changes).
+PostgreSQL (`initdb`/`pg_ctl`, only for database-claim apps) and Node
+(only for UI components) are diagnosed with the exact package-manager
+command for your platform.
+
 ## Installing and opening apps locally
 
 Agents (or humans) can install a built app — a generated source package,
