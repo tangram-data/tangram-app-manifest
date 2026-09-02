@@ -59,6 +59,28 @@ class DiagnoseTest(unittest.TestCase):
     def test_fix_is_noop_when_pkl_present(self):
         self.assertEqual(fix(), [])  # host has pkl on PATH
 
+    def test_bad_download_never_clobbers_working_binary(self):
+        from tangram_app.local_doctor import DoctorError
+
+        managed = managed_pkl_path()
+        managed.parent.mkdir(parents=True)
+        managed.write_text("#!/bin/sh\necho Pkl 0.0.0\n")
+        managed.chmod(0o755)
+
+        def fake_fetch(url, timeout):
+            import io
+
+            return mock.MagicMock(
+                __enter__=lambda s: io.BytesIO(b"\x7fELFgarbage"),
+                __exit__=lambda s, *a: False,
+            )
+
+        with mock.patch("tangram_app.local_doctor.urllib.request.urlopen", fake_fetch):
+            with self.assertRaises(DoctorError):
+                install_pkl()
+        self.assertIn("Pkl 0.0.0", managed.read_text())  # untouched
+        self.assertFalse(managed.with_suffix(".download").exists())
+
 
 class InstallPklTest(unittest.TestCase):
     """Real download into a sandbox home — network required."""

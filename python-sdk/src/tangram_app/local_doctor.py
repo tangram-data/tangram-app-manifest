@@ -67,14 +67,27 @@ def diagnose() -> dict:
             "hint": None if python_ok else "install Python 3.11+ (3.12+ to run app backends)",
         }
     )
-    backend_ok = sys.version_info >= (3, 12) or shutil.which("python3.12") is not None
+    # Mirror the runtime's own interpreter resolution (TANGRAM_LOCAL_PYTHON,
+    # python3.12/python3, well-known paths) so the verdict matches `run`.
+    from .local_runtime import _resolve_python, _verify_python
+
+    try:
+        backend_python = _resolve_python(None)
+        _verify_python(backend_python)
+        backend_detail: str | None = str(backend_python)
+        backend_ok = True
+    except Exception as error:
+        backend_detail = str(error)
+        backend_ok = False
     checks.append(
         {
             "name": "python-3.12-backends",
             "ok": backend_ok,
             "required": False,
-            "detail": "needed only to RUN app backends locally",
-            "hint": None if backend_ok else "install Python 3.12+ for `run`/`open`/`call --local`",
+            "detail": backend_detail,
+            "hint": None
+            if backend_ok
+            else "install Python 3.12+ (or set TANGRAM_LOCAL_PYTHON) for `run`/`open`/`call --local`",
         }
     )
 
@@ -146,12 +159,21 @@ def install_pkl(*, version: str = PKL_VERSION) -> Path:
         with scratch.open("wb") as sink:
             shutil.copyfileobj(response, sink)
     scratch.chmod(scratch.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
-    os.replace(scratch, target)
-    try:  # trust-but-verify: a broken download must not become the fallback
-        subprocess.run([str(target)], input=b"", capture_output=True, timeout=60)
+    # Verify the DOWNLOAD before it replaces anything: a broken fetch must
+    # never clobber a working managed binary.
+    try:
+        completed = subprocess.run(
+            [str(scratch), "--version"], capture_output=True, text=True, timeout=60
+        )
     except OSError as error:
-        target.unlink(missing_ok=True)
+        scratch.unlink(missing_ok=True)
         raise DoctorError(f"downloaded Pkl binary does not execute: {error}") from None
+    if completed.returncode != 0 or "Pkl" not in completed.stdout:
+        scratch.unlink(missing_ok=True)
+        raise DoctorError(
+            f"downloaded Pkl binary failed --version (exit {completed.returncode})"
+        )
+    os.replace(scratch, target)
     return target
 
 
