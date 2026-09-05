@@ -45,6 +45,9 @@ class VersionEnvelopeTest(unittest.TestCase):
         self.assertTrue(envelope["ok"])
         self.assertEqual(envelope["data"]["protocol"], "1")
         self.assertTrue(envelope["data"]["version"])
+        code, envelope = _run_cli("--version", "junk")
+        self.assertNotEqual(code, 0)  # extra tokens are not silently ignored
+        self.assertFalse(envelope["ok"])
 
 
 class SelectorGrammarTest(unittest.TestCase):

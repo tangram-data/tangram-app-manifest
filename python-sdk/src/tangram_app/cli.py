@@ -89,7 +89,7 @@ class _Parser(argparse.ArgumentParser):
 
 def main(argv: Sequence[str] | None = None) -> int:
     supplied = list(sys.argv[1:] if argv is None else argv)
-    if supplied[:1] == ["--version"]:
+    if supplied == ["--version"]:
         # Version-negotiation contract: machine-readable, standard envelope.
         from . import __version__
         from .backend_runtime_sdk import PROTOCOL
