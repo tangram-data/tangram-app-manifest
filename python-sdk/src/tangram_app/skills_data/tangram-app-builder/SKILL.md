@@ -261,9 +261,16 @@ an https URL.
 **Tangram OS (local `localhost:8081` or remote):**
 
 ```sh
-python -m tangram_app app install ./my-app --workspace demo --dry-run   # server's plan
-python -m tangram_app app install ./my-app --workspace demo --upgrade   # apply
+python -m tangram_app app install ./my-app --workspace demo --dry-run --yes  # server's plan
+python -m tangram_app app install ./my-app --workspace demo --upgrade --yes  # apply
 ```
+
+Non-interactive runs (you, the agent) must either use an explicit target
+— `--workspace INSTANCE/WS` (canonical) or `--instance NAME` — or pass
+`--yes` to acknowledge the ambient `tangram use` context. Conflicting
+selectors refuse. `--upgrade` is the one replace-existing flag in both
+destinations; `app uninstall` needs `--yes` non-interactively (it deletes
+the installed copy and its `.preview` state).
 
 This posts the package through the OS's governed workspace-app install
 endpoint, reusing the native CLI's stored login (`tangram use <instance>`

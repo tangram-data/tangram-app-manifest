@@ -7,6 +7,9 @@ its machine-readable envelopes.
 
 ## Command-line interface
 
+`tangram-app --version` emits the version-negotiation envelope
+(`{"data":{"version":…,"protocol":"1"}}`).
+
 Both `tangram-app` and `python -m tangram_app` use the same implementation.
 
 | Command | Purpose |
@@ -17,10 +20,11 @@ Both `tangram-app` and `python -m tangram_app` use the same implementation.
 | `inspect TARGET [--tools | --action ID]` | Inspect a package or graph |
 | `run PACKAGE` | Run backend/database/UI until interrupted |
 | `open TARGET [--no-browser]` | Run like `run`, then open the app UI in the browser |
-| `app install SOURCE [--force]` | Validate + install a package (dir, tar.gz/zip, https URL) into `~/.tangram/apps/` |
-| `app install SOURCE --workspace WS [--instance N \| --os-url URL --token T] [--dry-run] [--upgrade]` | Deploy the package into a Tangram OS workspace (native-CLI credentials reused) |
-| `app list` | List installed apps |
-| `app uninstall REF` | Remove an installed app |
+| `app install SOURCE [--upgrade]` | Validate + install a package (dir, tar.gz/zip, https URL) into `~/.tangram/apps/`; `--upgrade` replaces an existing install (`--force` is a deprecated alias) |
+| `app install SOURCE --workspace [I/]WS [--instance N \| --os-url URL --token T] [--dry-run] [--upgrade] [--yes]` | Deploy into a Tangram OS workspace (native credentials reused; qualified `INSTANCE/WS` is the canonical address; ambient context needs a TTY confirmation or `--yes`; conflicting selectors refuse) |
+| `app list` | List installed apps (normalized rows: id, version, context, state, detail) |
+| `app get REF` | One installed app's normalized details |
+| `app uninstall REF [--yes]` | Remove an installed app + its `.preview` state (TTY confirms; non-interactive requires `--yes`) |
 | `actions TARGET` | Compact action catalog (short refs, effects, bindings) |
 | `call TARGET REF --local [--allow-mutation] [--confirm]` | Invoke once (`REF` = `Action`, `ResourceType.Action`, or full id); attaches to a live `run`/`open` session when one exists, else boots and stops; flags grant that one action's mutation/confirmation |
 | `call TARGET ID --backend URL` | Invoke an already-running loopback backend |

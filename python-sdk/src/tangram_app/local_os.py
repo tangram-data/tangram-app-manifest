@@ -61,6 +61,19 @@ def load_os_credential(instance: str | None = None) -> dict:
     )
 
 
+def configured_instances() -> list[str]:
+    """Names of all stored instance credentials (empty when none)."""
+    try:
+        credentials = json.loads((tangram_home() / ".credentials").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return sorted(
+        entry["instance"]
+        for entry in (credentials if isinstance(credentials, list) else [])
+        if isinstance(entry, dict) and isinstance(entry.get("instance"), str)
+    )
+
+
 def base_url(credential: dict) -> str:
     """CliHttp parity: bare `localhost` is the local http instance on 8081."""
     url = credential.get("url") or ""
