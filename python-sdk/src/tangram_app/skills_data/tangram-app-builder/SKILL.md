@@ -246,11 +246,12 @@ only when the ask names a workspace, an instance, or Tangram OS.
 
 ```sh
 python -m tangram_app app install ./my-app     # validate + copy into ~/.tangram/apps/
-python -m tangram_app app list
+python -m tangram_app app install ./my-app --upgrade   # replace an existing install
+python -m tangram_app app list                 # normalized rows: id/version/context/state/detail
+python -m tangram_app app get my-app           # one app's details
 python -m tangram_app open my-app              # run + open the app UI in the browser
-printf '{}' | python -m tangram_app call my-app \
-  'com.example/my-app#Todo.List@listTodos' --local --input-json -
-python -m tangram_app app uninstall my-app
+printf '{}' | python -m tangram_app call my-app Todo.List --local --input-json -
+python -m tangram_app app uninstall my-app --yes   # destructive: --yes required non-interactively
 ```
 
 Installed apps are addressable by app id (or unique bare name) everywhere
