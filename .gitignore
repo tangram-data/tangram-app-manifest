@@ -4,3 +4,10 @@
 build
 target
 .idea
+
+# Python SDK
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+*.egg-info/

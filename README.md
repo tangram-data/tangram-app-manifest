@@ -37,6 +37,23 @@ secrets = List(
 - `agent.pkl` — agent model, tool, and skill declarations
 - `infra.pkl` — infrastructure claims and injected resource access
 
+## Python SDK (draft)
+
+`python-sdk/` contains the first AI-authoring and standalone runtime layer for
+Tangram apps. It evaluates manifest packages into Python dataclasses and
+Capability Graphs, exposes a `TangramProject` validation/compilation facade,
+and can supervise the canonical agent-built FastAPI source backend on loopback.
+It provides input/output validation, safe local policy, metadata-only audit,
+versioned JSON commands, a loopback React component host, and integrity-locked
+portable agent skills. Snapshot inspection and external-backend invocation need neither
+the native Tangram CLI nor Tangram OS; source-mode local execution additionally
+uses Pkl, a Python 3.12+ interpreter, and host PostgreSQL when the app declares
+the canonical database claim. The SDK manages the project venv, database
+instance, and migrations. See the
+[Python SDK README](python-sdk/README.md) for its current scope and examples.
+The detailed API and runtime reference is available in the
+[Python SDK guide](python-sdk/docs/sdk-guide.md).
+
 `core.pkl` was removed in `2.0.0`; consumers must import the owning modules
 directly. The unification release removed `app-package.pkl` (the built-app
 package vocabulary) together with the `NativeApp`/`ConnectorApp`/`PlatformApp`
