@@ -127,8 +127,10 @@ def _main(argv: Sequence[str] | None = None) -> int:
         return 0
     # Machine contract: any non-tty stdout (agents, pipes, CI) — or --json —
     # gets the single JSON envelope exactly as always. A human at a terminal
-    # gets readable text instead.
+    # gets readable text instead. --json is a global output-mode toggle,
+    # accepted at ANY position; it is consumed here, before parsing.
     human = sys.stdout.isatty() and "--json" not in supplied
+    supplied = [token for token in supplied if token != "--json"]
     command = None
     try:
         from .cli_parser import build_parser

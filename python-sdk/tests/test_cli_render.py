@@ -33,10 +33,11 @@ class RenderModeTest(unittest.TestCase):
         self.assertIn("pkl", out)
         self.assertIn("environment", out)
 
-    def test_json_flag_forces_envelope_on_tty(self):
-        code, out, _ = _run(["--json", "doctor"], tty=True)
-        envelope = json.loads(out)
-        self.assertTrue(envelope["ok"])
+    def test_json_flag_forces_envelope_on_tty_at_any_position(self):
+        for argv in (["--json", "doctor"], ["doctor", "--json"], ["app", "list", "--json"]):
+            code, out, _ = _run(argv, tty=True)
+            envelope = json.loads(out)
+            self.assertTrue(envelope["ok"], argv)
 
     def test_tty_errors_go_to_stderr_as_text(self):
         code, out, err = _run(["validate", "/no/such/package"], tty=True)
