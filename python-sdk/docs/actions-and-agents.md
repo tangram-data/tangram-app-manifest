@@ -145,6 +145,23 @@ shape. Recompiling packages with these body schemas changes their argument
 shape; update direct callers and regenerate portable skills. Existing compiled
 snapshots are not rewritten and must be rebuilt to receive these fixes.
 
+### HTTP parameter serialization
+
+Compiled non-body `inputBindings` record `style` and `explode`. Query parameters
+support `form`; path and header parameters support `simple`. Scalars and scalar
+arrays are supported. Query arrays with `explode: true` (the default) use repeated
+keys (`ids=a&ids=b`); `explode: false` uses a single comma-separated value
+(`ids=a,b`). Simple path/header arrays use commas with either explode value.
+URL values are escaped individually, keeping embedded commas separate from
+serialization delimiters. These defaults follow the
+[OpenAPI parameter contract](https://spec.openapis.org/oas/v3.0.3.html#parameter-object).
+
+Other styles, `allowReserved: true`, and declared object/nested-array parameters
+fail compilation with a diagnostic. Unconstrained schemas are still checked for
+renderable scalar values at invocation. Legacy bindings without serialization
+metadata retain their defaults; rebuild snapshots to preserve explicit source
+settings, and use an updated SDK to execute graphs containing these fields.
+
 ### Supported JSON Schema subset
 
 Runtime validation supports object, array, string, boolean, integer, number,

@@ -9,7 +9,7 @@ import json
 import re
 from typing import Any, Mapping, Sequence
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode, urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import (
     HTTPRedirectHandler,
     ProxyHandler,
@@ -71,7 +71,7 @@ class OpenApiRequestRenderer:
         if not isinstance(arguments, Mapping):
             raise RequestRenderError("HTTP action arguments must be an object")
         path = binding.path
-        query: list[tuple[str, str]] = []
+        query: list[str] = []
         rendered_headers: dict[str, str] = {}
         body_fields: dict[str, Any] = {}
         whole_body: Any = _MISSING
@@ -93,7 +93,9 @@ class OpenApiRequestRenderer:
                 path = path.replace(token, _path_value(value, name))
             elif location == "query":
                 assert name is not None
-                query.extend(_query_values(name, value))
+                query.extend(
+                    _query_values(name, value, explode=input_binding.effective_explode)
+                )
             elif location == "header":
                 assert name is not None
                 _validate_header_name(name)
@@ -153,7 +155,7 @@ class OpenApiRequestRenderer:
                 self._base.scheme,
                 self._base.netloc,
                 base_path + relative_path,
-                urlencode(query, doseq=True),
+                "&".join(query),
                 "",
             )
         )
@@ -284,25 +286,34 @@ def _validate_header_value(value: str, name: str) -> None:
 
 
 def _path_value(value: Any, name: str) -> str:
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        rendered = ",".join(_scalar(item, name) for item in value)
-    else:
-        rendered = _scalar(value, name)
-    if "/" in rendered or "\\" in rendered or rendered in {".", ".."}:
-        raise RequestRenderError(
-            f"path parameter {name!r} contains a path separator or traversal segment"
-        )
-    return quote(rendered, safe="")
+    values = (
+        value if isinstance(value, Sequence)
+        and not isinstance(value, (str, bytes, bytearray)) else [value]
+    )
+    encoded = []
+    for item in values:
+        rendered = _scalar(item, name)
+        if "/" in rendered or "\\" in rendered or rendered in {".", ".."}:
+            raise RequestRenderError(
+                f"path parameter {name!r} contains a path separator or traversal segment"
+            )
+        encoded.append(quote(rendered, safe=""))
+    # Keep simple-style separators distinct from commas inside a value.
+    return ",".join(encoded)
 
 
-def _query_values(name: str, value: Any) -> list[tuple[str, str]]:
+def _query_values(name: str, value: Any, *, explode: bool = True) -> list[str]:
     if isinstance(value, Mapping):
         raise RequestRenderError(
             f"query parameter {name!r} cannot be an object in this SDK version"
         )
+    key = quote(name, safe="")
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return [(name, _scalar(item, name)) for item in value]
-    return [(name, _scalar(value, name))]
+        encoded = [quote(_scalar(item, name), safe="") for item in value]
+        if explode:
+            return [f"{key}={item}" for item in encoded]
+        return [f"{key}={','.join(encoded)}"]
+    return [f"{key}={quote(_scalar(value, name), safe='')}"]
 
 
 def _header_value(value: Any, name: str) -> str:

@@ -205,6 +205,24 @@ class HttpDriverTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_Handler.requests[0]["path"], "/orders")
         self.assertEqual(_Handler.requests[0]["query"], {"status": ["pending"]})
 
+    async def test_non_exploded_query_array_reaches_backend_as_one_value(self) -> None:
+        from tangram_app.compiler import _compile_input, _Operation
+
+        graph_value = http_graph().to_dict()
+        operation = _Operation("getThing", "GET", "/things", {}, {
+            "parameters": [{"in": "query", "name": "tag", "explode": False,
+                            "schema": {"type": "array", "items": {"type": "string"}}}],
+        })
+        schema, bindings, _ = _compile_input({"openapi": "3.1.0"}, operation)
+        graph_value["actions"][0]["bindings"][0].update({
+            "method": "GET", "path": "/things", "inputSchema": schema,
+            "inputBindings": bindings,
+        })
+        graph = CapabilityGraph.from_json(CapabilityGraph.from_dict(graph_value).to_json())
+        host = TangramHost(graph, driver=LocalHttpDriver(self.base_url))
+        await host.call("com.example/http#Thing.Get", {"tag": ["one", "two"]})
+        self.assertEqual(_Handler.requests[0]["query"], {"tag": ["one,two"]})
+
     async def test_host_executes_rendered_post_binding(self) -> None:
         host = TangramHost(http_graph(), driver=LocalHttpDriver(self.base_url))
 

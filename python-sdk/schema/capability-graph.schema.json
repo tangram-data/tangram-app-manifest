@@ -171,8 +171,28 @@
         "name": {
           "type": "string",
           "minLength": 1
+        },
+        "style": {
+          "enum": ["form", "simple"]
+        },
+        "explode": {
+          "type": "boolean"
         }
       },
+      "allOf": [
+        {
+          "if": {"properties": {"location": {"const": "query"}}},
+          "then": {"properties": {"style": {"const": "form"}}}
+        },
+        {
+          "if": {"properties": {"location": {"enum": ["path", "header"]}}},
+          "then": {"properties": {"style": {"const": "simple"}}}
+        },
+        {
+          "if": {"properties": {"location": {"const": "body"}}},
+          "then": {"not": {"anyOf": [{"required": ["style"]}, {"required": ["explode"]}]}}
+        }
+      ],
       "additionalProperties": false
     }
   }

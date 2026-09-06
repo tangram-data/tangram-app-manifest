@@ -94,6 +94,25 @@ class PackageIdentity:
 class InputBinding:
     location: str
     name: str | None
+    style: str | None = None
+    explode: bool | None = None
+
+    def __post_init__(self) -> None:
+        if self.location == "body":
+            if self.style is not None or self.explode is not None:
+                raise CapabilityGraphError("body inputs cannot declare parameter serialization")
+            return
+        supported = "form" if self.location == "query" else "simple"
+        if self.style is not None and self.style != supported:
+            raise CapabilityGraphError(
+                f"unsupported {self.location} parameter style {self.style!r}; expected {supported!r}"
+            )
+        if self.explode is not None and not isinstance(self.explode, bool):
+            raise CapabilityGraphError("parameter explode must be a boolean")
+
+    @property
+    def effective_explode(self) -> bool:
+        return self.explode if self.explode is not None else self.location == "query"
 
     @classmethod
     def from_dict(cls, value: Any, path: str) -> "InputBinding":
@@ -107,12 +126,18 @@ class InputBinding:
         name = None if raw_name is None else _string(raw_name, f"{path}.name")
         if location != "body" and name is None:
             raise CapabilityGraphError(f"{path}.name is required for {location} inputs")
-        return cls(location=location, name=name)
+        style = None if "style" not in obj else _string(obj["style"], f"{path}.style")
+        explode = None if "explode" not in obj else _boolean(obj["explode"], f"{path}.explode")
+        return cls(location=location, name=name, style=style, explode=explode)
 
-    def to_dict(self) -> dict[str, str]:
-        value = {"location": self.location}
+    def to_dict(self) -> dict[str, Any]:
+        value: dict[str, Any] = {"location": self.location}
         if self.name is not None:
             value["name"] = self.name
+        if self.style is not None:
+            value["style"] = self.style
+        if self.explode is not None:
+            value["explode"] = self.explode
         return value
 
 

@@ -9,9 +9,9 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from .errors import ManifestCompilationError
+from .errors import CapabilityGraphError, ManifestCompilationError
 from .manifest import ActionEffect, ApplicationType, ManifestPackage, ResourceTypeAction
-from .models import CapabilityGraph
+from .models import CapabilityGraph, InputBinding
 from .validation import ValidationFinding, validate_manifest
 
 
@@ -75,6 +75,7 @@ class _Input:
     name: str | None
     schema: Mapping[str, Any]
     required: bool
+    serialization: InputBinding | None = None
 
 
 class ManifestCompiler:
@@ -375,7 +376,7 @@ def _requires_confirmation(action: ResourceTypeAction) -> bool:
 
 def _compile_input(
     document: Mapping[str, Any], operation: _Operation
-) -> tuple[dict[str, Any], dict[str, dict[str, str]], bool]:
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]], bool]:
     inputs: list[_Input] = []
     body_required = False
     parameters: dict[tuple[str, str], Mapping[str, Any]] = {}
@@ -414,6 +415,9 @@ def _compile_input(
                 name=name,
                 schema=schema,
                 required=location == "path" or parameter.get("required") is True,
+                serialization=_parameter_serialization(
+                    parameter, schema, f"{operation.operation_id}.{location}.{name}"
+                ),
             )
         )
 
@@ -455,7 +459,7 @@ def _compile_input(
     used: set[str] = set()
     properties: dict[str, Any] = {}
     required: list[str] = []
-    bindings: dict[str, dict[str, str]] = {}
+    bindings: dict[str, dict[str, Any]] = {}
     for item in inputs:
         natural = item.name if item.name is not None else "body"
         candidate = natural if counts[natural] == 1 else f"{item.location}_{natural}"
@@ -464,7 +468,10 @@ def _compile_input(
         properties[exposed] = dict(item.schema)
         if item.required:
             required.append(exposed)
-        binding = {"location": item.location}
+        binding = (
+            item.serialization.to_dict() if item.serialization is not None
+            else {"location": item.location}
+        )
         if item.name is not None:
             binding["name"] = item.name
         bindings[exposed] = binding
@@ -476,6 +483,42 @@ def _compile_input(
     if required:
         schema["required"] = required
     return schema, bindings, body_required
+
+
+def _parameter_serialization(
+    parameter: Mapping[str, Any], schema: Mapping[str, Any], path: str,
+) -> InputBinding:
+    location = parameter["in"]
+    style = parameter.get("style", "form" if location == "query" else "simple")
+    explode = parameter.get("explode", style == "form")
+    try:
+        binding = InputBinding.from_dict({
+            "location": location, "name": parameter["name"],
+            "style": style, "explode": explode,
+        }, path)
+    except CapabilityGraphError as error:
+        raise ManifestCompilationError(f"{path}: {error}") from error
+    if "allowReserved" in parameter and parameter["allowReserved"] is not False:
+        raise ManifestCompilationError(f"{path}: allowReserved is unsupported; use false")
+    _check_parameter_shape(schema, path)
+    return binding
+
+
+def _check_parameter_shape(schema: Mapping[str, Any], path: str, *, item: bool = False) -> None:
+    """Reject declared shapes that cannot be serialized as scalar parameters."""
+    declared = schema.get("type", [])
+    types = [declared] if isinstance(declared, str) else declared
+    if not isinstance(types, Sequence) or not all(isinstance(value, str) for value in types):
+        raise ManifestCompilationError(f"{path}: parameter type must be a string or array of strings")
+    if "object" in types or "properties" in schema:
+        raise ManifestCompilationError(f"{path}: object parameters are unsupported")
+    if item and ("array" in types or "items" in schema):
+        raise ManifestCompilationError(f"{path}: nested array parameters are unsupported")
+    if isinstance(schema.get("items"), Mapping):
+        _check_parameter_shape(schema["items"], f"{path}.items", item=True)
+    for keyword in ("allOf", "anyOf", "oneOf"):
+        for child in schema.get(keyword, []):
+            _check_parameter_shape(child, path, item=item)
 
 
 def _compile_output(
