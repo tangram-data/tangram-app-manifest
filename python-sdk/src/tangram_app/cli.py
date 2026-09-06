@@ -92,7 +92,11 @@ def _swallow_broken_pipe() -> None:
     try:
         import os
 
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        try:
+            os.dup2(devnull, sys.stdout.fileno())
+        finally:
+            os.close(devnull)
     except Exception:
         pass
 
@@ -221,6 +225,8 @@ def _skill_runner_main(skill_root: str | Path, argv: Sequence[str]) -> int:
             }
         )
         return 0
+    except BrokenPipeError:
+        raise  # handled once in skill_runner_main()
     except Exception as error:
         code, status, message = _error_details(error)
         _emit(

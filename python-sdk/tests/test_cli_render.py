@@ -83,6 +83,13 @@ class BrokenPipeTest(unittest.TestCase):
         self.assertNotIn("Traceback", completed.stderr)
         self.assertNotIn("BrokenPipeError", completed.stderr)
 
+    def test_skill_runner_swallows_broken_pipe(self):
+        from tangram_app import cli
+
+        with mock.patch.object(cli, "verify_skill", side_effect=BrokenPipeError):
+            code = cli.skill_runner_main("/tmp/none", ["inspect"])
+        self.assertEqual(code, 141)
+
 
 class RendererUnitTest(unittest.TestCase):
     def test_doctor_layout(self):
