@@ -29,6 +29,7 @@ Issues = "https://github.com/tangram-data/tangram-app-manifest/issues"
 
 [project.scripts]
 tangram-app = "tangram_app.cli:main"
+tangram = "tangram_app.frontdoor:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tangram_app"]
