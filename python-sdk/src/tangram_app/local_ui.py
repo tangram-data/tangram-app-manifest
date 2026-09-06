@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 from .errors import LocalRuntimeError
 from .policy import LocalDevelopmentPolicy
+from .models import ActionBinding
 
 if TYPE_CHECKING:
     from .local_runtime import LocalAppSession
@@ -308,7 +309,7 @@ def _handler_factory(session: "LocalAppSession", bundle: UiBundle):
                 body = json.loads(self.rfile.read(length))
                 resource_type = body["resourceType"]
                 action = body["action"]
-                arguments = _flatten_action_arguments(body.get("args", {}))
+                arguments = body.get("args", {})
                 confirmed = body.get("confirmed") is True
                 result = _invoke_ui_action(
                     session, resource_type, action, arguments, confirmed=confirmed
@@ -377,6 +378,8 @@ def _invoke_ui_action(
     if len(matches) != 1:
         raise ValueError(f"app declares no unambiguous action {resource_type}.{action_name}")
     action = matches[0]
+    _, binding = session.app.graph.resolve(action.id)
+    arguments = _flatten_action_arguments(arguments, binding)
     gated = action.effect.value == "Irreversible" or action.requires_confirmation
     if gated and not confirmed:
         detail = (
@@ -397,20 +400,47 @@ def _invoke_ui_action(
     return asyncio.run(app.call(action.id, arguments))
 
 
-def _flatten_action_arguments(value: Any) -> Any:
+def _flatten_action_arguments(value: Any, binding: ActionBinding) -> Any:
+    """Translate the UI envelope using the compiled projection, without data loss."""
     if not isinstance(value, Mapping):
         return value
-    result = {
-        key: item
-        for key, item in value.items()
-        if key not in {"parameters", "requestBody"}
-    }
-    parameters = value.get("parameters")
-    request_body = value.get("requestBody")
-    if isinstance(parameters, Mapping):
-        result.update(parameters)
-    if isinstance(request_body, Mapping):
-        result.update(request_body)
+    # A direct agent argument may itself be named parameters or requestBody.
+    if not ({"parameters", "requestBody"} & set(value)) or set(value) <= set(
+        binding.input_bindings
+    ):
+        return value
+    result = {key: item for key, item in value.items()
+              if key not in {"parameters", "requestBody"}}
+
+    def assign(name: str, item: Any) -> None:
+        if name in result:
+            raise ValueError(f"duplicate action argument {name!r}")
+        result[name] = item
+
+    parameters = value.get("parameters", {})
+    if not isinstance(parameters, Mapping):
+        raise ValueError("parameters must be an object")
+    for name, item in parameters.items():
+        matches = [exposed for exposed, source in binding.input_bindings.items()
+                   if source.location != "body" and source.name == name]
+        if len(matches) != 1:
+            raise ValueError(f"unknown or ambiguous parameter {name!r}")
+        assign(matches[0], item)
+    if "requestBody" in value:
+        request_body = value["requestBody"]
+        whole = [exposed for exposed, source in binding.input_bindings.items()
+                 if source.location == "body" and source.name is None]
+        if len(whole) == 1:
+            assign(whole[0], request_body)
+        else:
+            if not isinstance(request_body, Mapping):
+                raise ValueError("requestBody must be an object for a flattened binding")
+            fields = {source.name: exposed for exposed, source in binding.input_bindings.items()
+                      if source.location == "body"}
+            for name, item in request_body.items():
+                if name not in fields:
+                    raise ValueError(f"unknown body property {name!r}")
+                assign(fields[name], item)
     return result
 
 

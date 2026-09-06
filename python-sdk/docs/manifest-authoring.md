@@ -121,7 +121,9 @@ Compilation:
 2. selects each resource type's active version;
 3. includes actions with `openApiMapping` or `openApiMappings`;
 4. resolves each mapping to an OpenAPI operation;
-5. flattens path, query, header, and JSON-body inputs into one agent schema;
+5. projects path, query, header, and JSON-body inputs into one agent schema,
+   flattening only required closed bodies without object-level constraints
+   (see [input projection](actions-and-agents.md#input-projection));
 6. stores reverse input bindings for HTTP request rendering;
 7. selects the supported success response schema;
 8. records runtime requirements and root UI metadata; and

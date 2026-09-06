@@ -58,11 +58,9 @@ def validate(instance: Any, schema: Mapping[str, Any], path: str = "$") -> None:
             path, f"unsupported schema keywords: {', '.join(unsupported)}"
         )
 
-    if schema.get("nullable") is True and instance is None:
-        return
-    if "const" in schema and instance != schema["const"]:
+    if "const" in schema and not _json_equal(instance, schema["const"]):
         raise InputValidationError(path, f"must equal {schema['const']!r}")
-    if "enum" in schema and instance not in schema["enum"]:
+    if "enum" in schema and not any(_json_equal(instance, item) for item in schema["enum"]):
         raise InputValidationError(path, f"must be one of {schema['enum']!r}")
 
     for child in schema.get("allOf", []):
@@ -78,6 +76,10 @@ def validate(instance: Any, schema: Mapping[str, Any], path: str = "$") -> None:
             )
 
     expected = schema.get("type")
+    # Legacy graph snapshots may still carry OAS 3.0 nullable. It widens only
+    # the declared type; enum/const/composition constraints still apply.
+    if schema.get("nullable") is True and isinstance(expected, str):
+        expected = (expected, "null")
     if _is_sequence(expected):
         if not any(_is_type(instance, item) for item in expected):
             raise InputValidationError(path, f"must have one of types {expected!r}")
@@ -94,6 +96,21 @@ def validate(instance: Any, schema: Mapping[str, Any], path: str = "$") -> None:
         _validate_string(instance, schema, path)
     elif _is_number(instance):
         _validate_number(instance, schema, path)
+
+
+def _json_equal(left: Any, right: Any) -> bool:
+    """JSON equality distinguishes booleans from numbers, including nested values."""
+    if isinstance(left, bool) or isinstance(right, bool):
+        return isinstance(left, bool) and isinstance(right, bool) and left == right
+    if isinstance(left, Mapping) and isinstance(right, Mapping):
+        return left.keys() == right.keys() and all(
+            _json_equal(value, right[key]) for key, value in left.items()
+        )
+    if _is_sequence(left) and _is_sequence(right):
+        return len(left) == len(right) and all(
+            _json_equal(a, b) for a, b in zip(left, right)
+        )
+    return left == right
 
 
 def _schema(value: Any, path: str) -> Mapping[str, Any]:

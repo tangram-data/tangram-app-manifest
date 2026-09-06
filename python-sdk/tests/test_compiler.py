@@ -95,6 +95,7 @@ class ManifestCompilerTests(unittest.TestCase):
                             "type": "object",
                             "properties": {"status": {"type": "integer"}},
                             "required": ["status"],
+                            "additionalProperties": False,
                         }
                     }
                 },

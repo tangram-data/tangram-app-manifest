@@ -94,6 +94,7 @@ class ManifestCompiler:
             raise ManifestCompilationError(detail or "manifest validation failed")
         package = validation.require_valid()
         document = self._load_openapi(package)
+        _schema_dialect(document)
         operations = self._index_operations(document)
         graph_value = {
             "formatVersion": "1",
@@ -435,11 +436,7 @@ def _compile_input(
                 set(),
             )
             properties = body_schema.get("properties")
-            if (
-                isinstance(properties, Mapping)
-                and properties
-                and (body_schema.get("type") == "object" or "type" not in body_schema)
-            ):
+            if _can_flatten_body(body_schema, body_required):
                 required = body_schema.get("required", [])
                 required_names = set(required) if isinstance(required, list) else set()
                 for name, schema in properties.items():
@@ -550,32 +547,127 @@ def _managed_header_names(document: Mapping[str, Any]) -> set[str]:
     return names
 
 
+def _can_flatten_body(schema: Mapping[str, Any], required: bool) -> bool:
+    """Flatten only when the wrapper preserves every body constraint."""
+    properties = schema.get("properties")
+    return (
+        required
+        and schema.get("type") == "object"
+        and isinstance(properties, Mapping)
+        and bool(properties)
+        and schema.get("additionalProperties") is False
+        and set(schema) <= {
+            "type", "properties", "required", "additionalProperties",
+            "title", "description", "deprecated", "readOnly", "writeOnly",
+        }
+        and set(schema.get("required", [])) <= set(properties)
+    )
+
+
+def _schema_dialect(document: Mapping[str, Any]) -> str:
+    version = document.get("openapi", "3.0.0")
+    if isinstance(version, str) and version.startswith("3.0."):
+        return "3.0"
+    if isinstance(version, str) and version.startswith("3.1."):
+        dialect = document.get("jsonSchemaDialect")
+        if dialect not in {
+            None, "https://spec.openapis.org/oas/3.1/dialect/base",
+            "https://json-schema.org/draft/2020-12/schema",
+        }:
+            raise ManifestCompilationError(f"unsupported JSON Schema dialect {dialect!r}")
+        return "3.1"
+    raise ManifestCompilationError(f"unsupported OpenAPI version {version!r}")
+
+
 def _normalize_schema(
     document: Mapping[str, Any],
     value: Any,
     path: str,
     seen: set[str],
 ) -> dict[str, Any]:
+    """Normalize the supported OAS dialect into the graph's JSON Schema subset.
+
+    Graph schemas use numeric exclusive bounds and type unions for nullability.
+    Recursive and boolean schemas remain outside the supported subset.
+    """
     if not isinstance(value, Mapping):
         raise ManifestCompilationError(f"{path} schema must be an object")
+    dialect = _schema_dialect(document)
+    if "$schema" in value and value["$schema"] not in {
+        "https://spec.openapis.org/oas/3.1/dialect/base",
+        "https://json-schema.org/draft/2020-12/schema",
+    }:
+        raise ManifestCompilationError(f"{path} uses unsupported schema dialect")
     raw_reference = value.get("$ref")
     if isinstance(raw_reference, str):
         if raw_reference in seen:
             raise ManifestCompilationError(
                 f"recursive schema reference {raw_reference!r}"
             )
-        target = _resolve_pointer(document, raw_reference, path)
-        merged = dict(target)
-        merged.update({key: item for key, item in value.items() if key != "$ref"})
-        return _normalize_schema(document, merged, path, seen | {raw_reference})
+        target = _normalize_schema(
+            document, _resolve_pointer(document, raw_reference, path),
+            path, seen | {raw_reference},
+        )
+        # OAS 3.0 Reference Objects ignore siblings. In 3.1 Schema Objects,
+        # siblings constrain the same instance; merging would overwrite rules.
+        siblings = {key: item for key, item in value.items() if key != "$ref"}
+        if dialect == "3.1" and siblings:
+            return {"allOf": [
+                target, _normalize_schema(document, siblings, path, seen),
+            ]}
+        return target
     unsupported = sorted(set(value) - _SCHEMA_KEYWORDS)
     if unsupported:
         raise ManifestCompilationError(
             f"{path} uses unsupported schema keyword(s): {', '.join(unsupported)}"
         )
+    value = dict(value)
+    if dialect == "3.0":
+        for exclusive, inclusive in (
+            ("exclusiveMinimum", "minimum"), ("exclusiveMaximum", "maximum"),
+        ):
+            if exclusive in value:
+                flag = value.pop(exclusive)
+                if not isinstance(flag, bool):
+                    raise ManifestCompilationError(
+                        f"{path}.{exclusive} must be boolean in OpenAPI 3.0"
+                    )
+                if flag:
+                    bound = value.pop(inclusive, None)
+                    if isinstance(bound, bool) or not isinstance(bound, (int, float)):
+                        raise ManifestCompilationError(
+                            f"{path}.{exclusive} requires a numeric {inclusive}"
+                        )
+                    value[exclusive] = bound
+        nullable = value.pop("nullable", False)
+        if not isinstance(nullable, bool):
+            raise ManifestCompilationError(f"{path}.nullable must be boolean")
+        if nullable and isinstance(value.get("type"), str):
+            value["type"] = [value["type"], "null"]
+    else:
+        if "nullable" in value:
+            raise ManifestCompilationError(
+                f"{path}.nullable is unsupported in OpenAPI 3.1; use a null type union"
+            )
+        for exclusive in ("exclusiveMinimum", "exclusiveMaximum"):
+            if exclusive in value and (
+                isinstance(value[exclusive], bool)
+                or not isinstance(value[exclusive], (int, float))
+            ):
+                raise ManifestCompilationError(
+                    f"{path}.{exclusive} must be numeric in OpenAPI 3.1"
+                )
     result: dict[str, Any] = {}
     for key, item in value.items():
-        if key == "properties":
+        if key == "required":
+            if (
+                not isinstance(item, Sequence)
+                or isinstance(item, str)
+                or not all(isinstance(name, str) for name in item)
+            ):
+                raise ManifestCompilationError(f"{path}.required must be an array of strings")
+            result[key] = list(item)
+        elif key == "properties":
             if not isinstance(item, Mapping):
                 raise ManifestCompilationError(f"{path}.properties must be an object")
             result[key] = {

@@ -97,8 +97,9 @@ steps.
 
 ### Input projection
 
-Agent-facing arguments are a flat JSON object even when OpenAPI uses several
-locations:
+Agent-facing arguments combine OpenAPI locations into one JSON object.
+Required, closed object bodies with only property-level constraints are flattened:
+
 
 ```json
 {
@@ -122,8 +123,27 @@ window.tangram.performAction(
 )
 ```
 
-The local UI bridge flattens `parameters` and `requestBody` before entering the
-normal host pipeline.
+The local UI bridge projects `parameters` and `requestBody` using the compiled
+bindings before entering the normal host pipeline, preserving whole bodies and
+parameter/body name collisions. If every supplied key is already an exposed
+argument name, direct arguments take precedence over envelope interpretation
+(including arguments literally named `parameters` or `requestBody`).
+
+Optional bodies, open objects (including the OpenAPI default when
+`additionalProperties` is omitted), and bodies with composition or other
+object-level constraints use a whole `body` argument instead:
+
+```json
+{"todo_id": 42, "body": {"title": "Ship SDK docs", "extra": true}}
+```
+
+Omitting `body` omits an optional HTTP body; `"body": {}` sends an explicit
+empty object, and `"body": null` sends JSON null if the schema permits it.
+The exact exposed name is recorded in `inputBindings` and may be prefixed on
+collision. Inspect the generated input schema rather than assuming a flat
+shape. Recompiling packages with these body schemas changes their argument
+shape; update direct callers and regenerate portable skills. Existing compiled
+snapshots are not rewritten and must be rebuilt to receive these fixes.
 
 ### Supported JSON Schema subset
 
@@ -135,6 +155,16 @@ and null types plus the keywords emitted by the graph compiler, including:
 - `enum`, `const`, `allOf`, `anyOf`, and `oneOf`;
 - `minLength`, `maxLength`, and `pattern`; and
 - numeric bounds and `multipleOf`.
+
+The compiler accepts the supported subsets of OpenAPI 3.0 and 3.1 and emits
+numeric exclusive bounds and null type unions. OpenAPI 3.0 boolean exclusive
+bounds are converted using the corresponding minimum/maximum; `nullable` only
+adds null to an explicitly declared type and does not bypass enum or composition
+constraints. Schema `$ref` siblings are ignored in 3.0 and applied conjunctively
+in 3.1. Reference resolution outside Schema Objects is unchanged. Unsupported
+dialects fail compilation; recursive references
+and boolean schemas remain unsupported. Enum/const equality distinguishes JSON
+booleans from numbers, including within arrays and objects.
 
 ## Authorization and confirmation
 
