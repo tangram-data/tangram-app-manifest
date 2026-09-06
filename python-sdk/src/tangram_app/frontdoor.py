@@ -71,7 +71,8 @@ def find_native(argv0: str | None = None) -> str | None:
                 continue
             # Skip other copies of THIS shim (console scripts import this
             # module); forward only to a real (non-python-entrypoint) binary.
-            head = resolved.read_bytes()[:512]
+            with resolved.open("rb") as handle:
+                head = handle.read(512)
             if b"tangram_app" in head:
                 continue
             return str(candidate)
