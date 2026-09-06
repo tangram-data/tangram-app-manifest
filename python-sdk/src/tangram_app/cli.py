@@ -87,7 +87,26 @@ class _Parser(argparse.ArgumentParser):
         raise CliArgumentsError(message)
 
 
+def _swallow_broken_pipe() -> None:
+    """Point stdout at devnull so the interpreter's exit flush can't raise."""
+    try:
+        import os
+
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    except Exception:
+        pass
+
+
 def main(argv: Sequence[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except BrokenPipeError:
+        # `… | head` etc. closed the pipe: die quietly like a Unix tool.
+        _swallow_broken_pipe()
+        return 141
+
+
+def _main(argv: Sequence[str] | None = None) -> int:
     supplied = list(sys.argv[1:] if argv is None else argv)
     if supplied == ["--version"]:
         # Version-negotiation contract: machine-readable, standard envelope.
@@ -134,6 +153,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 }
             )
         return 0
+    except BrokenPipeError:
+        raise  # handled once in main(); never wrapped into an envelope
     except Exception as error:  # The CLI boundary always returns one JSON document.
         code, status, message = _error_details(error)
         if human:
@@ -152,6 +173,14 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def skill_runner_main(skill_root: str | Path, argv: Sequence[str]) -> int:
+    try:
+        return _skill_runner_main(skill_root, argv)
+    except BrokenPipeError:
+        _swallow_broken_pipe()
+        return 141
+
+
+def _skill_runner_main(skill_root: str | Path, argv: Sequence[str]) -> int:
     try:
         graph = verify_skill(skill_root)
         args = _skill_parser().parse_args(argv)

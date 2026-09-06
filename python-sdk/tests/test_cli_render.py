@@ -52,6 +52,38 @@ class RenderModeTest(unittest.TestCase):
             json.loads(out)
 
 
+class BrokenPipeTest(unittest.TestCase):
+    def test_closed_pipe_exits_141_without_traceback(self):
+        import subprocess
+        import sys as _sys
+        from pathlib import Path
+
+        completed = subprocess.run(
+            [
+                _sys.executable,
+                "-c",
+                "import sys; sys.argv=['tangram-app','doctor']; "
+                "from tangram_app.cli import main; "
+                "sys.stdout.close = lambda: None\n"
+                "import io, os\n"
+                "read_end, write_end = os.pipe()\n"
+                "os.close(read_end)\n"  # reader gone: writes will EPIPE
+                "os.dup2(write_end, 1)\n"
+                "raise SystemExit(main(['doctor']))",
+            ],
+            capture_output=True,
+            text=True,
+            env={
+                "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+                "PATH": "/usr/bin:/bin",
+                "HOME": "/tmp",
+            },
+        )
+        self.assertEqual(completed.returncode, 141, completed.stderr)
+        self.assertNotIn("Traceback", completed.stderr)
+        self.assertNotIn("BrokenPipeError", completed.stderr)
+
+
 class RendererUnitTest(unittest.TestCase):
     def test_doctor_layout(self):
         text = render_data(
