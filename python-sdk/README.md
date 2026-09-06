@@ -264,8 +264,14 @@ sha-checked against it in CI.
 
 ```sh
 pip install tangram-app-sdk
-tangram-app doctor --fix     # diagnose everything; auto-install the Pkl CLI
+tangram doctor --fix         # diagnose everything; auto-install the Pkl CLI
 ```
+
+The package installs two entrypoints: **`tangram`** (the unified front
+door — agent-lane commands run here; platform commands forward to the
+native Tangram CLI when installed) and **`tangram-app`** (the SDK CLI
+proper, always available for agents/scripts). Every example below works
+with either name.
 
 `doctor` reports each prerequisite with an actionable hint. `--fix`
 installs what is safe to install without sudo (the Pkl CLI, into

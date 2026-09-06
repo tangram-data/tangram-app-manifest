@@ -18,6 +18,14 @@ rule (envelope on stdout when piped; plain text on stderr for humans).
 
 Both `tangram-app` and `python -m tangram_app` use the same implementation.
 
+The package also installs **`tangram`** — the unified front door: every
+command on this page works as `tangram <command>` too (run in-process),
+while platform/OS commands (`use`, `login`, `workspace …`, and any `app`
+invocation carrying a workspace/instance selector) are forwarded to the
+native Tangram CLI when it is on PATH, with an install pointer otherwise.
+Translations match the native front door: `app ls` → `app list`,
+`app open` → `open`.
+
 | Command | Purpose |
 |---|---|
 | `doctor [--fix]` | Diagnose prerequisites (Python, Pkl, PostgreSQL, Node) with hints; `--fix` auto-installs the Pkl CLI into `~/.tangram/bin` |

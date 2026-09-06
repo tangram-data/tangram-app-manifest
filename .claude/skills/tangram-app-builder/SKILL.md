@@ -23,6 +23,10 @@ tangram-app --help || pip install tangram-app-sdk
 tangram-app doctor --fix    # diagnoses everything; auto-installs the Pkl CLI
 ```
 
+(The SDK also installs the unified `tangram` front door — the same
+commands work as `tangram <command>`; this skill uses `tangram-app` /
+`python -m tangram_app`, which is always unambiguous.)
+
 `doctor` reports each prerequisite with a hint: Python 3.11+ (3.12+ to run
 backends), the Pkl CLI (`--fix` installs it into `~/.tangram/bin`, no PATH
 edits needed), PostgreSQL toolchain (`initdb`/`pg_ctl`, needed only for
