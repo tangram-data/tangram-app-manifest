@@ -5,6 +5,12 @@
 This page is the reference for the versioned `tangram-app` command surface and
 its machine-readable envelopes.
 
+Output modes: when stdout is NOT a tty (agents, scripts, pipes, CI) every
+command emits exactly one JSON envelope — the machine contract, unchanged.
+On an interactive terminal the same data renders as human-readable text;
+pass `--json` to force the envelope there too. Errors follow the same
+rule (envelope on stdout when piped; plain text on stderr for humans).
+
 ## Command-line interface
 
 `tangram-app --version` emits the version-negotiation envelope

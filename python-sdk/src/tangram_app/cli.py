@@ -102,33 +102,52 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
         )
         return 0
+    # Machine contract: any non-tty stdout (agents, pipes, CI) — or --json —
+    # gets the single JSON envelope exactly as always. A human at a terminal
+    # gets readable text instead.
+    human = sys.stdout.isatty() and "--json" not in supplied
+    command = None
     try:
         from .cli_parser import build_parser
 
         args = build_parser().parse_args(supplied)
+        command = args.command
         if args.command in ("run", "open"):
-            return _run_local_foreground(args)
+            return _run_local_foreground(args, human=human)
         data = _run(args)
-        _emit({"schemaVersion": COMMAND_SCHEMA_VERSION, "ok": True, "data": data})
+        if human:
+            from .cli_render import render_data
+
+            print(render_data(command, data))
+        else:
+            _emit({"schemaVersion": COMMAND_SCHEMA_VERSION, "ok": True, "data": data})
         return 0
     except CliHelp as help_request:
-        _emit(
-            {
-                "schemaVersion": COMMAND_SCHEMA_VERSION,
-                "ok": True,
-                "data": {"help": help_request.help_text},
-            }
-        )
+        if human:
+            print(help_request.help_text.rstrip())
+        else:
+            _emit(
+                {
+                    "schemaVersion": COMMAND_SCHEMA_VERSION,
+                    "ok": True,
+                    "data": {"help": help_request.help_text},
+                }
+            )
         return 0
     except Exception as error:  # The CLI boundary always returns one JSON document.
         code, status, message = _error_details(error)
-        _emit(
-            {
-                "schemaVersion": COMMAND_SCHEMA_VERSION,
-                "ok": False,
-                "error": {"code": code, "message": message},
-            }
-        )
+        if human:
+            from .cli_render import render_error
+
+            print(render_error({"code": code, "message": message}), file=sys.stderr)
+        else:
+            _emit(
+                {
+                    "schemaVersion": COMMAND_SCHEMA_VERSION,
+                    "ok": False,
+                    "error": {"code": code, "message": message},
+                }
+            )
         return status
 
 
@@ -340,7 +359,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     raise CliArgumentsError("unsupported command")
 
 
-def _run_local_foreground(args: argparse.Namespace) -> int:
+def _run_local_foreground(args: argparse.Namespace, *, human: bool = False) -> int:
     app = TangramApp.from_package(resolve_target(args.package))
     session = app.run_local(
         python=args.python,
@@ -355,19 +374,26 @@ def _run_local_foreground(args: argparse.Namespace) -> int:
 
     signal.signal(signal.SIGTERM, stop_requested)
     try:
-        _emit(
-            {
-                "schemaVersion": COMMAND_SCHEMA_VERSION,
-                "ok": True,
-                "data": {
-                    "package": app.graph.package.to_dict(),
-                    "runtime": "local-source",
-                    "backendUrl": session.backend_url,
-                    "uiUrl": session.ui_url,
-                    "log": str(session.log_path),
-                },
-            }
-        )
+        if human:
+            print(f"{app.graph.package.to_dict().get('id')} running (Ctrl-C stops it)")
+            print(f"  backend: {session.backend_url}")
+            if session.ui_url:
+                print(f"  ui:      {session.ui_url}")
+            print(f"  log:     {session.log_path}")
+        else:
+            _emit(
+                {
+                    "schemaVersion": COMMAND_SCHEMA_VERSION,
+                    "ok": True,
+                    "data": {
+                        "package": app.graph.package.to_dict(),
+                        "runtime": "local-source",
+                        "backendUrl": session.backend_url,
+                        "uiUrl": session.ui_url,
+                        "log": str(session.log_path),
+                    },
+                }
+            )
         if args.command == "open" and not args.no_browser:
             import webbrowser
 

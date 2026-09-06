@@ -7,6 +7,7 @@ from .cli import _Parser
 
 def build_parser() -> _Parser:
     parser = _Parser(prog="tangram-app")
+    parser.add_argument("--json", action="store_true", help="force the JSON envelope on a TTY")
     commands = parser.add_subparsers(dest="command", required=True)
 
     build = commands.add_parser("build")
