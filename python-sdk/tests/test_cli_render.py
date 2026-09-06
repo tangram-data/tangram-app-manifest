@@ -86,7 +86,8 @@ class BrokenPipeTest(unittest.TestCase):
     def test_skill_runner_swallows_broken_pipe(self):
         from tangram_app import cli
 
-        with mock.patch.object(cli, "verify_skill", side_effect=BrokenPipeError):
+        with mock.patch.object(cli, "verify_skill", side_effect=BrokenPipeError), \
+             mock.patch.object(cli, "_swallow_broken_pipe"):  # dup2 would hijack pytest's fd 1
             code = cli.skill_runner_main("/tmp/none", ["inspect"])
         self.assertEqual(code, 141)
 
