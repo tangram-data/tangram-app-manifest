@@ -106,6 +106,28 @@ def _codex_agents_block(names: list[str], home: Path) -> str:
         ref = _tilde_path(home / "prompts" / f"{name}.md")
         what = _CODEX_SKILL_GUIDANCE.get(name, f"working with the {name} skill")
         lines.append(f"- Before {what}, read and follow `{ref}` first.")
+    # Usage guidance rides INLINE (not behind a pointer): for "use the app"
+    # asks the block is the only text guaranteed to be in context, and an
+    # extra read step is exactly what gets skipped.
+    lines.extend(
+        (
+            "",
+            "To USE Tangram apps installed on this machine — list them, list an",
+            'app\'s actions, or answer questions from an app\'s data (e.g. "list',
+            'my todos" when a todo app is installed) — go through the governed',
+            "`tangram-app` CLI (`tangram` works the same on machines with the",
+            "desktop app):",
+            "",
+            "- `tangram-app app list` — installed apps (the `~/.tangram` store)",
+            "- `tangram-app actions <app>` — an app's callable actions",
+            "- `tangram-app call <app> <Action> --local` — invoke one action through",
+            "  the governed pipeline (writes need `--allow-mutation`, plus",
+            "  `--confirm` for confirmation-gated actions)",
+            "",
+            "Never inspect an app's files/database or curl its backend directly:",
+            "answers from there are unreliable, and it bypasses policy and audit.",
+        )
+    )
     lines.append(CODEX_AGENTS_END)
     return "\n".join(lines) + "\n"
 
