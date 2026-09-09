@@ -166,6 +166,23 @@ class InstallBuilderSkillTest(unittest.TestCase):
                 self.assertEqual(cli.main(["skill", "install"]), 0)
                 self.assertEqual(cli.main(["skill", "install"]), 0)
 
+    def test_bare_install_preflights_before_writing_anything(self):
+        from tangram_app import cli, cli_skills, skills
+
+        with tempfile.TemporaryDirectory() as directory:
+            fake_home = Path(directory)
+            diverged = fake_home / ".codex" / "prompts" / "tangram-connector-builder.md"
+            diverged.parent.mkdir(parents=True)
+            diverged.write_text("locally edited", encoding="utf-8")
+            with mock.patch.object(cli_skills.Path, "home", return_value=fake_home), mock.patch.object(
+                skills.Path, "home", return_value=fake_home
+            ):
+                self.assertNotEqual(cli.main(["skill", "install"]), 0)
+                self.assertFalse((fake_home / ".claude").exists())
+                self.assertEqual(diverged.read_text(encoding="utf-8"), "locally edited")
+                self.assertEqual(cli.main(["skill", "install", "--force"]), 0)
+                self.assertTrue((fake_home / ".claude" / "skills" / BUILDER_SKILL_NAME / "SKILL.md").is_file())
+
     def test_nameless_install_honours_a_single_scope(self):
         code, home, payload = self._bare_install(["skill", "install", "--user"])
         self.assertEqual(code, 0)

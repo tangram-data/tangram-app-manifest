@@ -12,6 +12,9 @@ from .skills import (
     configure_codex_agents,
     install_packaged_skill,
     install_packaged_skill_codex,
+    packaged_skill_codex_target,
+    packaged_skill_current,
+    packaged_skill_target,
 )
 
 
@@ -33,6 +36,23 @@ def install_skills(args: argparse.Namespace) -> dict[str, Any]:
     else:
         scopes = ["user", "codex"]
 
+    def skills_root(scope: str) -> Path:
+        root = Path.home() if scope == "user" else Path(args.project or ".")
+        return root / ".claude" / "skills"
+
+    # Preflight every destination so a diverged copy refuses BEFORE anything
+    # is written — a multi-install never leaves a partial setup behind.
+    if not args.force:
+        for scope in scopes:
+            for name in names:
+                target = (
+                    packaged_skill_codex_target(name)
+                    if scope == "codex"
+                    else packaged_skill_target(name, skills_root(scope))
+                )
+                if target.exists() and not packaged_skill_current(name, target):
+                    raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
+
     installed: list[dict[str, str]] = []
     agents: Path | None = None
     for scope in scopes:
@@ -40,8 +60,7 @@ def install_skills(args: argparse.Namespace) -> dict[str, Any]:
             if scope == "codex":
                 target = install_packaged_skill_codex(name, force=args.force)
             else:
-                root = Path.home() if scope == "user" else Path(args.project or ".")
-                target = install_packaged_skill(name, root / ".claude" / "skills", force=args.force)
+                target = install_packaged_skill(name, skills_root(scope), force=args.force)
             installed.append({"skill": str(target.resolve()), "scope": scope})
         if scope == "codex" and not getattr(args, "no_agents", False):
             agents = configure_codex_agents()

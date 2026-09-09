@@ -31,11 +31,25 @@ def packaged_skill_text(name: str) -> str:
     )
 
 
+def packaged_skill_target(name: str, skills_root: str | Path) -> Path:
+    return Path(skills_root) / name / "SKILL.md"
+
+
+def packaged_skill_codex_target(name: str, codex_home: str | Path | None = None) -> Path:
+    home = Path(codex_home) if codex_home is not None else Path.home() / ".codex"
+    return home / "prompts" / f"{name}.md"
+
+
+def packaged_skill_current(name: str, target: Path) -> bool:
+    """True when `target` already holds this release's copy of the skill."""
+    return _identical_copy(target, packaged_skill_text(name))
+
+
 def install_packaged_skill(name: str, skills_root: str | Path, *, force: bool = False) -> Path:
     """Copy a bundled skill under `skills_root` (a `.claude/skills` directory).
     Never overwrites unless `force`."""
     text = packaged_skill_text(name)
-    return _write_skill(Path(skills_root) / name / "SKILL.md", text, force=force)
+    return _write_skill(packaged_skill_target(name, skills_root), text, force=force)
 
 
 def install_packaged_skill_codex(
@@ -45,8 +59,7 @@ def install_packaged_skill_codex(
     (`/<name>`) under `<codex-home>/prompts/`. Standalone — no Claude Code
     installation is assumed or referenced."""
     text = packaged_skill_text(name)
-    home = Path(codex_home) if codex_home is not None else Path.home() / ".codex"
-    return _write_skill(home / "prompts" / f"{name}.md", text, force=force)
+    return _write_skill(packaged_skill_codex_target(name, codex_home), text, force=force)
 
 
 CODEX_AGENTS_BEGIN = "<!-- >>> tangram skills >>> -->"
@@ -161,11 +174,26 @@ def install_builder_skill_codex(codex_home: str | Path | None = None, *, force: 
     return install_packaged_skill_codex(BUILDER_SKILL_NAME, codex_home, force=force)
 
 
+def _identical_copy(target: Path, text: str) -> bool:
+    """Byte-identical regular file. Symlinks, size mismatches (checked before
+    reading — the target may be repository-controlled), and read failures all
+    count as divergence."""
+    expected = text.encode("utf-8")
+    try:
+        if target.is_symlink() or not target.is_file():
+            return False
+        if target.stat().st_size != len(expected):
+            return False
+        return target.read_bytes() == expected
+    except OSError:
+        return False
+
+
 def _write_skill(target: Path, text: str, *, force: bool) -> Path:
     if target.exists() and not force:
         # An identical copy is a no-op, so reinstalls stay idempotent; only a
         # DIVERGED copy (e.g. local edits) needs the explicit --force consent.
-        if target.is_file() and target.read_text(encoding="utf-8") == text:
+        if _identical_copy(target, text):
             return target
         raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
     target.parent.mkdir(parents=True, exist_ok=True)
