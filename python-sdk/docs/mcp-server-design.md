@@ -58,6 +58,10 @@ titles or parameter summaries in v1). One contract, one set of
 conformance vectors; hosts wanting parameter schemas fetch the action's
 declared schema via a later enrichment, not a diverging v1 shape.
 
+Every tool result — success or failure — carries BOTH the payload as
+`structuredContent` AND a `content` text block holding the same payload
+serialized (the MCP schema requires `content` unconditionally).
+
 **Decision — static tool surface, dynamic data.** NOT one MCP tool per
 installed action. Rationale: context economics (N apps × M actions
 would bloat every agent turn and churn on every install), and it keeps
@@ -182,7 +186,8 @@ transfers.
 - **M1** — `local_mcp.py` (lifecycle per spec, tools/list, tools/call),
   the three tools with `tangram_call_action` read-only-only
   (`allow_mutation` refused with `policy_denied`), the conforming
-  failure path (`isError: true` + structured envelope), size caps,
+  result contract for success AND failure (`content` block +
+  `structuredContent`, `isError: true` on failures), size caps,
   server-owned audit file, `mcp` verb in the parser, unit tests driving
   a scripted JSON-RPC session against a store fixture.
 - **M2** — `allow_mutation` + annotations; conformance vectors for the
