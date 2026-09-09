@@ -40,18 +40,27 @@ def install_skills(args: argparse.Namespace) -> dict[str, Any]:
         root = Path.home() if scope == "user" else Path(args.project or ".")
         return root / ".claude" / "skills"
 
+    def codex_skills_root() -> Path:
+        return Path.home() / ".codex" / "skills"
+
+    def scope_targets(scope: str, name: str) -> list[Path]:
+        if scope == "codex":
+            # Both codex copies: the /name prompt AND the discoverable
+            # Agent Skills catalog entry.
+            return [
+                packaged_skill_codex_target(name),
+                packaged_skill_target(name, codex_skills_root()),
+            ]
+        return [packaged_skill_target(name, skills_root(scope))]
+
     # Preflight every destination so a diverged copy refuses BEFORE anything
     # is written — a multi-install never leaves a partial setup behind.
     if not args.force:
         for scope in scopes:
             for name in names:
-                target = (
-                    packaged_skill_codex_target(name)
-                    if scope == "codex"
-                    else packaged_skill_target(name, skills_root(scope))
-                )
-                if (target.is_symlink() or target.exists()) and not packaged_skill_current(name, target):
-                    raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
+                for target in scope_targets(scope, name):
+                    if (target.is_symlink() or target.exists()) and not packaged_skill_current(name, target):
+                        raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
 
     installed: list[dict[str, str]] = []
     agents: Path | None = None
@@ -59,9 +68,13 @@ def install_skills(args: argparse.Namespace) -> dict[str, Any]:
         for name in names:
             if scope == "codex":
                 target = install_packaged_skill_codex(name, force=args.force)
+                catalog = install_packaged_skill(name, codex_skills_root(), force=args.force)
+                installed.append(
+                    {"skill": str(target.resolve()), "scope": scope, "skillsCatalog": str(catalog.resolve())}
+                )
             else:
                 target = install_packaged_skill(name, skills_root(scope), force=args.force)
-            installed.append({"skill": str(target.resolve()), "scope": scope})
+                installed.append({"skill": str(target.resolve()), "scope": scope})
         if scope == "codex" and not getattr(args, "no_agents", False):
             agents = configure_codex_agents()
 

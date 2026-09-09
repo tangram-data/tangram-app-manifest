@@ -100,6 +100,8 @@ class InstallBuilderSkillTest(unittest.TestCase):
             self.assertEqual(code, 0)
             installed = fake_home / ".codex" / "prompts" / f"{BUILDER_SKILL_NAME}.md"
             self.assertEqual(installed.read_text(encoding="utf-8"), builder_skill_text())
+            catalog = fake_home / ".codex" / "skills" / BUILDER_SKILL_NAME / "SKILL.md"
+            self.assertEqual(catalog.read_text(encoding="utf-8"), builder_skill_text())
             self.assertFalse((fake_home / ".claude").exists())
 
     def test_install_by_name_and_unknown_name_refuses(self):
