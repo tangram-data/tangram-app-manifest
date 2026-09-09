@@ -48,9 +48,15 @@ New verb `tangram-app mcp`: a **stdio** MCP server (new module
 
 | Tool | Result | Mirrors |
 |---|---|---|
-| `tangram_list_apps` | installed apps: id, version, state, description | `app list` |
-| `tangram_app_actions {app}` | compact catalog: short ref, title, effect, requiresConfirmation, params summary | `actions <app>` |
-| `tangram_call_action {app, action, args?, allow_mutation?, confirm?}` | one governed invocation's result | `call <app> <ref> --local [--allow-mutation] [--confirm]` |
+| `tangram_list_apps` | installed apps: the CLI's rows `{id, version, context, state, detail}` | `app list` |
+| `tangram_app_actions {app}` | the CLI's catalog rows `{ref, id, effect, requiresConfirmation, doc, bindings}` | `actions <app>` |
+| `tangram_call_action {app, action, args?, allow_mutation?}` | one governed invocation's result | `call <app> <ref> --local --input-json … [--allow-mutation]` |
+
+**Decision — results are the CLI's `data` payloads EXACTLY** (the field
+sets above are today's actual envelopes; no MCP-side enrichment like
+titles or parameter summaries in v1). One contract, one set of
+conformance vectors; hosts wanting parameter schemas fetch the action's
+declared schema via a later enrichment, not a diverging v1 shape.
 
 **Decision — static tool surface, dynamic data.** NOT one MCP tool per
 installed action. Rationale: context economics (N apps × M actions
@@ -68,19 +74,30 @@ transfers.
 
 - `tangram_call_action` binds through the identical code path as
   `call --local`: resolver (id or unique bare name, `RT.Action` short
-  refs, ambiguity → candidate list), per-call policy scoped to the one
-  resolved action, audit_path, warm-session attach.
+  refs, ambiguity → `invalid_arguments` naming the candidates), per-call
+  policy scoped to the one resolved action, warm-session attach.
 - **Mutations default-deny.** `allow_mutation: true` mirrors
-  `--allow-mutation`; `confirm: true` mirrors `--confirm` for
-  confirmation-gated actions. The server never escalates on its own.
-- **MCP tool annotations** carry the safety surface to the host UI:
-  `readOnlyHint: true` on the two listing tools;
-  `tangram_call_action` is annotated non-read-only (and
-  `destructiveHint`) so hosts that gate tool use prompt the human.
-- Errors use the SDK's structured contract `{code, message,
-  retryable}` — `policy_denied` for a mutation without
-  `allow_mutation`, `invalid_arguments` with candidates on ambiguity,
-  etc.
+  `--allow-mutation` — the same trust model as the CLI flag: an explicit
+  consent token recorded in the transcript, not proof of a human.
+- **Confirmation-gated actions are DENIED over MCP in v1.** There is no
+  `confirm` param: a model-supplied boolean is not human approval, and
+  MCP annotations are advisory — they cannot force a host prompt. The
+  error tells the caller to use the CLI (`--confirm`) or the app UI;
+  revisit when MCP elicitation gives a trusted host-mediated approval.
+- **MCP tool annotations** carry the safety surface to hosts that honor
+  them: `readOnlyHint: true` on the two listing tools;
+  `tangram_call_action` annotated non-read-only + `destructiveHint`.
+  Annotations are UX, never enforcement.
+- **Errors**: CLI error envelopes today are `{code, message}` (no
+  `retryable` at this boundary). MCP failures MUST be a
+  `CallToolResult` with `isError: true` carrying that envelope as
+  `structuredContent` — a conforming failure path is an **M1**
+  requirement, not deferred polish.
+- **Audit is real, not implied**: `bind()` without an `audit_path`
+  installs a null sink, so the server always supplies a server-owned
+  destination — append-only JSONL under
+  `<TANGRAM_HOME>/audit/mcp-actions.jsonl` — for every
+  `tangram_call_action`.
 
 ## 6. Backend lifecycle
 
@@ -91,6 +108,17 @@ transfers.
   first call to a cold app it starts the managed backend, keeps it
   warm for subsequent calls, and writes the same `session.json` so the
   CLI shares the session. All owned sessions stop on server shutdown.
+- **Session identity tracks the install**: an owned session is keyed to
+  the installation it was started from (package digest / `.install.json`
+  identity). Upgrade, uninstall, or reinstall of the app invalidates the
+  owned session — it is stopped and the next call cold-starts the new
+  code. Without this, "dynamic data" would silently serve a stale graph.
+- **Cold-start contention is real**: today the runtime takes an
+  exclusive non-blocking project lock and `session.json` is written
+  non-atomically, so two concurrent cold callers race — the loser gets
+  `local_runtime_failed` rather than attaching. M3 must add
+  retry-then-reattach on lock failure and atomic session-marker writes
+  before the server may own sessions.
 - Latency is documented honestly: first cold call pays the ~30s
   managed-environment start; hosts wanting instant first calls can run
   `tangram-app open <app>` beforehand.
@@ -104,8 +132,18 @@ transfers.
   tree. MCP's server core here is small (initialize, `tools/list`,
   `tools/call`, ping, notifications), so `local_mcp.py` implements the
   JSON-RPC framing directly — the same choice the desktop repo made
-  for its test server. Supported protocol version is pinned and
-  echoed at initialize; unknown client versions get a clean error.
+  for its test server.
+- **Lifecycle per the MCP spec, not ad hoc**: the design names a
+  supported protocol-version set (initially one pinned version). When a
+  client requests an unknown version the server RESPONDS with a version
+  it supports (the client decides whether to disconnect) — it does not
+  reject. The server waits for `notifications/initialized` before
+  serving tool traffic.
+- **Explicit size caps** (the CLI lane has none on argument input, so
+  the server enforces its own): maximum inbound JSON-RPC message and
+  `args` object 1 MiB (matching the local-actions bridge cap), maximum
+  serialized tool result 4 MiB with a structured `result_too_large`
+  error; enforced before parsing/serializing.
 - Server info reports the SDK `__version__`; the §15 capability tier
   table gains an `mcp` row when this ships.
 - **Host recipes** (documented in cli-reference + skills):
@@ -122,26 +160,31 @@ transfers.
 ## 8. Security notes
 
 - Mutation double gate: explicit tool param AND per-action policy; host
-  approval prompts via annotations on top.
+  approval prompts via annotations on top. Confirmation-gated actions
+  denied outright (§5).
 - No secrets in any tool result; connector connections are out of
   scope v1.
-- Args size caps and validation identical to the CLI lane; nothing
-  from tool input reaches a shell.
-- Concurrent hosts: two servers may own different sessions; session
-  files are written atomically and attach checks probe liveness, so
-  the worst case is a redundant backend, not corruption. (Open
-  question below.)
+- Server-enforced size caps (§7); schema validation identical to the
+  CLI lane; nothing from tool input reaches a shell.
+- Concurrent hosts race on cold starts today (exclusive project lock +
+  non-atomic `session.json` — see §6); until M3 lands the
+  retry/atomic-marker work, concurrent cold callers can observe
+  `local_runtime_failed` and simply retry.
 
 ## 9. Milestones
 
-- **M1** — `local_mcp.py` (initialize/tools/list/tools/call), the three
-  tools with `tangram_call_action` read-only-only (mutation params
-  refused with `policy_denied`), `mcp` verb in the parser, unit tests
-  driving a scripted JSON-RPC session against a store fixture.
-- **M2** — mutation params + annotations + structured error mapping;
-  conformance vectors for the tool envelopes.
+- **M1** — `local_mcp.py` (lifecycle per spec, tools/list, tools/call),
+  the three tools with `tangram_call_action` read-only-only
+  (`allow_mutation` refused with `policy_denied`), the conforming
+  failure path (`isError: true` + structured envelope), size caps,
+  server-owned audit file, `mcp` verb in the parser, unit tests driving
+  a scripted JSON-RPC session against a store fixture.
+- **M2** — `allow_mutation` + annotations; conformance vectors for the
+  tool envelopes; confirmation-gated denial message.
 - **M3** — warm-session ownership (start/keep/stop, shared
-  session.json) + latency docs.
+  session.json, install-identity eviction) on top of runtime fixes:
+  retry-then-reattach on the project lock, atomic session-marker
+  writes; latency docs.
 - **M4** — host recipes in docs/skills; desktop self-registration
   (tangram-desktop repo); `mcp` passthrough (tangram repo).
 - **M5 (maybe)** — `tools/list_changed` + per-action tool projection
@@ -168,10 +211,13 @@ transfers.
 ## 11. Open questions
 
 1. Should MCP-originated calls carry a distinct audit surface tag
-   (e.g. `surface: mcp`) vs staying byte-identical to CLI audit v1?
-2. Session ownership when several hosts run servers concurrently —
-   first-writer-wins on `session.json` plus liveness probing may be
-   enough; needs a decided rule before M3.
+   (e.g. `surface: mcp`) inside the server-owned audit records, or
+   stay field-identical to CLI audit records?
+2. The exact concurrency rule for M3 session ownership (retry budget,
+   who wins the lock, marker format) — decided alongside the runtime
+   atomic-write fix, not before.
 3. Whether `tangram_call_action` should accept `args` as a JSON object
    only, or also the CLI's `key=value` sugar (leaning: object only —
    MCP hosts are structured callers).
+4. Whether/when MCP elicitation is mature enough across target hosts to
+   lift the confirmation-gated denial.
