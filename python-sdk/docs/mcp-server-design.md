@@ -46,14 +46,14 @@ the shortest path becomes the correct path.
 New verb `tangram-app mcp`: a **stdio** MCP server (new module
 `local_mcp.py`, within the new-file LOC budget). Tools:
 
-| Tool | Result | Mirrors |
+| Tool | Result (the CLI's `data` payload, verbatim) | Mirrors |
 |---|---|---|
-| `tangram_list_apps` | installed apps: the CLI's rows `{id, version, context, state, detail}` | `app list` |
-| `tangram_app_actions {app}` | the CLI's catalog rows `{ref, id, effect, requiresConfirmation, doc, bindings}` | `actions <app>` |
-| `tangram_call_action {app, action, args?, allow_mutation?}` | one governed invocation's result | `call <app> <ref> --local --input-json … [--allow-mutation]` |
+| `tangram_list_apps` | `{apps: [{id, version, context, state, detail}, …]}` | `app list` |
+| `tangram_app_actions {app}` | `{app, actions: [{ref, id, effect, requiresConfirmation, doc, bindings}, …]}` | `actions <app>` |
+| `tangram_call_action {app, action, args?, allow_mutation?}` | `{bindingId, result}` (+ `session: "attached"` when a warm session served it) | `call <app> <ref> --local --input-json … [--allow-mutation]` |
 
-**Decision — results are the CLI's `data` payloads EXACTLY** (the field
-sets above are today's actual envelopes; no MCP-side enrichment like
+**Decision — results are the CLI's `data` payloads EXACTLY** (the
+shapes above are today's actual envelopes; no MCP-side enrichment like
 titles or parameter summaries in v1). One contract, one set of
 conformance vectors; hosts wanting parameter schemas fetch the action's
 declared schema via a later enrichment, not a diverging v1 shape.
@@ -90,14 +90,19 @@ transfers.
   Annotations are UX, never enforcement.
 - **Errors**: CLI error envelopes today are `{code, message}` (no
   `retryable` at this boundary). MCP failures MUST be a
-  `CallToolResult` with `isError: true` carrying that envelope as
-  `structuredContent` — a conforming failure path is an **M1**
+  `CallToolResult` with `isError: true`, a `content` text block (the
+  serialized error envelope — `content` is required by the MCP schema
+  even when `structuredContent` is present), and the envelope again as
+  `structuredContent`. A conforming failure path is an **M1**
   requirement, not deferred polish.
 - **Audit is real, not implied**: `bind()` without an `audit_path`
   installs a null sink, so the server always supplies a server-owned
-  destination — append-only JSONL under
-  `<TANGRAM_HOME>/audit/mcp-actions.jsonl` — for every
-  `tangram_call_action`.
+  destination for every `tangram_call_action`. One JSONL file **per
+  server process** (`<TANGRAM_HOME>/audit/mcp-<pid>-<start>.jsonl`) —
+  the existing `JsonlAuditSink` writes record and newline separately
+  with no inter-process locking, so a shared file across concurrent
+  hosts could interleave; per-process files avoid that without new
+  locking machinery.
 
 ## 6. Backend lifecycle
 
@@ -133,12 +138,13 @@ transfers.
   `tools/call`, ping, notifications), so `local_mcp.py` implements the
   JSON-RPC framing directly — the same choice the desktop repo made
   for its test server.
-- **Lifecycle per the MCP spec, not ad hoc**: the design names a
-  supported protocol-version set (initially one pinned version). When a
-  client requests an unknown version the server RESPONDS with a version
-  it supports (the client decides whether to disconnect) — it does not
-  reject. The server waits for `notifications/initialized` before
-  serving tool traffic.
+- **Lifecycle per the MCP spec, not ad hoc**: the supported
+  protocol-version set for v1 is exactly `{"2025-06-18"}`. When a
+  client requests a version outside the set the server RESPONDS with
+  `2025-06-18` (the client decides whether to disconnect) — it does
+  not reject. The server waits for `notifications/initialized` before
+  serving tool traffic. Widening the set is a deliberate,
+  conformance-tested change.
 - **Explicit size caps** (the CLI lane has none on argument input, so
   the server enforces its own): maximum inbound JSON-RPC message and
   `args` object 1 MiB (matching the local-actions bridge cap), maximum
