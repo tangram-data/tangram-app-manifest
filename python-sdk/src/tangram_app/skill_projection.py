@@ -132,37 +132,49 @@ def _projection_problem(app_id: str, block: Any) -> str | None:
             or not isinstance(action.get("requiresConfirmation"), bool)
         ):
             return "projection action entry is malformed or unsafe to template"
+    freeform = block.get("freeform")
+    if freeform is not None:
+        if not isinstance(freeform, dict):
+            return "projection freeform is malformed"
+        if "description" in freeform and not isinstance(freeform["description"], str):
+            return "projection freeform is malformed"
+        docs = freeform.get("actionDocs")
+        if docs is not None and (
+            not isinstance(docs, dict)
+            or not all(isinstance(k, str) and isinstance(v, str) for k, v in docs.items())
+        ):
+            return "projection freeform is malformed"
     return None
 
 
-def _store_dir_ids() -> set[str]:
-    """Ids for every store directory carrying an install marker, whether or
-    not the marker parses — a corrupt record must read as 'still installed',
-    never as 'uninstalled'."""
+def _store_dir_names() -> set[str]:
+    """Encoded (`group__name`) directory names carrying an install marker,
+    whether or not the marker parses — a corrupt record must read as 'still
+    installed', never as 'uninstalled'. Comparison happens in the ENCODED
+    space: decoding `__` back to `/` is ambiguous for ids containing
+    underscores."""
     root = apps_root()
     if not root.is_dir():
         return set()
     return {
-        child.name.replace("__", "/", 1)
-        for child in root.iterdir()
-        if (child / ".install.json").is_file()
+        child.name for child in root.iterdir() if (child / ".install.json").is_file()
     }
 
 
 # ----------------------------------------------------------- allocation
 
 
-def _allocate_names(entries: list[dict], section: dict, live_ids: set[str]) -> dict[str, str]:
+def _allocate_names(entries: list[dict], section: dict, live_dirs: set[str]) -> dict[str, str]:
     """Persisted, deterministic skill-name allocation (sorted-id order on
     batches). Reservations are released only when the app leaves the STORE
-    (`live_ids`, which includes corrupt/unprojectable installs) — a record
-    that merely can't render right now keeps its name."""
+    (`live_dirs`, encoded dir names, which include corrupt/unprojectable
+    installs) — a record that merely can't render right now keeps its name."""
     names: dict[str, str] = {
         app_id: name
         for app_id, name in (section.get("names") or {}).items()
         if isinstance(app_id, str) and isinstance(name, str)
     }
-    for app_id in [existing for existing in names if existing not in live_ids]:
+    for app_id in [existing for existing in names if existing.replace("/", "__") not in live_dirs]:
         del names[app_id]
     taken = set(names.values())
     for entry in sorted(entries, key=lambda item: item["id"]):
@@ -185,11 +197,15 @@ def _allocate_names(entries: list[dict], section: dict, live_ids: set[str]) -> d
 # ------------------------------------------------------------ rendering
 
 
-def _yaml_safe(text: str, cap: int = 200) -> str:
-    """One line, control characters stripped, escaped for a double-quoted
-    YAML scalar."""
-    collapsed = " ".join(str(text).split())[:cap]
-    return collapsed.replace("\\", "\\\\").replace('"', '\\"')
+def _one_line(text: str, cap: int) -> str:
+    """One printable line: control characters dropped, whitespace collapsed."""
+    printable = "".join(ch for ch in str(text) if ch.isprintable() or ch.isspace())
+    return " ".join(printable.split())[:cap]
+
+
+def _yaml_quote(text: str) -> str:
+    """Escape ONCE for a double-quoted YAML scalar (input already one line)."""
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
 def _render(entry: dict, name: str, freeform: dict) -> str:
@@ -208,13 +224,13 @@ def _render(entry: dict, name: str, freeform: dict) -> str:
     )
     if freeform.get("description"):
         description = (
-            f"{_yaml_safe(freeform['description'])} — installed Tangram app "
+            f"{_one_line(freeform['description'], 200)} — installed Tangram app "
             f"{app_id}; use it through the tangram-app CLI."
         )
     lines = [
         "---",
         f"name: {name}",
-        f'description: "{_yaml_safe(description, cap=400)}"',
+        f"description: {_yaml_quote(_one_line(description, 400))}",
         "metadata:",
         f"  managed-by: {MANAGED_BY}",
         f"  tangram-app: {app_id}",
@@ -277,8 +293,22 @@ def _is_managed(directory: Path) -> bool:
     if closing < 0:
         return False
     frontmatter = head[4:closing].splitlines()
-    return f"  managed-by: {MANAGED_BY}" in frontmatter and any(
-        line.startswith("  tangram-app: ") for line in frontmatter
+    # The marker lines must sit inside the top-level `metadata:` section's
+    # OWN indented run — a foreign block scalar (`description: |`) holding
+    # look-alike indented lines never reaches here because its content ends
+    # at the next column-0 line.
+    try:
+        start = frontmatter.index("metadata:") + 1
+    except ValueError:
+        return False
+    run = []
+    for line in frontmatter[start:]:
+        if line.startswith("  "):
+            run.append(line)
+        else:
+            break
+    return f"  managed-by: {MANAGED_BY}" in run and any(
+        line.startswith("  tangram-app: ") for line in run
     )
 
 
@@ -371,8 +401,8 @@ def sync(*, apply: bool = True) -> dict:
         report["hint"] = "backfill/repair skipped apps with: tangram-app skill sync --rebuild"
     # Liveness comes from store DIRECTORIES, so a corrupt or unparseable
     # install record keeps both its name reservation and its projected skill.
-    live_ids = _store_dir_ids() | {entry["id"] for entry in entries}
-    names = _allocate_names(projectable, section, live_ids)
+    live_dirs = _store_dir_names() | {entry["id"].replace("/", "__") for entry in entries}
+    names = _allocate_names(projectable, section, live_dirs)
     approved = {digest for digest in section.get("approvedFreeform") or [] if isinstance(digest, str)}
 
     desired: dict[str, str] = {}
