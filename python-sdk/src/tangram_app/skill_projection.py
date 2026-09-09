@@ -152,7 +152,10 @@ def _store_dir_names() -> set[str]:
     whether or not the marker parses — a corrupt record must read as 'still
     installed', never as 'uninstalled'. Comparison happens in the ENCODED
     space: decoding `__` back to `/` is ambiguous for ids containing
-    underscores."""
+    underscores. The encoding itself is the store's and is not injective
+    (`a_/b` and `a/_b` collide) — but such ids also collide on DISK in the
+    store, and a collision here only over-protects (a reservation or stale
+    skill outlives its app; nothing is wrongly deleted)."""
     root = apps_root()
     if not root.is_dir():
         return set()
