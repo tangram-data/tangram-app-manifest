@@ -50,7 +50,7 @@ def install_skills(args: argparse.Namespace) -> dict[str, Any]:
                     if scope == "codex"
                     else packaged_skill_target(name, skills_root(scope))
                 )
-                if target.exists() and not packaged_skill_current(name, target):
+                if (target.is_symlink() or target.exists()) and not packaged_skill_current(name, target):
                     raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
 
     installed: list[dict[str, str]] = []

@@ -183,6 +183,24 @@ class InstallBuilderSkillTest(unittest.TestCase):
                 self.assertEqual(cli.main(["skill", "install", "--force"]), 0)
                 self.assertTrue((fake_home / ".claude" / "skills" / BUILDER_SKILL_NAME / "SKILL.md").is_file())
 
+    def test_dangling_symlink_refuses_and_force_replaces_the_link(self):
+        from tangram_app import cli, cli_skills, skills
+
+        with tempfile.TemporaryDirectory() as directory:
+            fake_home = Path(directory)
+            link = fake_home / ".codex" / "prompts" / "tangram-app-builder.md"
+            link.parent.mkdir(parents=True)
+            link.symlink_to(fake_home / "elsewhere.md")
+            with mock.patch.object(cli_skills.Path, "home", return_value=fake_home), mock.patch.object(
+                skills.Path, "home", return_value=fake_home
+            ):
+                self.assertNotEqual(cli.main(["skill", "install"]), 0)
+                self.assertFalse((fake_home / ".claude").exists())
+                self.assertEqual(cli.main(["skill", "install", "--force"]), 0)
+            self.assertFalse(link.is_symlink())
+            self.assertFalse((fake_home / "elsewhere.md").exists())
+            self.assertEqual(link.read_text(encoding="utf-8"), builder_skill_text())
+
     def test_nameless_install_honours_a_single_scope(self):
         code, home, payload = self._bare_install(["skill", "install", "--user"])
         self.assertEqual(code, 0)

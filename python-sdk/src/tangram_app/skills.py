@@ -190,12 +190,16 @@ def _identical_copy(target: Path, text: str) -> bool:
 
 
 def _write_skill(target: Path, text: str, *, force: bool) -> Path:
-    if target.exists() and not force:
+    # is_symlink() as well as exists(): a DANGLING symlink fails exists() but
+    # a write would still follow it and land elsewhere.
+    if (target.is_symlink() or target.exists()) and not force:
         # An identical copy is a no-op, so reinstalls stay idempotent; only a
         # DIVERGED copy (e.g. local edits) needs the explicit --force consent.
         if _identical_copy(target, text):
             return target
         raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
+    if target.is_symlink():
+        target.unlink()  # --force replaces the link itself, never writes through it
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")
     return target
