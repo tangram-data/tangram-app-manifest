@@ -101,9 +101,11 @@ def build_parser() -> _Parser:
     for verb, has_name in (("install", True), ("install-builder", False)):
         install = skill_commands.add_parser(verb)
         if has_name:
-            install.add_argument("name")
+            # Optional: bare `skill install` sets up every packaged skill for
+            # both Claude Code (user scope) and Codex in one go.
+            install.add_argument("name", nargs="?")
         scope = install.add_mutually_exclusive_group()
-        scope.add_argument("--project", default=".")
+        scope.add_argument("--project", default=None)
         scope.add_argument("--user", action="store_true")
         scope.add_argument("--codex", action="store_true")
         install.add_argument("--force", action="store_true")

@@ -163,6 +163,10 @@ def install_builder_skill_codex(codex_home: str | Path | None = None, *, force: 
 
 def _write_skill(target: Path, text: str, *, force: bool) -> Path:
     if target.exists() and not force:
+        # An identical copy is a no-op, so reinstalls stay idempotent; only a
+        # DIVERGED copy (e.g. local edits) needs the explicit --force consent.
+        if target.is_file() and target.read_text(encoding="utf-8") == text:
+            return target
         raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(text, encoding="utf-8")

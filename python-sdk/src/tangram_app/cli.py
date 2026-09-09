@@ -40,13 +40,10 @@ from .cli_targets import (
     handle_app_list,
     handle_app_uninstall,
 )
+from .cli_skills import install_skills
 from .local_store import resolve_target
 from .skills import (
-    BUILDER_SKILL_NAME,
-    configure_codex_agents,
     generate_skill,
-    install_packaged_skill,
-    install_packaged_skill_codex,
     verify_skill,
 )
 from .project import TangramProject
@@ -377,31 +374,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             "bindings": len(app.tools()),
         }
     if args.command == "skill" and args.skill_command in ("install", "install-builder"):
-        name = getattr(args, "name", None) or BUILDER_SKILL_NAME
-        if args.codex:
-            target = install_packaged_skill_codex(name, force=args.force)
-            result = {
-                "skill": str(target.resolve()),
-                "scope": "codex",
-                "hint": f"invoke as /{name}",
-            }
-            if not getattr(args, "no_agents", False):
-                agents = configure_codex_agents()
-                if agents is not None:
-                    result["agents"] = str(agents.resolve())
-                    result["hint"] = (
-                        f"invoke as /{name}; Codex will also use Tangram skills "
-                        f"automatically via {agents}"
-                    )
-            return result
-        if args.user:
-            skills_root = Path.home() / ".claude" / "skills"
-            scope = "user"
-        else:
-            skills_root = Path(args.project) / ".claude" / "skills"
-            scope = "project"
-        target = install_packaged_skill(name, skills_root, force=args.force)
-        return {"skill": str(target.resolve()), "scope": scope}
+        return install_skills(args)
     raise CliArgumentsError("unsupported command")
 
 

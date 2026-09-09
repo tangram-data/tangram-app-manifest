@@ -8,6 +8,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 from unittest import mock
 
@@ -57,9 +59,12 @@ class InstallBuilderSkillTest(unittest.TestCase):
             target = install_builder_skill(root)
             self.assertEqual(target, root / BUILDER_SKILL_NAME / "SKILL.md")
             self.assertEqual(target.read_text(encoding="utf-8"), builder_skill_text())
+            # Identical copy: reinstall is an idempotent no-op.
+            self.assertEqual(install_builder_skill(root), target)
+            # Diverged copy: refuse without --force.
+            target.write_text("stale", encoding="utf-8")
             with self.assertRaises(FileExistsError):
                 install_builder_skill(root)
-            target.write_text("stale", encoding="utf-8")
             install_builder_skill(root, force=True)
             self.assertEqual(target.read_text(encoding="utf-8"), builder_skill_text())
 
@@ -114,15 +119,60 @@ class InstallBuilderSkillTest(unittest.TestCase):
             self.assertNotEqual(cli.main(["skill", "install", "bogus", "--project", str(project)]), 0)
 
     def test_user_scope_targets_home(self):
-        from tangram_app import cli
+        from tangram_app import cli, cli_skills
 
         with tempfile.TemporaryDirectory() as directory:
             fake_home = Path(directory)
-            with mock.patch.object(cli.Path, "home", return_value=fake_home):
+            with mock.patch.object(cli_skills.Path, "home", return_value=fake_home):
                 code = cli.main(["skill", "install-builder", "--user"])
             self.assertEqual(code, 0)
             installed = fake_home / ".claude" / "skills" / BUILDER_SKILL_NAME / "SKILL.md"
             self.assertTrue(installed.is_file())
+
+    def _bare_install(self, argv):
+        from tangram_app import cli, cli_skills, skills
+
+        directory = tempfile.mkdtemp()
+        fake_home = Path(directory)
+        stdout = StringIO()
+        with mock.patch.object(cli_skills.Path, "home", return_value=fake_home), mock.patch.object(
+            skills.Path, "home", return_value=fake_home
+        ):
+            with redirect_stdout(stdout):
+                code = cli.main(argv)
+        payload = json.loads(stdout.getvalue()) if stdout.getvalue() else {}
+        return code, fake_home, payload
+
+    def test_bare_install_sets_up_claude_and_codex(self):
+        code, home, payload = self._bare_install(["skill", "install"])
+        self.assertEqual(code, 0)
+        for name in ("tangram-app-builder", "tangram-connector-builder"):
+            self.assertTrue((home / ".claude" / "skills" / name / "SKILL.md").is_file())
+            self.assertTrue((home / ".codex" / "prompts" / f"{name}.md").is_file())
+        installed = payload["data"]["installed"]
+        self.assertEqual(len(installed), 4)
+        self.assertEqual({row["scope"] for row in installed}, {"user", "codex"})
+        self.assertIn("agents", payload["data"])
+        self.assertTrue((home / ".codex" / "AGENTS.md").is_file())
+
+    def test_bare_install_is_rerunnable(self):
+        from tangram_app import cli, cli_skills, skills
+
+        with tempfile.TemporaryDirectory() as directory:
+            fake_home = Path(directory)
+            with mock.patch.object(cli_skills.Path, "home", return_value=fake_home), mock.patch.object(
+                skills.Path, "home", return_value=fake_home
+            ):
+                self.assertEqual(cli.main(["skill", "install"]), 0)
+                self.assertEqual(cli.main(["skill", "install"]), 0)
+
+    def test_nameless_install_honours_a_single_scope(self):
+        code, home, payload = self._bare_install(["skill", "install", "--user"])
+        self.assertEqual(code, 0)
+        for name in ("tangram-app-builder", "tangram-connector-builder"):
+            self.assertTrue((home / ".claude" / "skills" / name / "SKILL.md").is_file())
+        self.assertFalse((home / ".codex").exists())
+        self.assertEqual({row["scope"] for row in payload["data"]["installed"]}, {"user"})
 
 
 class CodexAgentsTest(unittest.TestCase):

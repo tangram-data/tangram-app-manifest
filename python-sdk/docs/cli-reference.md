@@ -47,7 +47,9 @@ Translations match the native front door: `app ls` → `app list`,
 | `call TARGET ID --connected [--endpoint URL]` | Execute a connector action against its vendor endpoint with the stored token |
 | `disconnect TARGET` | Remove the stored developer connection |
 | `skill generate TARGET --output DIR` | Generate an integrity-locked agent skill |
-| `skill install-builder [--project DIR \| --user] [--force]` | Install the bundled app-authoring skill into `.claude/skills/` |
+| `skill install` | Install EVERY bundled authoring skill for both Claude Code (`~/.claude/skills/`) and Codex (`~/.codex/prompts/` + AGENTS.md pointer) — idempotent machine setup |
+| `skill install [NAME] [--project DIR \| --user \| --codex] [--force]` | Install one bundled skill (or all, when NAME is omitted) into a single scope; a NAME without a scope defaults to `--project .` |
+| `skill install-builder [--project DIR \| --user \| --codex] [--force]` | Alias for `skill install tangram-app-builder` |
 
 `TARGET` is a package directory, a capability graph JSON file, or an
 installed app reference — the app id (`com.example/orders`) or its bare
