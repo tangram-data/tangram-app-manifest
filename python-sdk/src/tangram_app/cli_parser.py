@@ -107,6 +107,11 @@ def build_parser() -> _Parser:
         scope.add_argument("--user", action="store_true")
         scope.add_argument("--codex", action="store_true")
         install.add_argument("--force", action="store_true")
+        install.add_argument(
+            "--no-agents",
+            action="store_true",
+            help="with --codex, skip updating ~/.codex/AGENTS.md",
+        )
     return parser
 
 

@@ -125,5 +125,70 @@ class InstallBuilderSkillTest(unittest.TestCase):
             self.assertTrue(installed.is_file())
 
 
+class CodexAgentsTest(unittest.TestCase):
+    def _install(self, argv):
+        from tangram_app import cli, skills
+
+        directory = tempfile.mkdtemp()
+        fake_home = Path(directory)
+        with mock.patch.object(cli.Path, "home", return_value=fake_home), mock.patch.object(
+            skills.Path, "home", return_value=fake_home
+        ):
+            code = cli.main(argv)
+        return code, fake_home
+
+    def test_codex_install_writes_agents_pointer(self):
+        code, home = self._install(["skill", "install-builder", "--codex"])
+        self.assertEqual(code, 0)
+        agents = (home / ".codex" / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertIn("~/.codex/prompts/tangram-app-builder.md", agents)
+        self.assertIn("<!-- >>> tangram skills >>> -->", agents)
+
+    def test_no_agents_flag_skips_the_pointer(self):
+        code, home = self._install(["skill", "install-builder", "--codex", "--no-agents"])
+        self.assertEqual(code, 0)
+        self.assertTrue((home / ".codex" / "prompts" / f"{BUILDER_SKILL_NAME}.md").is_file())
+        self.assertFalse((home / ".codex" / "AGENTS.md").exists())
+
+    def test_block_is_idempotent_and_preserves_user_content(self):
+        from tangram_app import skills
+
+        directory = tempfile.mkdtemp()
+        home = Path(directory) / ".codex"
+        (home / "prompts").mkdir(parents=True)
+        for name in PACKAGED_SKILLS:
+            (home / "prompts" / f"{name}.md").write_text("x", encoding="utf-8")
+        agents = home / "AGENTS.md"
+        agents.write_text("# my notes\nkeep this\n", encoding="utf-8")
+
+        skills.configure_codex_agents(home)
+        first = agents.read_text(encoding="utf-8")
+        skills.configure_codex_agents(home)
+        second = agents.read_text(encoding="utf-8")
+
+        self.assertEqual(first, second)  # idempotent — no churn on re-run
+        self.assertTrue(first.startswith("# my notes\nkeep this\n"))
+        self.assertEqual(first.count("<!-- >>> tangram skills >>> -->"), 1)
+        # codex_home here is outside $HOME, so the reference is the absolute
+        # prompt path (the ~/ form is covered by the CLI tests above).
+        for name in PACKAGED_SKILLS:
+            self.assertIn(str(home / "prompts" / f"{name}.md"), first)
+
+    def test_unreadable_agents_is_left_untouched(self):
+        from tangram_app import skills
+
+        directory = tempfile.mkdtemp()
+        home = Path(directory) / ".codex"
+        (home / "prompts").mkdir(parents=True)
+        (home / "prompts" / f"{BUILDER_SKILL_NAME}.md").write_text("x", encoding="utf-8")
+        agents = home / "AGENTS.md"
+        original = b"\xff\xfe not valid utf-8"
+        agents.write_bytes(original)
+
+        result = skills.configure_codex_agents(home)
+        self.assertIsNone(result)
+        self.assertEqual(agents.read_bytes(), original)  # never clobbered
+
+
 if __name__ == "__main__":
     unittest.main()

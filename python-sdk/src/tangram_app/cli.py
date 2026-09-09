@@ -43,6 +43,7 @@ from .cli_targets import (
 from .local_store import resolve_target
 from .skills import (
     BUILDER_SKILL_NAME,
+    configure_codex_agents,
     generate_skill,
     install_packaged_skill,
     install_packaged_skill_codex,
@@ -379,12 +380,20 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         name = getattr(args, "name", None) or BUILDER_SKILL_NAME
         if args.codex:
             target = install_packaged_skill_codex(name, force=args.force)
-            return {
+            result = {
                 "skill": str(target.resolve()),
                 "scope": "codex",
-                "hint": f"invoke as /{name}; for automatic use, tell "
-                "~/.codex/AGENTS.md to read this file for Tangram tasks",
+                "hint": f"invoke as /{name}",
             }
+            if not getattr(args, "no_agents", False):
+                agents = configure_codex_agents()
+                if agents is not None:
+                    result["agents"] = str(agents.resolve())
+                    result["hint"] = (
+                        f"invoke as /{name}; Codex will also use Tangram skills "
+                        f"automatically via {agents}"
+                    )
+            return result
         if args.user:
             skills_root = Path.home() / ".claude" / "skills"
             scope = "user"

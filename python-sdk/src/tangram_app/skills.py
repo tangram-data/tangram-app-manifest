@@ -49,6 +49,100 @@ def install_packaged_skill_codex(
     return _write_skill(home / "prompts" / f"{name}.md", text, force=force)
 
 
+CODEX_AGENTS_BEGIN = "<!-- >>> tangram skills >>> -->"
+CODEX_AGENTS_END = "<!-- <<< tangram skills <<< -->"
+
+# What each packaged skill is for, phrased to follow "Before …," in the guide.
+_CODEX_SKILL_GUIDANCE = {
+    "tangram-app-builder": "building or modifying a Tangram app (manifest, actions, FastAPI backend)",
+    "tangram-connector-builder": (
+        "building a Tangram connector that maps an external SaaS HTTP API into governed actions"
+    ),
+}
+
+
+def configure_codex_agents(codex_home: str | Path | None = None) -> Path | None:
+    """Point Codex at installed Tangram skill prompts by maintaining a marked,
+    idempotent block in `<codex-home>/AGENTS.md`, so Codex reads the right guide
+    automatically instead of only on an explicit `/<name>` invocation. The block
+    lists every packaged skill whose prompt is present under `prompts/`.
+
+    Returns the AGENTS.md path when written or already current, or None when no
+    packaged prompt is installed or the existing AGENTS.md can't be read (which
+    is left untouched rather than risk clobbering it)."""
+    home = Path(codex_home) if codex_home is not None else Path.home() / ".codex"
+    prompts = home / "prompts"
+    present = [name for name in PACKAGED_SKILLS if (prompts / f"{name}.md").is_file()]
+    if not present:
+        return None
+    existing = _read_text_or_none(home / "AGENTS.md")
+    if existing is None:
+        return None
+    block = _codex_agents_block(present, home)
+    merged = _merge_marked_block(existing, block, CODEX_AGENTS_BEGIN, CODEX_AGENTS_END)
+    agents = home / "AGENTS.md"
+    if merged != existing:
+        agents.parent.mkdir(parents=True, exist_ok=True)
+        agents.write_text(merged, encoding="utf-8")
+    return agents
+
+
+def _codex_agents_block(names: list[str], home: Path) -> str:
+    lines = [CODEX_AGENTS_BEGIN, "## Tangram tasks", ""]
+    for name in names:
+        ref = _tilde_path(home / "prompts" / f"{name}.md")
+        what = _CODEX_SKILL_GUIDANCE.get(name, f"working with the {name} skill")
+        lines.append(f"- Before {what}, read and follow `{ref}` first.")
+    lines.append(CODEX_AGENTS_END)
+    return "\n".join(lines) + "\n"
+
+
+def _tilde_path(path: Path) -> str:
+    try:
+        return "~/" + str(path.relative_to(Path.home()))
+    except ValueError:
+        return str(path)
+
+
+def _read_text_or_none(path: Path) -> str | None:
+    """Existing content, "" when absent, or None when the file exists but can't
+    be read — the caller must NOT write in that case, since a write would
+    truncate a file we couldn't read."""
+    try:
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+    except (OSError, UnicodeDecodeError):
+        return None
+
+
+def _merge_marked_block(existing: str, block: str, begin: str, end: str) -> str:
+    """Replace the begin..end region (markers matched as whole lines) in place,
+    else append. Content outside the marker pair is preserved verbatim, and a
+    marker-like substring inside other content is never treated as a boundary."""
+    lines = existing.splitlines(keepends=True)
+    begin_idx = _marker_line(lines, begin)
+    if begin_idx is not None:
+        end_idx = _marker_line(lines, end, start=begin_idx + 1)
+        if end_idx is not None:
+            head = "".join(lines[:begin_idx])
+            tail = "".join(lines[end_idx + 1 :])
+            return f"{head}{block}{tail}"
+    out = existing
+    if out and not out.endswith("\n"):
+        out += "\n"
+    if out:
+        out += "\n"
+    return out + block
+
+
+def _marker_line(lines: list[str], marker: str, start: int = 0) -> int | None:
+    for index in range(start, len(lines)):
+        if lines[index].rstrip("\n") == marker:
+            return index
+    return None
+
+
 def builder_skill_text() -> str:
     return packaged_skill_text(BUILDER_SKILL_NAME)
 
