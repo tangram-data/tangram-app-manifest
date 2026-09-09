@@ -115,6 +115,14 @@ metadata:
   package-digest: sha256:…
 ```
 
+Identifiers are NOT trusted implicitly: app validation does not
+charset-constrain ids or action names, so the renderer validates every
+templated identifier against safe patterns and skips (with a report)
+any record that fails — an app id cannot inject YAML, an action ref
+cannot inject body instructions. An APPROVED free-form description may
+join the frontmatter `description` (it is the router), but only inside
+a double-quoted, control-stripped, escaped YAML scalar.
+
 **Ownership is per skill DIRECTORY, checked entry by entry.** A
 directory is managed only when its `SKILL.md` carries the marker AND
 every entry in it is one the renderer writes; anything else (extra

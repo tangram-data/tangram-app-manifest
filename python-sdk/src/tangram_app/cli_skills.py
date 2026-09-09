@@ -71,12 +71,15 @@ def install_skills(args: argparse.Namespace) -> dict[str, Any]:
 
     # Preflight every destination so a diverged copy refuses BEFORE anything
     # is written — a multi-install never leaves a partial setup behind.
-    if not args.force:
-        for scope in scopes:
-            for name in names:
-                for target in scope_targets(scope, name):
-                    if (target.is_symlink() or target.exists()) and not packaged_skill_current(name, target):
-                        raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
+    for scope in scopes:
+        for name in names:
+            for target in scope_targets(scope, name):
+                if target.name == "SKILL.md" and target.parent.is_symlink():
+                    raise FileExistsError(
+                        f"skill directory {target.parent} is a symlink — refusing to write through it"
+                    )
+                if not args.force and (target.is_symlink() or target.exists()) and not packaged_skill_current(name, target):
+                    raise FileExistsError(f"skill already installed at {target} (use --force to replace)")
 
     installed: list[dict[str, str]] = []
     agents: Path | None = None

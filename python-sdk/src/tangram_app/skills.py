@@ -49,7 +49,10 @@ def install_packaged_skill(name: str, skills_root: str | Path, *, force: bool = 
     """Copy a bundled skill under `skills_root` (a `.claude/skills` directory).
     Never overwrites unless `force`."""
     text = packaged_skill_text(name)
-    return _write_skill(packaged_skill_target(name, skills_root), text, force=force)
+    target = packaged_skill_target(name, skills_root)
+    if target.parent.is_symlink():
+        raise FileExistsError(f"skill directory {target.parent} is a symlink — refusing to write through it")
+    return _write_skill(target, text, force=force)
 
 
 def install_packaged_skill_codex(

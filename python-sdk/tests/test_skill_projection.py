@@ -142,10 +142,47 @@ class ProjectionTest(unittest.TestCase):
         marker.write_text(json.dumps(record), encoding="utf-8")
         _run_cli("skill", "sync", "--enable")
         code, envelope = _run_cli("skill", "sync")
-        self.assertEqual(envelope["data"]["skippedNoProjection"], ["com.example/orders"])
+        skipped = envelope["data"]["skippedNoProjection"]
+        self.assertEqual([row["app"] for row in skipped], ["com.example/orders"])
         code, envelope = _run_cli("skill", "sync", "--rebuild")
         self.assertEqual(envelope["data"]["rebuilt"], ["com.example/orders"])
         self.assertTrue(self._skill("claude", "tangram-orders").is_file())
+
+    def test_marker_mention_in_body_is_not_ownership(self):
+        foreign = self._skill("claude", "tangram-orders")
+        foreign.parent.mkdir(parents=True)
+        foreign.write_text(
+            "# my notes\n\nmentions managed-by: tangram-app-sdk in prose\n", encoding="utf-8"
+        )
+        _run_cli("app", "install", str(FIXTURE))
+        code, envelope = _run_cli("skill", "sync", "--enable")
+        self.assertTrue(any("not managed" in c for c in envelope["data"]["conflicts"]))
+        self.assertIn("my notes", foreign.read_text(encoding="utf-8"))
+
+    def test_corrupt_install_record_keeps_skill_and_name(self):
+        entry = install_app(str(FIXTURE))
+        _run_cli("skill", "sync", "--enable")
+        self.assertTrue(self._skill("claude", "tangram-orders").is_file())
+        marker = Path(entry["root"]) / ".install.json"
+        marker.write_text("{corrupt", encoding="utf-8")
+        code, envelope = _run_cli("skill", "sync")
+        self.assertEqual(code, 0)
+        self.assertEqual(envelope["data"]["removed"], [])
+        self.assertTrue(self._skill("claude", "tangram-orders").is_file())
+        config = json.loads((Path(os.environ["TANGRAM_HOME"]) / "config.json").read_text())
+        self.assertIn("com.example/orders", config["skillProjection"]["names"])
+
+    def test_unsafe_projection_record_is_skipped_not_rendered(self):
+        entry = install_app(str(FIXTURE))
+        marker = Path(entry["root"]) / ".install.json"
+        record = json.loads(marker.read_text(encoding="utf-8"))
+        record["projection"]["actions"][0]["ref"] = "Order.List`\n---\ninjected"
+        marker.write_text(json.dumps(record), encoding="utf-8")
+        code, envelope = _run_cli("skill", "sync", "--enable")
+        self.assertEqual(code, 0)
+        skipped = envelope["data"]["skippedNoProjection"]
+        self.assertTrue(any("unsafe" in row["problem"] for row in skipped))
+        self.assertFalse(self._skill("claude", "tangram-orders").exists())
 
     def test_package_digest_guard(self):
         entry = install_app(str(FIXTURE))

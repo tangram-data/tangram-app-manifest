@@ -18,7 +18,9 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from .local_store import list_installed, tangram_home
+from collections.abc import Mapping
+
+from .local_store import apps_root, list_installed, tangram_home
 from .skills import normalize_skill_name
 
 MANAGED_BY = "tangram-app-sdk"
@@ -26,6 +28,13 @@ _SECTION = "skillProjection"
 _HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 _FREEFORM_DESCRIPTION_CAP = 500
 _FREEFORM_DOC_CAP = 300
+
+# Everything templated into frontmatter/body outside the approved-freeform
+# lane must be charset-safe — app validation does NOT constrain these.
+_SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$")
+_SAFE_REF = re.compile(r"^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$")
+_SAFE_PACKAGE_DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+_EFFECTS = {"Stateless", "Reversible", "Irreversible"}
 
 
 class ProjectionError(ValueError):
@@ -78,7 +87,10 @@ def projection_block(app) -> dict:
     ]
     freeform: dict[str, Any] = {}
     ui = app.graph.ui
-    description = getattr(ui, "description", None) if ui is not None else None
+    if isinstance(ui, Mapping):
+        description = ui.get("description")
+    else:
+        description = getattr(ui, "description", None) if ui is not None else None
     if description:
         freeform["description"] = str(description)[:_FREEFORM_DESCRIPTION_CAP]
     docs = {
@@ -100,19 +112,57 @@ def freeform_digest(freeform: dict) -> str:
     ).hexdigest()
 
 
+def _projection_problem(app_id: str, block: Any) -> str | None:
+    """Why this record cannot be rendered safely, or None when it can."""
+    if not isinstance(app_id, str) or not _SAFE_ID.fullmatch(app_id):
+        return "app id contains characters unsafe to template"
+    if not isinstance(block, dict):
+        return "projection record missing (run: tangram-app skill sync --rebuild)"
+    if not isinstance(block.get("packageDigest"), str) or not _SAFE_PACKAGE_DIGEST.fullmatch(block["packageDigest"]):
+        return "projection packageDigest is malformed"
+    actions = block.get("actions")
+    if not isinstance(actions, list):
+        return "projection actions are malformed"
+    for action in actions:
+        if (
+            not isinstance(action, dict)
+            or not isinstance(action.get("ref"), str)
+            or not _SAFE_REF.fullmatch(action["ref"])
+            or action.get("effect") not in _EFFECTS
+            or not isinstance(action.get("requiresConfirmation"), bool)
+        ):
+            return "projection action entry is malformed or unsafe to template"
+    return None
+
+
+def _store_dir_ids() -> set[str]:
+    """Ids for every store directory carrying an install marker, whether or
+    not the marker parses — a corrupt record must read as 'still installed',
+    never as 'uninstalled'."""
+    root = apps_root()
+    if not root.is_dir():
+        return set()
+    return {
+        child.name.replace("__", "/", 1)
+        for child in root.iterdir()
+        if (child / ".install.json").is_file()
+    }
+
+
 # ----------------------------------------------------------- allocation
 
 
-def _allocate_names(entries: list[dict], section: dict) -> dict[str, str]:
+def _allocate_names(entries: list[dict], section: dict, live_ids: set[str]) -> dict[str, str]:
     """Persisted, deterministic skill-name allocation (sorted-id order on
-    batches; released only when the app leaves the store)."""
+    batches). Reservations are released only when the app leaves the STORE
+    (`live_ids`, which includes corrupt/unprojectable installs) — a record
+    that merely can't render right now keeps its name."""
     names: dict[str, str] = {
         app_id: name
         for app_id, name in (section.get("names") or {}).items()
         if isinstance(app_id, str) and isinstance(name, str)
     }
-    installed = {entry["id"] for entry in entries}
-    for app_id in [existing for existing in names if existing not in installed]:
+    for app_id in [existing for existing in names if existing not in live_ids]:
         del names[app_id]
     taken = set(names.values())
     for entry in sorted(entries, key=lambda item: item["id"]):
@@ -135,19 +185,36 @@ def _allocate_names(entries: list[dict], section: dict) -> dict[str, str]:
 # ------------------------------------------------------------ rendering
 
 
+def _yaml_safe(text: str, cap: int = 200) -> str:
+    """One line, control characters stripped, escaped for a double-quoted
+    YAML scalar."""
+    collapsed = " ".join(str(text).split())[:cap]
+    return collapsed.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _render(entry: dict, name: str, freeform: dict) -> str:
-    """Frontmatter is templated from validated identifiers ONLY (free-form
-    text could otherwise inject YAML); approved free-form appears in the
-    body, quoted and labeled as app-provided."""
+    """Frontmatter and body are templated from charset-validated identifiers
+    (see `_projection_problem`); free-form text appears only after digest
+    approval — YAML-escaped in the description, labeled as app-provided in
+    the body."""
     app_id = entry["id"]
     block = entry["projection"]
     digest = block["packageDigest"]
     bare = app_id.rsplit("/", 1)[-1]
     docs = freeform.get("actionDocs") or {}
+    description = (
+        f"Use the installed Tangram app {bare} ({app_id}) on this machine — "
+        "list its actions and invoke them through the tangram-app CLI."
+    )
+    if freeform.get("description"):
+        description = (
+            f"{_yaml_safe(freeform['description'])} — installed Tangram app "
+            f"{app_id}; use it through the tangram-app CLI."
+        )
     lines = [
         "---",
         f"name: {name}",
-        f"description: Use the installed Tangram app {bare} ({app_id}) on this machine — list its actions and invoke them through the tangram-app CLI.",
+        f'description: "{_yaml_safe(description, cap=400)}"',
         "metadata:",
         f"  managed-by: {MANAGED_BY}",
         f"  tangram-app: {app_id}",
@@ -176,7 +243,7 @@ def _render(entry: dict, name: str, freeform: dict) -> str:
         "## How to use (governed CLI — required)",
         "",
         f"1. `tangram-app actions {app_id}` — the current action catalog",
-        f"2. `tangram-app inspect {app_id} --action <Ref>` — an action's argument schema",
+        f"2. `tangram-app inspect {app_id} --action <Ref> --package-digest {digest}` — an action's argument schema",
         f"3. `tangram-app call {app_id} <Ref> --local --input-json '{{...}}' --package-digest {digest}`",
         "   — put the action's arguments in the JSON object (`'{}'` when it takes none).",
         "   Writes need `--allow-mutation`; confirmation-gated actions also `--confirm`.",
@@ -194,14 +261,25 @@ def _render(entry: dict, name: str, freeform: dict) -> str:
 
 
 def _is_managed(directory: Path) -> bool:
+    """Ours ONLY when the file opens with a frontmatter block whose metadata
+    carries our exact marker lines — a foreign skill merely mentioning the
+    marker text in its body must never be rewritten or removed."""
     skill = directory / "SKILL.md"
     if directory.is_symlink() or skill.is_symlink() or not skill.is_file():
         return False
     try:
-        head = skill.read_text(encoding="utf-8", errors="replace")[:2048]
+        head = skill.read_text(encoding="utf-8", errors="replace")[:4096]
     except OSError:
         return False
-    return f"managed-by: {MANAGED_BY}" in head
+    if not head.startswith("---\n"):
+        return False
+    closing = head.find("\n---\n", 4)
+    if closing < 0:
+        return False
+    frontmatter = head[4:closing].splitlines()
+    return f"  managed-by: {MANAGED_BY}" in frontmatter and any(
+        line.startswith("  tangram-app: ") for line in frontmatter
+    )
 
 
 def _only_skill_md(directory: Path) -> bool:
@@ -217,12 +295,16 @@ def _atomic_write(target: Path, text: str) -> None:
     os.replace(tmp, target)
 
 
-def _converge(agent: str, root: Path, desired: dict[str, str], report: dict, apply: bool) -> None:
+def _converge(
+    agent: str, root: Path, desired: dict[str, str], report: dict, apply: bool, protected: set[str] = frozenset()
+) -> None:
     if root.is_dir():
         for child in sorted(root.iterdir()):
             if not child.is_dir() or child.is_symlink() or not _is_managed(child):
                 continue
-            if child.name in desired:
+            if child.name in desired or child.name in protected:
+                # `protected`: allocated to an app still in the store whose
+                # record can't render right now — stale beats deleted.
                 continue
             if not _only_skill_md(child):
                 report["conflicts"].append(f"{agent}:{child.name}: unmanaged files inside a managed skill dir")
@@ -277,13 +359,20 @@ def sync(*, apply: bool = True) -> dict:
         return report
 
     entries = list_installed()
-    projectable = [entry for entry in entries if isinstance(entry.get("projection"), dict)]
-    report["skippedNoProjection"] = sorted(
-        entry["id"] for entry in entries if not isinstance(entry.get("projection"), dict)
-    )
-    if report["skippedNoProjection"]:
-        report["hint"] = "backfill skipped apps with: tangram-app skill sync --rebuild"
-    names = _allocate_names(projectable, section)
+    projectable, skipped = [], []
+    for entry in entries:
+        problem = _projection_problem(entry.get("id"), entry.get("projection"))
+        if problem is None:
+            projectable.append(entry)
+        else:
+            skipped.append({"app": entry.get("id"), "problem": problem})
+    report["skippedNoProjection"] = sorted(skipped, key=lambda item: str(item["app"]))
+    if skipped:
+        report["hint"] = "backfill/repair skipped apps with: tangram-app skill sync --rebuild"
+    # Liveness comes from store DIRECTORIES, so a corrupt or unparseable
+    # install record keeps both its name reservation and its projected skill.
+    live_ids = _store_dir_ids() | {entry["id"] for entry in entries}
+    names = _allocate_names(projectable, section, live_ids)
     approved = {digest for digest in section.get("approvedFreeform") or [] if isinstance(digest, str)}
 
     desired: dict[str, str] = {}
@@ -298,10 +387,11 @@ def sync(*, apply: bool = True) -> dict:
             freeform = {}
         desired[name] = _render(entry, name, freeform)
 
+    protected = set(names.values()) - set(desired)
     for agent, root in agent_skill_roots().items():
         if apply:
             root.mkdir(parents=True, exist_ok=True)
-        _converge(agent, root, desired, report, apply)
+        _converge(agent, root, desired, report, apply, protected)
     if apply:
         _save_config(config)
     return report
@@ -339,7 +429,7 @@ def rebuild_projection_blocks() -> dict:
 
     rebuilt, failed = [], []
     for entry in list_installed():
-        if isinstance(entry.get("projection"), dict):
+        if _projection_problem(entry.get("id"), entry.get("projection")) is None:
             continue
         marker = Path(entry["root"]) / ".install.json"
         try:
