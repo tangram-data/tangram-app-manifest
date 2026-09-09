@@ -72,46 +72,84 @@ skills deliberately do NOT reuse that shape: a second graph copy per
 agent home drifts, and the runner assumes a project layout. Instead a
 projected skill is:
 
-- `SKILL.md` — frontmatter (name, description, managed marker,
-  install digest) + body: what the app is, the action catalog (ref,
-  effect, requiresConfirmation, doc — rendered from the graph), and
-  the exact CLI loop for THIS app (`tangram-app actions <id>`,
-  `call <id> <Ref> --local --input-json '{…}'`, mutation flags,
-  never-curl). The store remains the single source of truth for
-  schemas; the skill tells the agent to ask the CLI, not to trust a
-  cached copy.
+- `SKILL.md` — frontmatter (name, description, Tangram fields under
+  `metadata:`) + body: what the app is, the action catalog (ref,
+  effect, requiresConfirmation, doc), and the exact CLI loop for THIS
+  app: `tangram-app actions <id>`, **`inspect <id> --action <Ref>` for
+  the argument schema** (the `actions` catalog carries no schemas —
+  without this step agents cannot build nontrivial `--input-json`),
+  then `call <id> <Ref> --local --input-json '{…}'` with mutation
+  flags and the never-curl rule.
 
-Frontmatter marker (ownership, mirrored from the wrapper/AGENTS.md
-pattern):
+**Rendering inputs must exist first.** Today `.install.json` records
+only id/version/root/source/timestamp and the capability graph has no
+manifest description — the fields this design renders are not in the
+store record. Decision: `app install`/`--upgrade` (which already
+validate the package) write a validated **projection block** into
+`.install.json` (description, action catalog summary, digest);
+`skill sync` renders from the record only and never recompiles.
+Installs predating the block are skipped with a note in the sync
+report; `skill sync --rebuild` recompiles them once to backfill. A
+corrupt record skips that app and reports it.
+
+**Drift guard at call time, not just metadata.** A digest in
+frontmatter alone protects nothing — `call` executes whatever
+currently occupies the store path, and an agent session can hold a
+projected skill's content after the file changed. The taught commands
+therefore embed `--package-digest sha256:…`, a NEW `call`/`inspect`
+flag (S1 scope) that refuses on mismatch with a
+`skill sync`-and-retry hint. This restores the lock property the fat
+`generate_skill` bundle has today.
+
+Frontmatter (ownership under the portable `metadata:` field — custom
+top-level keys are not part of the shared Agent Skills format):
 
 ```yaml
-managed-by: tangram-app-sdk
-tangram-app: com.example/todo-list
-tangram-context: machine            # or instance/workspace
-package-digest: sha256:…
+name: tangram-todo-list
+description: …
+metadata:
+  managed-by: tangram-app-sdk
+  tangram-app: com.example/todo-list
+  tangram-context: machine            # or instance/workspace
+  package-digest: sha256:…
 ```
 
-Only files carrying `managed-by: tangram-app-sdk` are ever rewritten
-or removed. A user-authored skill occupying a managed name is reported
-as a conflict and left alone.
+**Ownership is per skill DIRECTORY, checked entry by entry.** A
+directory is managed only when its `SKILL.md` carries the marker AND
+every entry in it is one the renderer writes; anything else (extra
+user files, a symlinked SKILL.md, a path escaping the skills root) is
+a reported conflict, never rewritten or deleted. Writes are atomic
+(temp file + rename), symlinks are refused as targets — the
+`_write_skill` invariants carry over.
 
-Naming: `tangram-<app-name>` for machine context;
-`tangram-<workspace>-<app-name>` for workspace apps (both normalized
-by the existing `normalize_skill_name`). Description = the app
-manifest description plus an origin suffix ("installed on this
-machine" / "in workspace <ws>") — the description is the router, so it
-must carry the domain words.
+**Naming must survive the store's identity model.** Apps are keyed by
+`group/name` and two groups can install the same bare name;
+`normalize_skill_name` also truncates to 63 chars. The skill name is
+therefore derived deterministically from the FULL id:
+`tangram-<name>` when unique across the desired set, else
+`tangram-<name>-<8-hex-of-sha256(id)>`; the same rule handles
+truncation collisions. Desired-vs-desired collisions are thus resolved
+before any write, and the mapping is stable across syncs. Workspace
+apps prefix the workspace: `tangram-<ws>-<name>[-<hash>]`.
+Description = validated identifier-derived phrase + the app's manifest
+description (see §8) + an origin suffix ("on this machine" /
+"workspace <ws>") — the description is the router, so it must carry
+the domain words.
 
 ## 6. Agent targets
 
 - **Claude Code**: `~/.claude/skills/<name>/SKILL.md` (user scope —
   the store is user-scoped). Project scope is out: the store isn't
   per-project.
-- **Codex**: `~/.codex/prompts/<name>.md` (same body) plus per-app
-  lines inside the existing marked AGENTS.md block ("Before working
-  with <description-derived phrase>, read `~/.codex/prompts/<name>.md`
-  first."). The block section for managed apps is capped (see §9) —
-  the prompts themselves are invokable regardless.
+- **Codex**: `~/.codex/skills/<name>/SKILL.md` — Codex's discoverable
+  Agent Skills catalog, the analogue of Claude's. NOT
+  `~/.codex/prompts/` (a prompt is an explicit `/name` invocation, not
+  catalog routing — projecting there would never enter Codex's skill
+  discovery). The existing AGENTS.md marked block is unchanged by app
+  projection in v1; whether per-app pointer lines help routing on
+  Codex versions without skills support is an open question, measured
+  not assumed. (The two AUTHORING skills continue to ship as prompts —
+  migrating them to `~/.codex/skills` is folded into open question 4.)
 
 ## 7. Context switching and remote workspace apps
 
@@ -122,6 +160,13 @@ Projection follows it:
 - **Desired set = machine apps ∪ active-context workspace apps.**
   `tangram use` triggers `skill sync`; switching away removes the
   previous workspace's managed skills and projects the new one's.
+- **DEPENDENCY — a canonical persisted context.** Today the python
+  lane persists only an instance (`.HEAD`); the workspace is always an
+  explicit flag, and `use` itself is native-only (the pip front door
+  delegates it back). Before S4 there must be one recorded
+  instance+workspace context both CLIs read, and the native `use` must
+  invoke `skill sync` (or the front door intercepts it). Cross-repo
+  work, called out as such.
 - **Availability follows context; invocation is PINNED.** A workspace
   skill's commands embed the explicit selector
   (`--workspace WS --instance N`), never relying on ambient context:
@@ -149,38 +194,54 @@ Projection follows it:
   that; no polling. A stale skill fails safe — the CLI errors name
   the missing app/action, and `skill sync` repairs.
 - **Credentials**: skills never embed tokens; commands ride the stored
-  credential lane, and an expired login surfaces as the CLI's own
-  login prompt/error.
+  credential lane with the install lane's protections (no proxy, no
+  redirects). There is no auto-refresh or login prompt in this lane
+  today: a 401/expired credential surfaces as a structured error
+  naming the fix (`tangram login`), both at sync (workspace catalog
+  fetch fails → workspace skills left as-is, reported) and at call
+  time.
 
 ## 8. Prompt injection (the risk that needs its own section)
 
 Projected skill text originates in app manifests — third-party content
 (hub apps; for workspaces, other members' apps) that would be injected
-into EVERY agent session's context automatically. Treat it as
-untrusted:
+into EVERY agent session's context automatically. Be honest about what
+filtering can do: **no sanitizer makes adversarial free-form prose
+safe** — semantically equivalent instructions survive any phrase
+blacklist. The design therefore separates trust tiers instead of
+claiming filtering is a boundary:
 
-- Render only structured fields (name, description, action refs,
-  effects, docs); never pass free-form manifest content through
-  verbatim into instruction position.
-- Cap lengths (description, per-action doc) and strip/neutralize
-  imperative patterns ("ignore previous instructions", tool-call
-  syntax, markdown links masquerading as directives) — escaping into a
-  quoted "app says:" framing rather than silent dropping.
+- **Routing metadata defaults to validated identifiers only**: the
+  skill name and the identifier-derived description phrase come from
+  charset-constrained fields (app name, action refs) that cannot carry
+  prose. This alone routes most domain asks ("todo-list" matches
+  "todos").
+- **Free-form manifest text (description, action docs) enters the
+  skill only with review**: `app install` displays it verbatim and the
+  projection consent covers it; a config toggle
+  (`projection.freeform: never | reviewed`) can exclude it entirely.
+  Length caps and labeled "app says:" framing apply as hygiene — they
+  reduce accident surface, they are NOT the security boundary; the
+  boundary is that governed calls stay policy-gated regardless of what
+  a skill says.
 - The skill body's instructions (the CLI loop) are OURS, templated;
   app content appears only as labeled data within it.
-- `app install` prints the skill name + description it registered, so
-  a surprising description is visible at consent time.
 - Workspace projection inherits workspace trust: installing an app
-  into a workspace is already an admin-consented act; the cap and
-  labeling still apply.
+  into a workspace is an admin-consented act; caps, labeling, and the
+  review rule still apply.
 
 ## 9. Consent and clutter
 
-- First `skill sync` per agent home asks once (or inherits the consent
-  of an explicit bare `skill install`, which already writes these
-  homes); recorded under `~/.tangram/`. `app install --no-skills`
-  opts a single install out; a config key disables projection
-  entirely.
+- **The consent contract is decided, not open** (it gates S1):
+  projection is OFF until enabled once by an explicit, non-interactive
+  command — `tangram-app skill sync --enable` (recorded in
+  `~/.tangram/config.json`; works in scripts and CI, no TTY dance).
+  Until then, lifecycle hooks print a one-line hint and succeed
+  WITHOUT projecting — an install never fails because projection
+  couldn't run. `skill sync --status` is read-only always.
+  `app install --no-skills` opts a single install out;
+  `skill sync --disable` turns it back off and removes managed
+  entries.
 - Workspace projection is capped (e.g. 20 apps) with an explicit
   warning listing what was skipped — a large shared workspace must not
   flood the agent catalog. `skill sync --all` lifts the cap by hand.
@@ -197,11 +258,15 @@ CLI lane so neither drifts.
 
 ## 11. Milestones
 
-- **S1** — machine-context `skill sync` + Claude Code target: managed
-  SKILL.md rendering (with the §8 sanitizer), reconciler with
-  ownership rules, `--status`, unit tests over a store fixture.
-- **S2** — Codex target (prompts + capped AGENTS block section);
-  lifecycle hooks in `app install/uninstall/--upgrade`.
+- **S1** — machine-context `skill sync` + Claude Code target:
+  projection block written into `.install.json` at install/upgrade
+  (+ `--rebuild` backfill), managed SKILL.md rendering under the §8
+  trust tiers, `call`/`inspect --package-digest` refuse-on-mismatch
+  flag, reconciler with directory-ownership rules + deterministic
+  naming, the §9 consent contract (`--enable`/`--disable`/`--status`),
+  unit tests over a store fixture.
+- **S2** — Codex target (`~/.codex/skills`); lifecycle hooks in
+  `app install/uninstall/--upgrade`.
 - **S3** — the workspace call lane (`actions`/`call` against the
   active or pinned workspace over the OS API; cross-repo with the
   native CLI). Independently valuable.
@@ -228,11 +293,14 @@ CLI lane so neither drifts.
 
 ## 13. Open questions
 
-1. Consent UX: one recorded yes at first sync vs piggybacking on bare
-   `skill install` — and where the toggle lives (`~/.tangram/config`?).
-2. Should machine and workspace copies of the SAME app dedupe (prefer
+1. Should machine and workspace copies of the SAME app dedupe (prefer
    local) or both project with distinct names?
-3. Codex AGENTS block growth: per-app lines vs one generic line +
-   prompts only — measure catalog routing quality before deciding.
-4. Whether `skill sync` should also refresh the two authoring skills
-   (fold `skill install` into the same reconciler eventually).
+2. Do Codex versions without Agent Skills support need per-app
+   AGENTS.md pointer lines as a fallback — measure routing quality
+   before adding block growth.
+3. Whether `skill sync` should also own the two authoring skills
+   (fold `skill install` into the same reconciler, migrating the Codex
+   copies from `prompts/` to `skills/`).
+4. Whether the projection block in `.install.json` should be
+   sha-covered by the install record itself (tamper-evidence for the
+   rendered text).
