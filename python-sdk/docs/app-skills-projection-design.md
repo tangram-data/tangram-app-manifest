@@ -130,9 +130,14 @@ on the CURRENT desired set ("bare when unique, else hashed") is not
 stable — installing an unrelated same-named app would rename an
 existing skill. So the assignment is PERSISTED: at first projection an
 app gets `tangram-<name>` if free, else
-`tangram-<name>-<8-hex-of-sha256(id)>`, and that allocation is
-recorded in `~/.tangram/config.json` and kept until the app leaves the
-desired set — later arrivals never rename earlier skills. Workspace
+`tangram-<name>-<8-hex-of-sha256(id)>`, recorded in
+`~/.tangram/config.json`. When one sync introduces several colliding
+apps at once, allocation runs in sorted-full-id order, so fresh
+configs and `--rebuild` converge identically. An allocation outlives
+context absence — a workspace switching away keeps its names reserved,
+so returning never renames anything; allocations are released only on
+uninstall (machine) or explicit `skill sync --prune-names`. Later
+arrivals never rename earlier skills. Workspace
 apps prefix the workspace: `tangram-<ws>-<name>[-<hash>]`, same
 allocation rules.
 Description = validated identifier-derived phrase + the app's manifest
