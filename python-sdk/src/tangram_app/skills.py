@@ -119,15 +119,20 @@ def _read_text_or_none(path: Path) -> str | None:
 def _merge_marked_block(existing: str, block: str, begin: str, end: str) -> str:
     """Replace the begin..end region (markers matched as whole lines) in place,
     else append. Content outside the marker pair is preserved verbatim, and a
-    marker-like substring inside other content is never treated as a boundary."""
+    marker-like substring inside other content is never treated as a boundary.
+
+    A *lone* marker (only begin or only end — a hand-edited or interrupted
+    block) is left untouched: appending would create a second begin marker and
+    the next run would delete everything between the two, corrupting content."""
     lines = existing.splitlines(keepends=True)
     begin_idx = _marker_line(lines, begin)
-    if begin_idx is not None:
-        end_idx = _marker_line(lines, end, start=begin_idx + 1)
-        if end_idx is not None:
-            head = "".join(lines[:begin_idx])
-            tail = "".join(lines[end_idx + 1 :])
-            return f"{head}{block}{tail}"
+    end_idx = _marker_line(lines, end, start=begin_idx + 1 if begin_idx is not None else 0)
+    if begin_idx is not None and end_idx is not None:
+        head = "".join(lines[:begin_idx])
+        tail = "".join(lines[end_idx + 1 :])
+        return f"{head}{block}{tail}"
+    if begin_idx is not None or end_idx is not None:
+        return existing
     out = existing
     if out and not out.endswith("\n"):
         out += "\n"
@@ -137,8 +142,9 @@ def _merge_marked_block(existing: str, block: str, begin: str, end: str) -> str:
 
 
 def _marker_line(lines: list[str], marker: str, start: int = 0) -> int | None:
+    # rstrip("\r\n") so a CRLF-terminated marker line still matches.
     for index in range(start, len(lines)):
-        if lines[index].rstrip("\n") == marker:
+        if lines[index].rstrip("\r\n") == marker:
             return index
     return None
 

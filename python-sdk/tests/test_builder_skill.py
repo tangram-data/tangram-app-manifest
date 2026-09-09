@@ -174,6 +174,39 @@ class CodexAgentsTest(unittest.TestCase):
         for name in PACKAGED_SKILLS:
             self.assertIn(str(home / "prompts" / f"{name}.md"), first)
 
+    def test_lone_marker_is_left_untouched(self):
+        from tangram_app import skills
+
+        directory = tempfile.mkdtemp()
+        home = Path(directory) / ".codex"
+        (home / "prompts").mkdir(parents=True)
+        (home / "prompts" / f"{BUILDER_SKILL_NAME}.md").write_text("x", encoding="utf-8")
+        agents = home / "AGENTS.md"
+        # A begin marker with no matching end (interrupted/hand-edited).
+        original = "# notes\n<!-- >>> tangram skills >>> -->\nstray\n"
+        agents.write_text(original, encoding="utf-8")
+
+        skills.configure_codex_agents(home)
+        # Left verbatim — no second block appended, so no future deletion.
+        self.assertEqual(agents.read_text(encoding="utf-8"), original)
+
+    def test_crlf_markers_are_recognized_not_duplicated(self):
+        from tangram_app import skills
+
+        directory = tempfile.mkdtemp()
+        home = Path(directory) / ".codex"
+        (home / "prompts").mkdir(parents=True)
+        (home / "prompts" / f"{BUILDER_SKILL_NAME}.md").write_text("x", encoding="utf-8")
+        agents = home / "AGENTS.md"
+        skills.configure_codex_agents(home)
+        # Rewrite the managed block with CRLF endings, as a Windows editor might.
+        crlf = agents.read_text(encoding="utf-8").replace("\n", "\r\n")
+        agents.write_text(crlf, encoding="utf-8")
+
+        skills.configure_codex_agents(home)
+        after = agents.read_text(encoding="utf-8")
+        self.assertEqual(after.count("<!-- >>> tangram skills >>> -->"), 1)
+
     def test_unreadable_agents_is_left_untouched(self):
         from tangram_app import skills
 
