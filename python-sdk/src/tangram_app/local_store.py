@@ -60,12 +60,17 @@ def install_app(source: str, *, force: bool = False) -> dict:
         shutil.copytree(
             package_root, destination, ignore=shutil.ignore_patterns(*_IGNORED)
         )
+        from .skill_projection import projection_block
+
         entry = {
             "id": app_id,
             "version": package.get("version"),
             "root": str(destination),
             "source": source,
             "installedAt": datetime.now(timezone.utc).isoformat(),
+            # Validated record the skills projection renders from —
+            # `skill sync` never recompiles packages.
+            "projection": projection_block(app),
         }
         (destination / _ENTRY_FILE).write_text(json.dumps(entry), encoding="utf-8")
         return entry

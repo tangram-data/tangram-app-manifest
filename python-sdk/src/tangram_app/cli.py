@@ -32,7 +32,7 @@ from .errors import (
     UnknownBindingError,
     UnsupportedRequirementError,
 )
-from .cli_actions import actions_catalog, attach_url, call_policy, resolve_action_ref
+from .cli_actions import ActionRefError, actions_catalog, attach_url, call_policy, resolve_action_ref
 from .cli_connections import connected_call, handle_connect, handle_disconnect
 from .cli_targets import (
     handle_app_get,
@@ -40,7 +40,9 @@ from .cli_targets import (
     handle_app_list,
     handle_app_uninstall,
 )
-from .cli_skills import install_skills
+from . import skill_projection
+from .cli_skills import install_skills, sync_skills
+from .skill_projection import sync_after_store_change
 from .local_store import resolve_target
 from .skills import (
     generate_skill,
@@ -279,8 +281,15 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         }
     if args.command == "inspect":
         app = _load_app(args.target)
+        _check_package_digest(app, args)
         if args.action:
-            return _inspect_data(app, args.action)
+            # Same short-ref resolution as `call` (Todo.List, bare names);
+            # no-match falls through so the unknown_binding contract holds.
+            try:
+                action_ref = resolve_action_ref(app, args.action)
+            except ActionRefError:
+                action_ref = args.action
+            return _inspect_data(app, action_ref)
         data: dict[str, Any] = {
             "package": app.graph.package.to_dict(),
             "capabilityReport": app.capabilities(),
@@ -309,6 +318,7 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "call":
         arguments = _read_json_input(args.input_json)
         app = _load_app(args.target)
+        _check_package_digest(app, args)
         args.binding = resolve_action_ref(app, args.binding)
         policy = call_policy(
             app, args.binding, allow_mutation=args.allow_mutation, confirm=args.confirm
@@ -357,13 +367,20 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
             binding_id = bound.graph.resolve(args.binding)[1].id
         return {"bindingId": binding_id, "result": result}
     if args.command == "app" and args.app_command == "install":
-        return handle_app_install(args)
+        result = handle_app_install(args)
+        # Projection follows machine-store changes only; deploys don't touch
+        # agent homes.
+        if "installed" in result and not getattr(args, "no_skills", False):
+            sync_after_store_change()
+        return result
     if args.command == "app" and args.app_command == "list":
         return handle_app_list()
     if args.command == "app" and args.app_command == "get":
         return handle_app_get(args.ref)
     if args.command == "app" and args.app_command == "uninstall":
-        return handle_app_uninstall(args)
+        result = handle_app_uninstall(args)
+        sync_after_store_change()
+        return result
     if args.command == "skill" and args.skill_command == "generate":
         app = _load_app(args.target)
         root = generate_skill(app, args.output, skill_name=args.name)
@@ -375,7 +392,19 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         }
     if args.command == "skill" and args.skill_command in ("install", "install-builder"):
         return install_skills(args)
+    if args.command == "skill" and args.skill_command == "sync":
+        return sync_skills(args)
     raise CliArgumentsError("unsupported command")
+
+
+def _check_package_digest(app, args) -> None:
+    expected = getattr(args, "package_digest", None)
+    actual = app.graph.package.digest
+    if expected and actual != expected:
+        raise CliArgumentsError(
+            f"installed package digest {actual} does not match --package-digest {expected} "
+            "(the app changed since this reference was generated; run: tangram-app skill sync)"
+        )
 
 
 def _run_local_foreground(args: argparse.Namespace, *, human: bool = False) -> int:
@@ -496,6 +525,8 @@ def _error_details(error: Exception) -> tuple[str, int, str]:
         return "policy_denied", 3, str(error)
     if isinstance(error, UnsupportedRequirementError):
         return "unsupported_requirement", 3, str(error)
+    if isinstance(error, skill_projection.ProjectionError):
+        return "invalid_arguments", 2, str(error)
     if isinstance(error, LocalRuntimeError):
         return "local_runtime_failed", 3, str(error)
     if isinstance(error, (HttpResponseError, OutputValidationError, DriverError)):

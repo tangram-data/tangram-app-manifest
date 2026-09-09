@@ -50,6 +50,9 @@ Translations match the native front door: `app ls` → `app list`,
 | `skill install` | Install EVERY bundled authoring skill for both Claude Code (`~/.claude/skills/`) and Codex (`~/.codex/prompts/` + AGENTS.md pointer) — idempotent machine setup |
 | `skill install [NAME] [--project DIR \| --user \| --codex] [--force]` | Install one bundled skill (or all, when NAME is omitted) into a single scope; a NAME without a scope defaults to `--project .` |
 | `skill install-builder [--project DIR \| --user \| --codex] [--force]` | Alias for `skill install tangram-app-builder` |
+| `skill sync` | Project installed apps as managed agent skills (Claude Code + Codex catalogs); reconciles add/update/remove, reports conflicts. Off until `--enable` |
+| `skill sync --enable \| --disable \| --status \| --approve DIGEST \| --rebuild` | Turn projection on/off (disable removes managed skills), read-only status, approve an app's free-form text by digest, backfill projection records for older installs |
+| `call \| inspect … --package-digest sha256:…` | Refuse when the installed package no longer matches the digest a generated skill was rendered from |
 
 `TARGET` is a package directory, a capability graph JSON file, or an
 installed app reference — the app id (`com.example/orders`) or its bare

@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+from . import skill_projection
 from .skills import (
     BUILDER_SKILL_NAME,
     PACKAGED_SKILLS,
@@ -16,6 +17,21 @@ from .skills import (
     packaged_skill_current,
     packaged_skill_target,
 )
+
+
+def sync_skills(args: argparse.Namespace) -> dict:
+    """`skill sync [--enable|--disable|--status|--approve D|--rebuild]`."""
+    if args.enable:
+        return skill_projection.set_enabled(True)
+    if args.disable:
+        return skill_projection.set_enabled(False)
+    if args.status:
+        return skill_projection.sync(apply=False)
+    if args.approve:
+        return skill_projection.approve_freeform(args.approve)
+    if args.rebuild:
+        return skill_projection.rebuild_projection_blocks()
+    return skill_projection.sync()
 
 
 def install_skills(args: argparse.Namespace) -> dict[str, Any]:

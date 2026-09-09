@@ -30,6 +30,7 @@ def build_parser() -> _Parser:
     selection.add_argument("--tools", action="store_true")
     selection.add_argument("--action")
     inspect.add_argument("--format", choices=("json",), default="json")
+    inspect.add_argument("--package-digest")
 
     call = commands.add_parser("call")
     call.add_argument("target")
@@ -42,6 +43,7 @@ def build_parser() -> _Parser:
     call.add_argument("--allow-mutation", action="store_true")
     call.add_argument("--confirm", action="store_true")
     call.add_argument("--input-json", default="-")
+    call.add_argument("--package-digest")
     call.add_argument("--audit-path")
     call.add_argument("--timeout", type=float, default=30.0)
     call.add_argument("--startup-timeout", type=float, default=30.0)
@@ -59,6 +61,7 @@ def build_parser() -> _Parser:
     app_install.add_argument("--dry-run", action="store_true")
     app_install.add_argument("--upgrade", action="store_true")
     app_install.add_argument("--yes", action="store_true")
+    app_install.add_argument("--no-skills", action="store_true")
     app_commands.add_parser("list")
     app_get = app_commands.add_parser("get")
     app_get.add_argument("ref")
@@ -114,6 +117,14 @@ def build_parser() -> _Parser:
             action="store_true",
             help="with --codex, skip updating ~/.codex/AGENTS.md",
         )
+
+    sync = skill_commands.add_parser("sync")
+    sync_mode = sync.add_mutually_exclusive_group()
+    sync_mode.add_argument("--enable", action="store_true")
+    sync_mode.add_argument("--disable", action="store_true")
+    sync_mode.add_argument("--status", action="store_true")
+    sync_mode.add_argument("--approve", metavar="DIGEST")
+    sync_mode.add_argument("--rebuild", action="store_true")
     return parser
 
 
