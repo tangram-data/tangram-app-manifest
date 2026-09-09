@@ -8,8 +8,8 @@ serves shell-less hosts.
 ## 1. Problem
 
 Agents route requests by what is in their context. Skill names and
-descriptions are always there (Claude Code loads the catalog each
-session; Codex reads `~/.codex/prompts` + the AGENTS.md block), so a
+descriptions are always there (Claude Code and Codex both load their
+Agent Skills catalogs each session), so a
 `tangram-todo-list` skill described as "manage todos in the installed
 Todo app" matches *"list my todos"* by domain words — routing the
 generic usage prose we ship in AGENTS.md cannot provide. Today nothing
@@ -22,9 +22,10 @@ Apps installed in that workspace should reach agents the same way.
 
 ## 2. Goals
 
-- Installing an app makes it *discoverable and usable* by Claude Code
-  and Codex with no manual step; uninstalling removes it; upgrading
-  refreshes it.
+- Once projection is enabled (a single explicit opt-in, §9),
+  installing an app makes it *discoverable and usable* by Claude Code
+  and Codex with no further manual steps; uninstalling removes it;
+  upgrading refreshes it.
 - One governed lane: projected skills teach the `tangram-app`/`tangram`
   CLI (`actions`, `call --local --input-json …`, mutation flags,
   never-curl). Skills are routing + instructions, never a new
@@ -124,13 +125,16 @@ a reported conflict, never rewritten or deleted. Writes are atomic
 
 **Naming must survive the store's identity model.** Apps are keyed by
 `group/name` and two groups can install the same bare name;
-`normalize_skill_name` also truncates to 63 chars. The skill name is
-therefore derived deterministically from the FULL id:
-`tangram-<name>` when unique across the desired set, else
-`tangram-<name>-<8-hex-of-sha256(id)>`; the same rule handles
-truncation collisions. Desired-vs-desired collisions are thus resolved
-before any write, and the mapping is stable across syncs. Workspace
-apps prefix the workspace: `tangram-<ws>-<name>[-<hash>]`.
+`normalize_skill_name` also truncates to 63 chars. A rule that depends
+on the CURRENT desired set ("bare when unique, else hashed") is not
+stable — installing an unrelated same-named app would rename an
+existing skill. So the assignment is PERSISTED: at first projection an
+app gets `tangram-<name>` if free, else
+`tangram-<name>-<8-hex-of-sha256(id)>`, and that allocation is
+recorded in `~/.tangram/config.json` and kept until the app leaves the
+desired set — later arrivals never rename earlier skills. Workspace
+apps prefix the workspace: `tangram-<ws>-<name>[-<hash>]`, same
+allocation rules.
 Description = validated identifier-derived phrase + the app's manifest
 description (see §8) + an origin suffix ("on this machine" /
 "workspace <ws>") — the description is the router, so it must carry
@@ -149,7 +153,7 @@ the domain words.
   projection in v1; whether per-app pointer lines help routing on
   Codex versions without skills support is an open question, measured
   not assumed. (The two AUTHORING skills continue to ship as prompts —
-  migrating them to `~/.codex/skills` is folded into open question 4.)
+  migrating them to `~/.codex/skills` is folded into open question 3.)
 
 ## 7. Context switching and remote workspace apps
 
@@ -216,14 +220,18 @@ claiming filtering is a boundary:
   charset-constrained fields (app name, action refs) that cannot carry
   prose. This alone routes most domain asks ("todo-list" matches
   "todos").
-- **Free-form manifest text (description, action docs) enters the
-  skill only with review**: `app install` displays it verbatim and the
-  projection consent covers it; a config toggle
-  (`projection.freeform: never | reviewed`) can exclude it entirely.
-  Length caps and labeled "app says:" framing apply as hygiene — they
-  reduce accident surface, they are NOT the security boundary; the
-  boundary is that governed calls stay policy-gated regardless of what
-  a skill says.
+- **Free-form manifest text (description, action docs) projects
+  identifier-only by DEFAULT and is opt-in per content digest.** A
+  one-time enable cannot authorize text that arrives later via
+  upgrade, `--rebuild`, or workspace changes, and a workspace admin's
+  consent does not speak for the local agent user. So: unreviewed
+  free-form content never enters a skill; `skill sync --review` shows
+  pending text verbatim and records approval AGAINST ITS DIGEST in
+  `~/.tangram/config.json` — changed text goes back to pending and the
+  skill drops to identifier-only until re-approved. Length caps and
+  labeled "app says:" framing apply as hygiene — they reduce accident
+  surface, they are NOT the security boundary; the boundary is that
+  governed calls stay policy-gated regardless of what a skill says.
 - The skill body's instructions (the CLI loop) are OURS, templated;
   app content appears only as labeled data within it.
 - Workspace projection inherits workspace trust: installing an app
