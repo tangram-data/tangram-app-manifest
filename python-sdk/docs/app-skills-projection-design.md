@@ -22,10 +22,10 @@ Apps installed in that workspace should reach agents the same way.
 
 ## 2. Goals
 
-- Once projection is enabled (a single explicit opt-in, §9),
-  installing an app makes it *discoverable and usable* by Claude Code
-  and Codex with no further manual steps; uninstalling removes it;
-  upgrading refreshes it.
+- Installing an app makes it *discoverable and usable* by Claude Code
+  and Codex with no further manual steps (projection is ON by default —
+  the install is the consent moment; opt out per install or globally,
+  §9); uninstalling removes it; upgrading refreshes it.
 - One governed lane: projected skills teach the `tangram-app`/`tangram`
   CLI (`actions`, `call --local --input-json …`, mutation flags,
   never-curl). Skills are routing + instructions, never a new
@@ -175,8 +175,16 @@ The v3 model: one verb table, destination decided by context
 Projection follows it:
 
 - **Desired set = machine apps ∪ active-context workspace apps.**
-  `tangram use` triggers `skill sync`; switching away removes the
-  previous workspace's managed skills and projects the new one's.
+  `tangram use` triggers a quiet best-effort `skill sync` (landed in
+  the native front door); switching away removes the previous
+  context's managed skills and projects the new one's. Until S4
+  renders workspace skills, the reconciler already enforces the
+  context rule: managed skills tagged with a context other than
+  `machine` or the active one are removed, and active-context managed
+  skills it cannot render are KEPT (a newer component may own them —
+  never thrash). The active context today is the persisted instance
+  (`instance:<name>` from `.HEAD`); the workspace half remains the
+  canonical-context dependency below.
 - **DEPENDENCY — a canonical persisted context.** Today the python
   lane persists only an instance (`.HEAD`); the workspace is always an
   explicit flag, and `use` itself is native-only (the pip front door
@@ -253,16 +261,19 @@ claiming filtering is a boundary:
 
 ## 9. Consent and clutter
 
-- **The consent contract is decided, not open** (it gates S1):
-  projection is OFF until enabled once by an explicit, non-interactive
-  command — `tangram-app skill sync --enable` (recorded in
-  `~/.tangram/config.json`; works in scripts and CI, no TTY dance).
-  Until then, lifecycle hooks print a one-line hint and succeed
-  WITHOUT projecting — an install never fails because projection
-  couldn't run. `skill sync --status` is read-only always.
-  `app install --no-skills` opts a single install out;
-  `skill sync --disable` turns it back off and removes managed
-  entries.
+- **The consent contract (owner decision 2026-09-10): ON by default.**
+  Installing an app is itself the consent moment — the projection
+  happens as part of `app install`, which reports what it registered.
+  Free-form text stays digest-gated regardless (§8), so default-on
+  never auto-injects third-party prose. Opt-outs:
+  `app install --no-skills` for one install, `skill sync --disable`
+  globally (recorded in `~/.tangram/config.json`, removes managed
+  entries; `--enable` reverses it). Lifecycle hooks never fail the
+  store operation; `skill sync --status` is read-only always.
+  `TANGRAM_AGENT_HOME` redirects the agent homes (tests/sandboxes)
+  the way `TANGRAM_HOME` redirects the store — REQUIRED in any test
+  fixture that installs apps, or the suite writes into the
+  developer's real agent catalogs.
 - Workspace projection is capped (e.g. 20 apps) with an explicit
   warning listing what was skipped — a large shared workspace must not
   flood the agent catalog. `skill sync --all` lifts the cap by hand.

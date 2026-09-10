@@ -32,25 +32,21 @@ class ProjectionTest(unittest.TestCase):
         self.home = Path(self._dir.name)
         os.environ["TANGRAM_HOME"] = str(self.home / "th")
         self.addCleanup(os.environ.pop, "TANGRAM_HOME", None)
-        patcher = mock.patch.object(skill_projection.Path, "home", return_value=self.home)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        previous_agent_home = os.environ.get("TANGRAM_AGENT_HOME")
+        os.environ["TANGRAM_AGENT_HOME"] = str(self.home)
+        self.addCleanup(
+            lambda: os.environ.update({"TANGRAM_AGENT_HOME": previous_agent_home})
+            if previous_agent_home
+            else os.environ.pop("TANGRAM_AGENT_HOME", None)
+        )
 
     def _skill(self, agent: str, name: str) -> Path:
         return self.home / f".{agent}" / "skills" / name / "SKILL.md"
 
-    def test_off_by_default_and_enable_projects(self):
+    def test_install_projects_by_default(self):
         code, envelope = _run_cli("app", "install", str(FIXTURE))
         self.assertEqual(code, 0)
         self.assertIn("projection", envelope["data"]["installed"]["detail"])
-        self.assertFalse(self._skill("claude", "tangram-orders").exists())
-
-        code, envelope = _run_cli("skill", "sync", "--enable")
-        self.assertEqual(code, 0)
-        self.assertEqual(
-            sorted(envelope["data"]["added"]),
-            ["claude:tangram-orders", "codex:tangram-orders"],
-        )
         for agent in ("claude", "codex"):
             text = self._skill(agent, "tangram-orders").read_text(encoding="utf-8")
             self.assertIn("managed-by: tangram-app-sdk", text)
@@ -58,6 +54,56 @@ class ProjectionTest(unittest.TestCase):
             self.assertIn("inspect com.example/orders --action", text)
             # Freeform action doc is pending, not projected.
             self.assertNotIn("List orders", text)
+
+    def test_no_skills_flag_and_disable_stay_off(self):
+        code, _ = _run_cli("app", "install", str(FIXTURE), "--no-skills")
+        self.assertEqual(code, 0)
+        self.assertFalse(self._skill("claude", "tangram-orders").exists())
+        code, envelope = _run_cli("skill", "sync", "--disable")
+        self.assertEqual(code, 0)
+        code, _ = _run_cli("app", "install", str(FIXTURE), "--upgrade")
+        self.assertEqual(code, 0)
+        self.assertFalse(self._skill("claude", "tangram-orders").exists())
+        code, envelope = _run_cli("skill", "sync")
+        self.assertFalse(envelope["data"]["enabled"])
+
+    def test_context_switch_removes_other_context_keeps_active(self):
+        _run_cli("app", "install", str(FIXTURE))
+        th = Path(os.environ["TANGRAM_HOME"])
+        th.mkdir(parents=True, exist_ok=True)
+
+        def fake_ws_skill(name: str, context: str) -> Path:
+            skill = self._skill("claude", name)
+            skill.parent.mkdir(parents=True)
+            skill.write_text(
+                "---\n"
+                f"name: {name}\n"
+                'description: "ws"\n'
+                "metadata:\n"
+                "  managed-by: tangram-app-sdk\n"
+                "  tangram-app: ws.group/app\n"
+                f"  tangram-context: {context}\n"
+                "  package-digest: sha256:0\n"
+                "---\n",
+                encoding="utf-8",
+            )
+            return skill
+
+        dev = fake_ws_skill("tangram-dev-app", "instance:dev")
+        prod = fake_ws_skill("tangram-prod-app", "instance:prod")
+        (th / ".HEAD").write_text(json.dumps({"instance": "dev"}), encoding="utf-8")
+        code, envelope = _run_cli("skill", "sync")
+        self.assertEqual(code, 0)
+        self.assertEqual(envelope["data"]["context"], "instance:dev")
+        self.assertTrue(dev.is_file())  # active context: kept
+        self.assertFalse(prod.exists())  # other context: removed
+        self.assertIn("claude:tangram-dev-app", envelope["data"]["keptActiveContext"])
+        # Machine skills are context-independent.
+        self.assertTrue(self._skill("claude", "tangram-orders").is_file())
+        # Switching away removes the dev skill too.
+        (th / ".HEAD").write_text(json.dumps({"instance": "prod"}), encoding="utf-8")
+        code, envelope = _run_cli("skill", "sync")
+        self.assertFalse(dev.exists())
 
     def test_freeform_projects_only_after_digest_approval(self):
         _run_cli("app", "install", str(FIXTURE))

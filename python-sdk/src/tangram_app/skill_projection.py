@@ -65,9 +65,13 @@ def _save_config(config: dict) -> None:
 
 
 def agent_skill_roots() -> dict[str, Path]:
+    # TANGRAM_AGENT_HOME redirects the agent homes (tests, sandboxes) the
+    # same way TANGRAM_HOME redirects the store.
+    override = os.environ.get("TANGRAM_AGENT_HOME")
+    home = Path(override) if override else Path.home()
     return {
-        "claude": Path.home() / ".claude" / "skills",
-        "codex": Path.home() / ".codex" / "skills",
+        "claude": home / ".claude" / "skills",
+        "codex": home / ".codex" / "skills",
     }
 
 
@@ -279,40 +283,55 @@ def _render(entry: dict, name: str, freeform: dict) -> str:
 # ----------------------------------------------------------- filesystem
 
 
-def _is_managed(directory: Path) -> bool:
-    """Ours ONLY when the file opens with a frontmatter block whose metadata
-    carries our exact marker lines — a foreign skill merely mentioning the
-    marker text in its body must never be rewritten or removed."""
+def _managed_metadata(directory: Path) -> dict[str, str] | None:
+    """The Tangram metadata of a skill dir we own, or None for anything
+    foreign. Ours ONLY when the file opens with a frontmatter block whose
+    `metadata:` section's OWN indented run carries our exact marker lines —
+    a foreign skill merely mentioning the marker text in its body (or
+    inside a `description: |` block scalar, which ends at the next column-0
+    line) must never be rewritten or removed."""
     skill = directory / "SKILL.md"
     if directory.is_symlink() or skill.is_symlink() or not skill.is_file():
-        return False
+        return None
     try:
         head = skill.read_text(encoding="utf-8", errors="replace")[:4096]
     except OSError:
-        return False
+        return None
     if not head.startswith("---\n"):
-        return False
+        return None
     closing = head.find("\n---\n", 4)
     if closing < 0:
-        return False
+        return None
     frontmatter = head[4:closing].splitlines()
-    # The marker lines must sit inside the top-level `metadata:` section's
-    # OWN indented run — a foreign block scalar (`description: |`) holding
-    # look-alike indented lines never reaches here because its content ends
-    # at the next column-0 line.
     try:
         start = frontmatter.index("metadata:") + 1
     except ValueError:
-        return False
-    run = []
+        return None
+    fields: dict[str, str] = {}
     for line in frontmatter[start:]:
-        if line.startswith("  "):
-            run.append(line)
-        else:
+        if not line.startswith("  "):
             break
-    return f"  managed-by: {MANAGED_BY}" in run and any(
-        line.startswith("  tangram-app: ") for line in run
-    )
+        key, _, value = line.strip().partition(": ")
+        fields[key] = value
+    if fields.get("managed-by") != MANAGED_BY or "tangram-app" not in fields:
+        return None
+    return fields
+
+
+def _is_managed(directory: Path) -> bool:
+    return _managed_metadata(directory) is not None
+
+
+def _active_context() -> str:
+    """The persisted native-CLI context: `instance:<name>` from `.HEAD`, or
+    `machine`. (A canonical instance+workspace record is a flagged design
+    dependency; until it lands the instance is the whole context.)"""
+    try:
+        head = json.loads((tangram_home() / ".HEAD").read_text(encoding="utf-8"))
+        instance = head.get("instance") if isinstance(head, dict) else None
+    except (OSError, ValueError):
+        instance = None
+    return f"instance:{instance}" if isinstance(instance, str) and instance else "machine"
 
 
 def _only_skill_md(directory: Path) -> bool:
@@ -329,16 +348,33 @@ def _atomic_write(target: Path, text: str) -> None:
 
 
 def _converge(
-    agent: str, root: Path, desired: dict[str, str], report: dict, apply: bool, protected: set[str] = frozenset()
+    agent: str,
+    root: Path,
+    desired: dict[str, str],
+    report: dict,
+    apply: bool,
+    protected: set[str] = frozenset(),
+    active_context: str = "machine",
 ) -> None:
     if root.is_dir():
         for child in sorted(root.iterdir()):
-            if not child.is_dir() or child.is_symlink() or not _is_managed(child):
+            if not child.is_dir() or child.is_symlink():
+                continue
+            metadata = _managed_metadata(child)
+            if metadata is None:
                 continue
             if child.name in desired or child.name in protected:
                 # `protected`: allocated to an app still in the store whose
                 # record can't render right now — stale beats deleted.
                 continue
+            context = metadata.get("tangram-context", "machine")
+            if context != "machine" and context == active_context:
+                # A managed skill of the ACTIVE context we didn't render
+                # (e.g. written by a newer component) — keep, never thrash.
+                report["keptActiveContext"].append(f"{agent}:{child.name}")
+                continue
+            # Machine-context leftovers (uninstalled) and OTHER contexts'
+            # skills (switched away) both converge to removal.
             if not _only_skill_md(child):
                 report["conflicts"].append(f"{agent}:{child.name}: unmanaged files inside a managed skill dir")
                 continue
@@ -378,17 +414,22 @@ def sync(*, apply: bool = True) -> dict:
     """Converge agent homes to the store. `apply=False` = read-only status."""
     config = _load_config()
     section = config.setdefault(_SECTION, {})
+    active_context = _active_context()
     report: dict[str, Any] = {
-        "enabled": bool(section.get("enabled")),
+        # ON by default: installing an app is the consent moment; opt out
+        # per install (--no-skills) or globally (skill sync --disable).
+        "enabled": bool(section.get("enabled", True)),
+        "context": active_context,
         "added": [],
         "updated": [],
         "removed": [],
         "conflicts": [],
+        "keptActiveContext": [],
         "skippedNoProjection": [],
         "pendingFreeform": [],
     }
     if not report["enabled"]:
-        report["hint"] = "projection is off; enable with: tangram-app skill sync --enable"
+        report["hint"] = "projection is disabled; re-enable with: tangram-app skill sync --enable"
         return report
 
     entries = list_installed()
@@ -424,7 +465,7 @@ def sync(*, apply: bool = True) -> dict:
     for agent, root in agent_skill_roots().items():
         if apply:
             root.mkdir(parents=True, exist_ok=True)
-        _converge(agent, root, desired, report, apply, protected)
+        _converge(agent, root, desired, report, apply, protected, active_context)
     if apply:
         _save_config(config)
     return report
@@ -436,10 +477,12 @@ def set_enabled(enabled: bool) -> dict:
     _save_config(config)
     if enabled:
         return sync()
-    # Disabling removes every managed entry.
-    report: dict[str, Any] = {"enabled": False, "added": [], "updated": [], "removed": [], "conflicts": []}
+    # Disabling removes every managed entry, whatever context it carries.
+    report: dict[str, Any] = {
+        "enabled": False, "added": [], "updated": [], "removed": [], "conflicts": [], "keptActiveContext": []
+    }
     for agent, root in agent_skill_roots().items():
-        _converge(agent, root, {}, report, apply=True)
+        _converge(agent, root, {}, report, apply=True, active_context="")
     return report
 
 
@@ -452,7 +495,7 @@ def approve_freeform(digest: str) -> dict:
     approved.add(digest)
     section["approvedFreeform"] = sorted(approved)
     _save_config(config)
-    return sync() if section.get("enabled") else {"enabled": False, "approved": digest}
+    return sync() if section.get("enabled", True) else {"enabled": False, "approved": digest}
 
 
 def rebuild_projection_blocks() -> dict:
@@ -474,23 +517,19 @@ def rebuild_projection_blocks() -> dict:
         except Exception as error:  # noqa: BLE001 — report, keep going
             failed.append({"app": entry["id"], "error": str(error)})
     result = {"rebuilt": sorted(rebuilt), "failed": failed}
-    if _load_config().get(_SECTION, {}).get("enabled"):
+    if _load_config().get(_SECTION, {}).get("enabled", True):
         result["sync"] = sync()
     return result
 
 
 def sync_after_store_change() -> None:
-    """Lifecycle hook for app install/uninstall: quiet no-op with a hint
-    until projection is enabled; never fails the store operation."""
+    """Lifecycle hook for app install/uninstall: projects by default (the
+    install IS the consent moment); silent no-op when explicitly disabled;
+    never fails the store operation."""
     import sys
 
     try:
-        if _load_config().get(_SECTION, {}).get("enabled"):
+        if _load_config().get(_SECTION, {}).get("enabled", True):
             sync()
-        else:
-            print(
-                "hint: agent skills projection is off — enable with: tangram-app skill sync --enable",
-                file=sys.stderr,
-            )
     except Exception as error:  # noqa: BLE001
         print(f"warning: skill sync failed: {error}", file=sys.stderr)
