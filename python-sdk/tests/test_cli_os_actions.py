@@ -190,6 +190,16 @@ class AmbientWorkspaceContextTest(OsActionsLaneTest):
         self.assertEqual(code, 0, envelope)
         self.assertEqual(envelope["data"]["workspace"], "demo")
 
+    def test_env_workspace_applies_with_explicit_instance_flag(self):
+        self._set_head(None)
+        os.environ["TANGRAM_WORKSPACE"] = "demo"
+        self.addCleanup(os.environ.pop, "TANGRAM_WORKSPACE", None)
+        code, envelope = _run_cli(
+            "call", "todo", "List", "--instance", "dev", "--input-json", "{}"
+        )
+        self.assertEqual(code, 0, envelope)
+        self.assertEqual(envelope["data"]["workspace"], "demo")
+
     def test_env_instance_never_pairs_with_head_workspace(self):
         self._set_head("demo")
         os.environ["TANGRAM_INSTANCE"] = "dev"

@@ -88,8 +88,13 @@ def ambient_context() -> dict:
 
 
 def ambient_workspace() -> str | None:
-    """The workspace half of the persisted context (`tangram use I/WS`)."""
+    """The workspace half of the ambient context."""
     return ambient_context()["workspace"]
+
+
+def env_workspace() -> str | None:
+    """The per-session workspace pin alone (no `.HEAD` involvement)."""
+    return os.environ.get("TANGRAM_WORKSPACE") or None
 
 
 def configured_instances() -> list[str]:

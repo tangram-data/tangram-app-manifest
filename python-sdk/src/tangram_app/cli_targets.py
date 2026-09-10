@@ -16,6 +16,7 @@ import sys
 from .local_os import (
     LocalOsError,
     ambient_context,
+    env_workspace,
     base_url,
     configured_instances,
     load_os_credential,
@@ -62,7 +63,10 @@ def resolve_os_selector(args) -> dict:
             raise TargetError("--os-url conflicts with --instance")
         return {"url": os_url, "token": token, "workspace": workspace, "ambient": False}
     if instance:
-        return {"instance": instance, "workspace": workspace or None, "ambient": False}
+        # An explicit instance still honors the SESSION's env workspace
+        # (TANGRAM_WORKSPACE is deliberate per-session intent, unlike the
+        # persisted .HEAD workspace which belongs to the persisted instance).
+        return {"instance": instance, "workspace": (workspace or None) or env_workspace(), "ambient": False}
     # Fully ambient: instance AND workspace come from ONE persisted-context
     # read (`tangram use I[/WS]`), so a concurrent `use` cannot pair this
     # read's workspace with a different instance downstream.
