@@ -95,8 +95,13 @@ class ConsentAndDispatchTest(unittest.TestCase):
         self.addCleanup(self._home.cleanup)
         os.environ["TANGRAM_HOME"] = self._home.name
         self.addCleanup(os.environ.pop, "TANGRAM_HOME", None)
+        previous_agent_home = os.environ.get("TANGRAM_AGENT_HOME")
         os.environ["TANGRAM_AGENT_HOME"] = self._home.name
-        self.addCleanup(os.environ.pop, "TANGRAM_AGENT_HOME", None)
+        self.addCleanup(
+            lambda: os.environ.update({"TANGRAM_AGENT_HOME": previous_agent_home})
+            if previous_agent_home
+            else os.environ.pop("TANGRAM_AGENT_HOME", None)
+        )
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _FakeOs)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.addCleanup(self.server.shutdown)
