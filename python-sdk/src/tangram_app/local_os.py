@@ -54,10 +54,17 @@ def load_os_credential(instance: str | None = None) -> dict:
             raise LocalOsError(
                 "no current instance — pass --instance or run `tangram use <instance>`"
             ) from error
-    quickstart_family = {"quickstart", "local"} if instance in ("quickstart", "local") else {instance}
-    for entry in credentials if isinstance(credentials, list) else []:
-        if isinstance(entry, dict) and entry.get("instance") in quickstart_family and entry.get("token"):
+    rows = [entry for entry in (credentials if isinstance(credentials, list) else []) if isinstance(entry, dict)]
+    # Exact name first; the quickstart/local legacy alias is only a fallback
+    # (a fresh 'quickstart' credential must beat a stale legacy 'local' one).
+    for entry in rows:
+        if entry.get("instance") == instance and entry.get("token"):
             return entry
+    if instance in ("quickstart", "local"):
+        alias = "local" if instance == "quickstart" else "quickstart"
+        for entry in rows:
+            if entry.get("instance") == alias and entry.get("token"):
+                return entry
     raise LocalOsError(
         f"no stored credential for instance {instance!r} — log in with the native CLI"
     )
