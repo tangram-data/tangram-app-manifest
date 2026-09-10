@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .cli import _Parser
+from .cli_targets import AMBIENT_WORKSPACE
 
 
 def build_parser() -> _Parser:
@@ -42,7 +43,7 @@ def build_parser() -> _Parser:
     execution.add_argument("--local", action="store_true")
     execution.add_argument("--connected", action="store_true")
     call.add_argument("--endpoint")
-    call.add_argument("--workspace", nargs="?", const="")
+    call.add_argument("--workspace", nargs="?", const=AMBIENT_WORKSPACE)
     call.add_argument("--instance")
     call.add_argument("--os-url")
     call.add_argument("--token")
@@ -78,7 +79,7 @@ def build_parser() -> _Parser:
     actions = commands.add_parser("actions")
     actions.add_argument("target")
     actions.add_argument("--local", action="store_true")
-    actions.add_argument("--workspace", nargs="?", const="")
+    actions.add_argument("--workspace", nargs="?", const=AMBIENT_WORKSPACE)
     actions.add_argument("--instance")
     actions.add_argument("--os-url")
     actions.add_argument("--token")

@@ -29,6 +29,11 @@ class TargetError(ValueError):
     """A target could not be resolved or was not consented to."""
 
 
+# Bare `--workspace` (ambient-fill request). argv strings cannot contain NUL,
+# so an explicit value can never collide with this sentinel.
+AMBIENT_WORKSPACE = "\x00ambient"
+
+
 def _interactive() -> bool:
     return sys.stdin.isatty() and sys.stderr.isatty()
 
@@ -42,8 +47,14 @@ def resolve_os_selector(args) -> dict:
     """Selector grammar: one complete OS target or a refusal."""
     workspace, instance = args.workspace, args.instance
     os_url, token = args.os_url, args.token
-    # An EXPLICITLY EMPTY selector (e.g. --instance "$UNSET_VAR") must refuse,
-    # never silently fall back to the ambient context.
+    # An EXPLICITLY EMPTY selector (e.g. --workspace "$UNSET_VAR") must
+    # refuse, never silently fall back to the ambient context. Bare
+    # `--workspace` (the AMBIENT_WORKSPACE sentinel) is the only ambient-fill
+    # request.
+    if workspace == AMBIENT_WORKSPACE:
+        workspace = None
+    elif workspace is not None and not str(workspace).strip():
+        raise TargetError("--workspace must not be empty")
     for name, value in (("--instance", instance), ("--os-url", os_url), ("--token", token)):
         if value is not None and not str(value).strip():
             raise TargetError(f"{name} must not be empty")
@@ -69,11 +80,21 @@ def resolve_os_selector(args) -> dict:
         return {"instance": instance, "workspace": (workspace or None) or env_workspace(), "ambient": False}
     # Fully ambient: instance AND workspace come from ONE persisted-context
     # read (`tangram use I[/WS]`), so a concurrent `use` cannot pair this
-    # read's workspace with a different instance downstream.
+    # read's workspace with a different instance downstream. A machine
+    # context REFUSES here — downstream must never re-read ambient state to
+    # fill the missing instance.
     context = ambient_context()
+    if context["instance"] is None:
+        instances = ", ".join(configured_instances()) or "(none)"
+        raise TargetError(
+            "--workspace targets a Tangram OS workspace but the resolved context is the "
+            f"machine — pass --instance NAME or --workspace INSTANCE/WS (configured: "
+            f"{instances}), or select one with `tangram use INSTANCE/WS`"
+        )
     return {
         "instance": context["instance"],
         "workspace": (workspace or None) or context["workspace"],
+        "profile_url": context["profile_url"],
         "ambient": True,
     }
 
@@ -130,6 +151,10 @@ def handle_app_install(args) -> dict:
             file=sys.stderr,
         )
     replace = args.upgrade or args.force
+    # An EXPLICITLY EMPTY --workspace (e.g. an unset shell variable) must
+    # refuse — never fall through to the ambient or machine lane.
+    if args.workspace is not None and not str(args.workspace).strip():
+        raise TargetError("--workspace must not be empty")
     if not args.workspace:
         if any((args.instance, args.os_url, args.token)):
             raise TargetError(
@@ -152,13 +177,18 @@ def handle_app_install(args) -> dict:
                 f"`tangram use {context['instance']}/WS`, pass --workspace WS, or "
                 "`tangram use local` for a machine install"
             )
-        selector = {"instance": context["instance"], "workspace": context["workspace"], "ambient": True}
+        selector = {
+            "instance": context["instance"],
+            "workspace": context["workspace"],
+            "profile_url": context["profile_url"],
+            "ambient": True,
+        }
     else:
         selector = resolve_os_selector(args)
     if selector.get("url"):
         credential = None
     else:
-        credential = load_os_credential(selector["instance"])
+        credential = load_os_credential(selector["instance"], expected_url=selector.get("profile_url"))
     description = _describe(selector, credential)
     _consent_os_install(selector, description, args.yes)
     token = selector.get("token")

@@ -37,8 +37,12 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None  # never re-send the bearer token to a redirected host
 
 
-def load_os_credential(instance: str | None = None) -> dict:
-    """The native CLI's stored credential for `instance` (default: `.HEAD`)."""
+def load_os_credential(instance: str | None = None, *, expected_url: str | None = None) -> dict:
+    """The native CLI's stored credential for `instance` (default: `.HEAD`),
+    matched by name EXACTLY and validated against the profile's endpoint
+    (`expected_url` when the caller already resolved it, else `.HEAD` /
+    `.contexts`) — a credential issued for another URL must not silently
+    redirect execution (native-CLI parity)."""
     home = tangram_home()
     try:
         credentials = json.loads((home / ".credentials").read_text(encoding="utf-8"))
@@ -49,38 +53,75 @@ def load_os_credential(instance: str | None = None) -> dict:
         ) from error
     if instance is None:
         try:
-            instance = json.loads((home / ".HEAD").read_text(encoding="utf-8"))["instance"]
-        except (OSError, ValueError, KeyError) as error:
+            head = json.loads((home / ".HEAD").read_text(encoding="utf-8"))
+            instance = head["instance"]
+        except (OSError, ValueError, KeyError, TypeError) as error:
             raise LocalOsError(
                 "no current instance — pass --instance or run `tangram use <instance>`"
             ) from error
+        if expected_url is None:
+            head_url = head.get("url") if isinstance(head, dict) else None
+            expected_url = head_url if isinstance(head_url, str) and head_url else None
+    elif expected_url is None:
+        expected_url = _profile_url(home, instance)
     rows = [entry for entry in (credentials if isinstance(credentials, list) else []) if isinstance(entry, dict)]
-    # Exact name first; the quickstart/local legacy alias is only a fallback
-    # (a fresh 'quickstart' credential must beat a stale legacy 'local' one).
     for entry in rows:
         if entry.get("instance") == instance and entry.get("token"):
+            if expected_url and entry.get("url") != expected_url:
+                raise LocalOsError(
+                    f"stored credential for {instance!r} was issued for {entry.get('url')!r} but the "
+                    f"instance profile points at {expected_url!r} — log in again with the native CLI"
+                )
             return entry
-    if instance in ("quickstart", "local"):
-        alias = "local" if instance == "quickstart" else "quickstart"
-        for entry in rows:
-            if entry.get("instance") == alias and entry.get("token"):
-                return entry
     raise LocalOsError(
         f"no stored credential for instance {instance!r} — log in with the native CLI"
     )
 
 
+def _profile_url(home: Path, instance: str) -> str | None:
+    """The instance's endpoint from the native CLI's `.contexts` profile
+    (None when the file or entry is absent; corrupt fails explicitly)."""
+    path = home / ".contexts"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise LocalOsError(f"cannot read {path}: {error}") from None
+    if not text.strip():
+        return None
+    try:
+        rows = json.loads(text)
+    except ValueError as error:
+        raise LocalOsError(f"{path} is corrupt ({error}) — fix or remove it") from None
+    for row in rows if isinstance(rows, list) else []:
+        if isinstance(row, dict) and row.get("instance") == instance:
+            url = row.get("url")
+            return url if isinstance(url, str) and url else None
+    return None
+
+
 def ambient_context() -> dict:
-    """Instance + workspace of the ambient context. Precedence per axis:
-    `TANGRAM_INSTANCE`/`TANGRAM_WORKSPACE` env (per-shell/per-agent pinning,
-    the kubectl `--context` lesson) over the persisted `.HEAD` — read ONCE.
-    An env instance NEVER pairs with a `.HEAD` workspace: that workspace
-    belongs to the persisted instance, and carrying it across is the exact
-    cross-instance hazard the model forbids."""
+    """Instance + workspace (+ `.HEAD`'s profile_url) of the ambient
+    context. Precedence per axis: `TANGRAM_INSTANCE`/`TANGRAM_WORKSPACE` env
+    (per-shell/per-agent pinning, the kubectl `--context` lesson) over the
+    persisted `.HEAD` — read ONCE. An env instance NEVER pairs with a
+    `.HEAD` workspace: that workspace belongs to the persisted instance,
+    and carrying it across is the exact cross-instance hazard the model
+    forbids."""
     env_instance = os.environ.get("TANGRAM_INSTANCE") or None
     env_workspace = os.environ.get("TANGRAM_WORKSPACE") or None
+    if env_instance in ("local", "machine"):
+        # The machine-context words pin THE MACHINE, exactly like
+        # `tangram use local` — they never name an OS instance.
+        if env_workspace:
+            raise LocalOsError(
+                f"TANGRAM_INSTANCE={env_instance} pins the machine context, which has no "
+                "workspaces — unset TANGRAM_WORKSPACE"
+            )
+        return {"instance": None, "workspace": None, "profile_url": None}
     if env_instance:
-        return {"instance": env_instance, "workspace": env_workspace}
+        return {"instance": env_instance, "workspace": env_workspace, "profile_url": None}
     head_path = tangram_home() / ".HEAD"
     try:
         text = head_path.read_text(encoding="utf-8")
@@ -89,7 +130,7 @@ def ambient_context() -> dict:
     except OSError as error:
         raise LocalOsError(f"cannot read {head_path}: {error}") from None
     if not text.strip():
-        return {"instance": None, "workspace": env_workspace}
+        return {"instance": None, "workspace": env_workspace, "profile_url": None}
     # MISSING/empty means the machine context; a CORRUPT or unexpectedly
     # shaped file must fail explicitly, never silently read as a different
     # target (the native CLI's decoder rejects the same shapes).
@@ -107,7 +148,12 @@ def ambient_context() -> dict:
         or not isinstance(workspace, (str, type(None)))
     ):
         raise LocalOsError(f"{head_path} is corrupt (unexpected context shape) — fix or remove it")
-    return {"instance": instance or None, "workspace": env_workspace or workspace or None}
+    url = head.get("url")
+    return {
+        "instance": instance or None,
+        "workspace": env_workspace or workspace or None,
+        "profile_url": url if isinstance(url, str) and url else None,
+    }
 
 
 def env_workspace() -> str | None:

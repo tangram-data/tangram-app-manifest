@@ -79,6 +79,22 @@ class LocalOsTest(unittest.TestCase):
         with self.assertRaises(LocalOsError):
             load_os_credential("ghost")
 
+    def test_credential_endpoint_must_match_the_profile(self):
+        home = Path(self._home.name)
+        self._write_credentials("os.example.com")
+        # Ambient lane: .HEAD's profile URL is authoritative.
+        (home / ".HEAD").write_text(json.dumps({"instance": "dev", "url": "elsewhere.example.com"}))
+        with self.assertRaises(LocalOsError) as caught:
+            load_os_credential()
+        self.assertIn("issued for", str(caught.exception))
+        # Explicit lane: the .contexts profile URL is authoritative.
+        (home / ".contexts").write_text(
+            json.dumps([{"instance": "dev", "url": "elsewhere.example.com"}])
+        )
+        with self.assertRaises(LocalOsError) as caught:
+            load_os_credential("dev")
+        self.assertIn("issued for", str(caught.exception))
+
     def test_read_tree_contract(self):
         tree = read_tree(FIXTURE)
         self.assertIn("manifests/app.pkl", tree)

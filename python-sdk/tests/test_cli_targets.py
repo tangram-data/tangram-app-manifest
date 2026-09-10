@@ -51,6 +51,16 @@ class VersionEnvelopeTest(unittest.TestCase):
 
 
 class SelectorGrammarTest(unittest.TestCase):
+    def setUp(self):
+        # Ambient forms read the context — isolate from the real ~/.tangram.
+        self._home = tempfile.TemporaryDirectory()
+        self.addCleanup(self._home.cleanup)
+        os.environ["TANGRAM_HOME"] = self._home.name
+        self.addCleanup(os.environ.pop, "TANGRAM_HOME", None)
+        (Path(self._home.name) / ".HEAD").write_text(
+            json.dumps({"instance": "dev", "url": "os.example.com"})
+        )
+
     def test_valid_forms(self):
         qualified = resolve_os_selector(_args(workspace="prod/analytics"))
         self.assertEqual(qualified, {"instance": "prod", "workspace": "analytics", "ambient": False})
@@ -60,6 +70,7 @@ class SelectorGrammarTest(unittest.TestCase):
         self.assertEqual(url_form["url"], "https://x")
         ambient = resolve_os_selector(_args(workspace="ws"))
         self.assertTrue(ambient["ambient"])
+        self.assertEqual(ambient["instance"], "dev")
 
     def test_conflicts_refuse_never_precedence(self):
         conflicts = [
@@ -68,10 +79,18 @@ class SelectorGrammarTest(unittest.TestCase):
             _args(workspace="ws", os_url="https://x"),  # token missing
             _args(workspace="ws", instance="dev", os_url="https://x", token="t"),
             _args(workspace="/ws"),
+            _args(workspace="  "),  # explicitly empty is never ambient
         ]
         for args in conflicts:
             with self.assertRaises(TargetError, msg=vars(args)):
                 resolve_os_selector(args)
+
+    def test_machine_context_refuses_ambient_os_selector(self):
+        # Downstream must never re-read ambient state to fill the instance.
+        (Path(self._home.name) / ".HEAD").unlink()
+        with self.assertRaises(TargetError) as caught:
+            resolve_os_selector(_args(workspace="ws"))
+        self.assertIn("machine", str(caught.exception))
 
 
 class _FakeOs(BaseHTTPRequestHandler):
@@ -187,6 +206,14 @@ class ConsentAndDispatchTest(unittest.TestCase):
         code, envelope = _run_cli("app", "install", str(FIXTURE), "--dry-run", "--yes")
         self.assertEqual(code, 0, envelope)
         self.assertTrue(envelope["data"]["deployed"]["dryRun"])
+
+    def test_explicitly_empty_workspace_refuses_never_ambient(self):
+        # An unset shell variable (--workspace "$WS") must not deploy to the
+        # ambient workspace or fall through to the machine lane.
+        self._os_context("demo")
+        code, envelope = _run_cli("app", "install", str(FIXTURE), "--workspace", "", "--yes")
+        self.assertNotEqual(code, 0)
+        self.assertIn("must not be empty", envelope["error"]["message"])
 
     def test_selector_free_install_instance_only_context_refuses(self):
         self._os_context(workspace=None)

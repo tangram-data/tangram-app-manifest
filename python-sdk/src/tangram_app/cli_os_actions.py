@@ -16,10 +16,11 @@ from .local_os import LocalOsError, base_url, load_os_credential, os_request
 
 
 def wants_os_lane(args) -> bool:
-    # Presence, not truthiness: `--workspace` given BARE parses to "" (the
-    # ambient context fills in downstream), and an explicitly EMPTY
-    # --instance/--os-url/--token must reach the selector's refusal instead
-    # of silently reading as "no selector".
+    # Presence, not truthiness: `--workspace` given BARE parses to the
+    # AMBIENT_WORKSPACE sentinel (the ambient context fills in downstream),
+    # and an explicitly EMPTY --workspace/--instance/--os-url/--token must
+    # reach the selector's refusal instead of silently reading as "no
+    # selector".
     return any(
         getattr(args, name, None) is not None for name in ("workspace", "instance", "os_url", "token")
     )
@@ -28,7 +29,9 @@ def wants_os_lane(args) -> bool:
 def _credential(selector: dict) -> dict:
     if selector.get("url"):
         return {"token": selector["token"], "url": selector["url"]}
-    return load_os_credential(selector.get("instance"))
+    # profile_url (from the .HEAD profile) pins the endpoint the resolved
+    # context points at — the credential must have been issued for it.
+    return load_os_credential(selector.get("instance"), expected_url=selector.get("profile_url"))
 
 
 def _workspace(selector: dict, credential: dict) -> str:

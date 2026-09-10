@@ -236,6 +236,58 @@ class AmbientWorkspaceContextTest(OsActionsLaneTest):
         self.assertIn("workspace", envelope["error"]["message"])
         self.assertEqual(_FakeOs.performed, [])
 
+    def test_env_instance_local_pins_the_machine_context(self):
+        # `local`/`machine` are the machine-context words, never OS instances.
+        self._set_head("demo")
+        os.environ["TANGRAM_INSTANCE"] = "local"
+        self.addCleanup(os.environ.pop, "TANGRAM_INSTANCE", None)
+        code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
+        self.assertNotEqual(code, 0)  # local lane: no app named 'todo'
+        self.assertNotIn("workspace", envelope["error"]["message"])
+        self.assertEqual(_FakeOs.performed, [])
+
+    def test_env_machine_pin_with_workspace_pin_refuses(self):
+        os.environ["TANGRAM_INSTANCE"] = "machine"
+        os.environ["TANGRAM_WORKSPACE"] = "demo"
+        self.addCleanup(os.environ.pop, "TANGRAM_INSTANCE", None)
+        self.addCleanup(os.environ.pop, "TANGRAM_WORKSPACE", None)
+        code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
+        self.assertNotEqual(code, 0)
+        self.assertIn("unset TANGRAM_WORKSPACE", envelope["error"]["message"])
+
+    def test_env_machine_pin_with_explicit_workspace_flag_refuses(self):
+        # The pinned machine context must not be bypassed by re-reading
+        # .HEAD to fill the instance for an OS selector.
+        self._set_head("demo")
+        os.environ["TANGRAM_INSTANCE"] = "local"
+        self.addCleanup(os.environ.pop, "TANGRAM_INSTANCE", None)
+        code, envelope = _run_cli(
+            "call", "todo", "List", "--workspace", "demo", "--input-json", "{}"
+        )
+        self.assertNotEqual(code, 0)
+        self.assertIn("machine", envelope["error"]["message"])
+        self.assertEqual(_FakeOs.performed, [])
+
+    def test_explicitly_empty_workspace_flag_refuses(self):
+        self._set_head("demo")
+        code, envelope = _run_cli(
+            "call", "todo", "List", "--workspace", "", "--input-json", "{}"
+        )
+        self.assertNotEqual(code, 0)
+        self.assertIn("must not be empty", envelope["error"]["message"])
+        self.assertEqual(_FakeOs.performed, [])
+
+    def test_credential_endpoint_must_match_the_head_profile(self):
+        home = Path(self._home.name)
+        (home / ".credentials").write_text(
+            json.dumps([{"instance": "dev", "url": "http://10.9.9.9:1", "token": "tok"}]), encoding="utf-8"
+        )
+        self._set_head("demo")
+        code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
+        self.assertNotEqual(code, 0)
+        self.assertIn("issued for", envelope["error"]["message"])
+        self.assertEqual(_FakeOs.performed, [])
+
     def test_refusal_lists_visible_workspaces(self):
         self._set_head(None)
         code, envelope = _run_cli("actions", "todo", "--workspace")
