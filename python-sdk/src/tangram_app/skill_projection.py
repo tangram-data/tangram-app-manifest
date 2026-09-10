@@ -265,7 +265,7 @@ def _render(entry: dict, name: str, freeform: dict) -> str:
         "",
         "## How to use (governed CLI — required)",
         "",
-        f"1. `tangram-app actions {app_id}` — the current action catalog",
+        f"1. `tangram-app actions {app_id} --local` — the current action catalog",
         f"2. `tangram-app inspect {app_id} --action <Ref> --package-digest {digest}` — an action's argument schema",
         f"3. `tangram-app call {app_id} <Ref> --local --input-json '{{...}}' --package-digest {digest}`",
         "   — put the action's arguments in the JSON object (`'{}'` when it takes none).",

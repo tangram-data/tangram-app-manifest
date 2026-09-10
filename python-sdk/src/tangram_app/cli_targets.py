@@ -202,7 +202,10 @@ def handle_app_install(args) -> dict:
     if getattr(args, "global_install", False):
         selector = resolve_os_selector(args)
     elif not args.workspace:
-        if any((args.instance, args.os_url, args.token)):
+        # PRESENCE, not truthiness: an explicitly empty --instance/--os-url/
+        # --token must refuse here, never fall through to the ambient or
+        # machine lane.
+        if any(value is not None for value in (args.instance, args.os_url, args.token)):
             raise TargetError(
                 "--instance/--os-url/--token target a Tangram OS workspace; "
                 "add --workspace WS (or drop them for a machine install)"

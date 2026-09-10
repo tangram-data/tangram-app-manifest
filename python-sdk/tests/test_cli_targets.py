@@ -254,6 +254,15 @@ class ConsentAndDispatchTest(unittest.TestCase):
         self.assertEqual(code, 0, envelope)
         self.assertTrue(envelope["data"]["deployed"]["dryRun"])
 
+    def test_explicitly_empty_os_flags_refuse_without_workspace(self):
+        # `--instance "$UNSET"` is presence, not truthiness: it must refuse,
+        # never fall through to the ambient (or machine) install lane.
+        self._os_context("demo")
+        for flag in ("--instance", "--os-url", "--token"):
+            code, envelope = _run_cli("app", "install", str(FIXTURE), flag, "", "--yes")
+            self.assertNotEqual(code, 0, flag)
+            self.assertIn("--instance/--os-url/--token", envelope["error"]["message"])
+
     def test_explicitly_empty_workspace_refuses_never_ambient(self):
         # An unset shell variable (--workspace "$WS") must not deploy to the
         # ambient workspace or fall through to the machine lane.

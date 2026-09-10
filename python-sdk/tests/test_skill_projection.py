@@ -180,6 +180,16 @@ class ProjectionTest(unittest.TestCase):
             config["skillProjection"]["names"], {"com.example/orders": "tangram-orders"}
         )
 
+    def test_generated_skill_pins_local_for_discovery_and_execution(self):
+        # Machine-store skills must be context-immune: discovery and
+        # execution BOTH pin --local, or an OS context would show a
+        # different app's catalog than the one invoked.
+        install_app(str(FIXTURE))
+        _run_cli("skill", "sync", "--enable")
+        text = self._skill("claude", "tangram-orders").read_text(encoding="utf-8")
+        self.assertIn("`tangram-app actions com.example/orders --local`", text)
+        self.assertIn("--local --input-json", text)
+
     def test_rebuild_backfills_missing_projection(self):
         entry = install_app(str(FIXTURE))
         marker = Path(entry["root"]) / ".install.json"
