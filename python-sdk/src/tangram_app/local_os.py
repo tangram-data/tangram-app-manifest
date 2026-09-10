@@ -14,6 +14,7 @@ remote.
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 import urllib.error
 import urllib.parse
@@ -62,22 +63,28 @@ def load_os_credential(instance: str | None = None) -> dict:
 
 
 def ambient_context() -> dict:
-    """Instance + workspace of the persisted context (`tangram use I[/WS]`),
-    from ONE `.HEAD` read — callers must never pair a workspace from one
-    read with an instance from another (a concurrent `use` could cross
-    them)."""
+    """Instance + workspace of the ambient context. Precedence per axis:
+    `TANGRAM_INSTANCE`/`TANGRAM_WORKSPACE` env (per-shell/per-agent pinning,
+    the kubectl `--context` lesson) over the persisted `.HEAD` — read ONCE.
+    An env instance NEVER pairs with a `.HEAD` workspace: that workspace
+    belongs to the persisted instance, and carrying it across is the exact
+    cross-instance hazard the model forbids."""
+    env_instance = os.environ.get("TANGRAM_INSTANCE") or None
+    env_workspace = os.environ.get("TANGRAM_WORKSPACE") or None
+    if env_instance:
+        return {"instance": env_instance, "workspace": env_workspace}
     try:
         head = json.loads((tangram_home() / ".HEAD").read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return {"instance": None, "workspace": None}
+        head = None
     if not isinstance(head, dict):
-        return {"instance": None, "workspace": None}
+        return {"instance": None, "workspace": env_workspace}
 
     def _field(name: str) -> str | None:
         value = head.get(name)
         return value if isinstance(value, str) and value else None
 
-    return {"instance": _field("instance"), "workspace": _field("workspace")}
+    return {"instance": _field("instance"), "workspace": env_workspace or _field("workspace")}
 
 
 def ambient_workspace() -> str | None:

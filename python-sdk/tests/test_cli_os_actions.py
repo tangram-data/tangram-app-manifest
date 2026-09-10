@@ -144,9 +144,6 @@ class OsActionsLaneTest(unittest.TestCase):
         )
         self.assertNotEqual(code, 0)
         self.assertIn("OS lane", envelope["error"]["message"])
-        code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
-        self.assertNotEqual(code, 0)
-        self.assertIn("--local", envelope["error"]["message"])
         code, envelope = _run_cli(
             "call", "todo", "List", "--workspace", "demo", "--input-json", "{}", "--confirm"
         )
@@ -176,11 +173,32 @@ class AmbientWorkspaceContextTest(OsActionsLaneTest):
         self.assertEqual(envelope["data"]["workspace"], "demo")
         self.assertEqual(envelope["data"]["actions"][0]["ref"], "Todo.List")
 
-    def test_bare_call_without_ambient_keeps_local_error(self):
+    def test_bare_call_in_machine_context_means_local(self):
         self._set_head(None)
         code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
+        # Local lane engaged: the failure is target resolution (nothing named
+        # 'todo' in the fixture store), not a missing execution flag.
         self.assertNotEqual(code, 0)
-        self.assertIn("--local", envelope["error"]["message"])
+        self.assertNotIn("--local", envelope["error"]["message"])
+        self.assertEqual(_FakeOs.performed, [])
+
+    def test_env_workspace_overrides_head(self):
+        self._set_head("other")
+        os.environ["TANGRAM_WORKSPACE"] = "demo"
+        self.addCleanup(os.environ.pop, "TANGRAM_WORKSPACE", None)
+        code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
+        self.assertEqual(code, 0, envelope)
+        self.assertEqual(envelope["data"]["workspace"], "demo")
+
+    def test_env_instance_never_pairs_with_head_workspace(self):
+        self._set_head("demo")
+        os.environ["TANGRAM_INSTANCE"] = "dev"
+        self.addCleanup(os.environ.pop, "TANGRAM_INSTANCE", None)
+        # env instance without env workspace: the .HEAD workspace must NOT
+        # ride along — machine-context local lane engages instead.
+        code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
+        self.assertNotEqual(code, 0)
+        self.assertEqual(_FakeOs.performed, [])
 
     def test_refusal_lists_visible_workspaces(self):
         self._set_head(None)

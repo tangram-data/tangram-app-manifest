@@ -323,7 +323,11 @@ def _is_managed(directory: Path) -> bool:
 
 
 def _active_context() -> str:
-    """The persisted native-CLI context from `.HEAD`: `machine` when none,
+    """DELIBERATELY reads `.HEAD` only — never the TANGRAM_INSTANCE/WORKSPACE
+    env overrides: those pin a single shell/agent session, while projection
+    writes SHARED agent catalogs that must follow the global context.
+
+    The persisted native-CLI context from `.HEAD`: `machine` when none,
     `instance:<name>` for a bare instance, and
     `instance:<name>/workspace:<ws>` once `tangram use I/WS` set one."""
     try:

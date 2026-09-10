@@ -322,10 +322,13 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         return {**report, "applied": applied}
     if args.command == "call":
         # Bare `call` follows the ambient context: with `tangram use I/WS`
-        # set, an agent's plain `call app Ref` targets that workspace
-        # (previously an error, so strictly additive).
-        if not wants_os_lane(args) and not (args.local or args.backend or args.connected) and ambient_workspace():
-            args.workspace = ""
+        # set it targets that workspace; in the machine context it means the
+        # local lane. (Both previously errored, so strictly additive.)
+        if not wants_os_lane(args) and not (args.local or args.backend or args.connected):
+            if ambient_workspace():
+                args.workspace = ""
+            else:
+                args.local = True
         if wants_os_lane(args):
             if args.local or args.backend or args.connected:
                 raise CliArgumentsError("--workspace/--instance select the OS lane; drop --local/--backend/--connected")
@@ -337,10 +340,6 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
                 allow_mutation=args.allow_mutation,
                 confirm=args.confirm,
                 timeout_seconds=args.timeout,
-            )
-        if not (args.local or args.backend or args.connected):
-            raise CliArgumentsError(
-                "one of --local, --backend URL, --connected (or --workspace WS for the OS lane) is required"
             )
         arguments = _read_json_input(args.input_json)
         app = _load_app(args.target)
