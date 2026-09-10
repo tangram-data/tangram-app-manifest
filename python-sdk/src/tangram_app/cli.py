@@ -45,6 +45,7 @@ from .cli_targets import (
 from . import skill_projection
 from .cli_skills import install_skills, sync_skills
 from .skill_projection import sync_after_store_change
+from .local_os import ambient_workspace
 from .local_store import resolve_target
 from .skills import (
     generate_skill,
@@ -320,6 +321,11 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         report = diagnose()
         return {**report, "applied": applied}
     if args.command == "call":
+        # Bare `call` follows the ambient context: with `tangram use I/WS`
+        # set, an agent's plain `call app Ref` targets that workspace
+        # (previously an error, so strictly additive).
+        if not wants_os_lane(args) and not (args.local or args.backend or args.connected) and ambient_workspace():
+            args.workspace = ""
         if wants_os_lane(args):
             if args.local or args.backend or args.connected:
                 raise CliArgumentsError("--workspace/--instance select the OS lane; drop --local/--backend/--connected")

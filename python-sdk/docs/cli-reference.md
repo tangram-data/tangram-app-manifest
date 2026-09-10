@@ -55,6 +55,7 @@ Translations match the native front door: `app ls` → `app list`,
 | `call \| inspect … --package-digest sha256:…` | Refuse when the installed package no longer matches the digest a generated skill was rendered from |
 | `actions APP --workspace WS [--instance N \| --os-url U --token T]` | A workspace app's declared action contracts (effect, confirmation, schemas) from the OS entity-action surface, with the native CLI's stored credentials |
 | `call APP REF --workspace WS --input-json '{…}' [--allow-mutation]` | Perform one workspace app action as you, server-governed (per-type IAM, audited); short refs resolve against the server catalog; confirmation-gated and irreversible actions refuse (use the app UI) |
+| `call APP REF --input-json '{…}'` (bare, after `tangram use INSTANCE/WS`) | Same OS lane against the AMBIENT context workspace; `--workspace` given bare also selects it. Explicit flags always win; without an ambient workspace the bare form keeps today's error |
 
 `TARGET` is a package directory, a capability graph JSON file, or an
 installed app reference — the app id (`com.example/orders`) or its bare

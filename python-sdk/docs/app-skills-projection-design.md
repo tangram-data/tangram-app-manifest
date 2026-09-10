@@ -185,13 +185,16 @@ Projection follows it:
   never thrash). The active context today is the persisted instance
   (`instance:<name>` from `.HEAD`); the workspace half remains the
   canonical-context dependency below.
-- **DEPENDENCY — a canonical persisted context.** Today the python
-  lane persists only an instance (`.HEAD`); the workspace is always an
-  explicit flag, and `use` itself is native-only (the pip front door
-  delegates it back). Before S4 there must be one recorded
-  instance+workspace context both CLIs read, and the native `use` must
-  invoke `skill sync` (or the front door intercepts it). Cross-repo
-  work, called out as such.
+- **Canonical persisted context — LANDED.** `tangram use INSTANCE/WS`
+  persists the workspace beside the instance in `.HEAD` (a bare
+  instance clears it, so a stale workspace never survives an instance
+  switch); the SDK reads it as the ambient workspace: bare
+  `call app Ref` targets it (previously an error — strictly additive),
+  `--workspace` given bare selects it explicitly, and explicit values
+  always win. Native `use` already triggers the quiet `skill sync`,
+  and the projection context is now
+  `instance:<i>/workspace:<ws>`. A workspace refusal lists the
+  credential's visible workspaces so the fix is one copy-paste away.
 - **Availability follows context; invocation is PINNED.** A workspace
   skill's commands embed the explicit selector
   (`--workspace WS --instance N`), never relying on ambient context:

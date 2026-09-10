@@ -49,6 +49,8 @@ class _FakeOs(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.endswith("/apps/todo/actions"):
             self._reply(CATALOG)
+        elif self.path.endswith("/api/core/v1/workspaces"):
+            self._reply([{"name": "demo"}, {"metadata": {"name": "analytics"}}])
         else:
             self._reply({"message": "not found"}, 404)
 
@@ -150,6 +152,44 @@ class OsActionsLaneTest(unittest.TestCase):
         )
         self.assertNotEqual(code, 0)
         self.assertIn("confirmation", envelope["error"]["message"])
+
+
+class AmbientWorkspaceContextTest(OsActionsLaneTest):
+    def _set_head(self, workspace: str | None):
+        home = Path(self._home.name)
+        head = {"instance": "dev", "url": f"http://127.0.0.1:{self.server.server_port}"}
+        if workspace:
+            head["workspace"] = workspace
+        (home / ".HEAD").write_text(json.dumps(head), encoding="utf-8")
+
+    def test_bare_call_follows_the_ambient_context(self):
+        self._set_head("demo")
+        code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
+        self.assertEqual(code, 0, envelope)
+        self.assertEqual(envelope["data"]["workspace"], "demo")
+        self.assertEqual(len(_FakeOs.performed), 1)
+
+    def test_bare_workspace_flag_uses_ambient(self):
+        self._set_head("demo")
+        code, envelope = _run_cli("actions", "todo", "--workspace")
+        self.assertEqual(code, 0, envelope)
+        self.assertEqual(envelope["data"]["workspace"], "demo")
+        self.assertEqual(envelope["data"]["actions"][0]["ref"], "Todo.List")
+
+    def test_bare_call_without_ambient_keeps_local_error(self):
+        self._set_head(None)
+        code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
+        self.assertNotEqual(code, 0)
+        self.assertIn("--local", envelope["error"]["message"])
+
+    def test_refusal_lists_visible_workspaces(self):
+        self._set_head(None)
+        code, envelope = _run_cli("actions", "todo", "--workspace")
+        self.assertNotEqual(code, 0)
+        message = envelope["error"]["message"]
+        self.assertIn("tangram use INSTANCE/WS", message)
+        self.assertIn("analytics", message)
+        self.assertIn("demo", message)
 
 
 if __name__ == "__main__":

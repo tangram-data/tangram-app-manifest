@@ -61,6 +61,16 @@ def load_os_credential(instance: str | None = None) -> dict:
     )
 
 
+def ambient_workspace() -> str | None:
+    """The workspace half of the persisted context (`tangram use I/WS`)."""
+    try:
+        head = json.loads((tangram_home() / ".HEAD").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    workspace = head.get("workspace") if isinstance(head, dict) else None
+    return workspace if isinstance(workspace, str) and workspace else None
+
+
 def configured_instances() -> list[str]:
     """Names of all stored instance credentials (empty when none)."""
     try:

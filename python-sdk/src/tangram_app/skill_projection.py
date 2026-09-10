@@ -323,15 +323,22 @@ def _is_managed(directory: Path) -> bool:
 
 
 def _active_context() -> str:
-    """The persisted native-CLI context: `instance:<name>` from `.HEAD`, or
-    `machine`. (A canonical instance+workspace record is a flagged design
-    dependency; until it lands the instance is the whole context.)"""
+    """The persisted native-CLI context from `.HEAD`: `machine` when none,
+    `instance:<name>` for a bare instance, and
+    `instance:<name>/workspace:<ws>` once `tangram use I/WS` set one."""
     try:
         head = json.loads((tangram_home() / ".HEAD").read_text(encoding="utf-8"))
-        instance = head.get("instance") if isinstance(head, dict) else None
     except (OSError, ValueError):
-        instance = None
-    return f"instance:{instance}" if isinstance(instance, str) and instance else "machine"
+        return "machine"
+    if not isinstance(head, dict):
+        return "machine"
+    instance = head.get("instance")
+    if not isinstance(instance, str) or not instance:
+        return "machine"
+    workspace = head.get("workspace")
+    if isinstance(workspace, str) and workspace:
+        return f"instance:{instance}/workspace:{workspace}"
+    return f"instance:{instance}"
 
 
 def _only_skill_md(directory: Path) -> bool:

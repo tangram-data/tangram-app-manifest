@@ -16,11 +16,13 @@ from .local_os import LocalOsError, base_url, load_os_credential, os_request
 
 
 def wants_os_lane(args) -> bool:
-    return bool(
-        getattr(args, "workspace", None)
-        or getattr(args, "instance", None)
-        or getattr(args, "os_url", None)
-        or getattr(args, "token", None)
+    # `--workspace` given BARE parses to "" and still selects the OS lane
+    # (the ambient context workspace fills in downstream).
+    return (
+        getattr(args, "workspace", None) is not None
+        or bool(getattr(args, "instance", None))
+        or bool(getattr(args, "os_url", None))
+        or bool(getattr(args, "token", None))
     )
 
 
@@ -30,11 +32,43 @@ def _credential(selector: dict) -> dict:
     return load_os_credential(selector.get("instance"))
 
 
-def _workspace(selector: dict) -> str:
+def _workspace(selector: dict, credential: dict) -> str:
     workspace = selector.get("workspace")
-    if not workspace:
-        raise LocalOsError("the Tangram OS lane needs --workspace WS (or --workspace INSTANCE/WS)")
-    return workspace
+    if workspace:
+        return workspace
+    # Refinement: the refusal lists the workspaces this credential can see,
+    # so the fix is one copy-paste away. Best-effort — listing failures must
+    # not mask the actual error.
+    visible = ""
+    try:
+        rows = os_request(credential, "GET", "/api/core/v1/workspaces", label="OS workspaces")
+        names = sorted(
+            {name for row in rows for name in [_workspace_name(row)] if name}
+            if isinstance(rows, list)
+            else set()
+        )
+        if names:
+            visible = f" (visible workspaces: {', '.join(names)})"
+    except LocalOsError:
+        pass
+    raise LocalOsError(
+        "the Tangram OS lane needs a workspace: pass --workspace WS, or set an "
+        f"ambient one with `tangram use INSTANCE/WS`{visible}"
+    )
+
+
+def _workspace_name(row) -> str | None:
+    if isinstance(row, str):
+        return row
+    if not isinstance(row, dict):
+        return None
+    for path in (("name",), ("metadata", "name"), ("spec", "name"), ("workspace",)):
+        value = row
+        for key in path:
+            value = value.get(key) if isinstance(value, dict) else None
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 def _actions_path(workspace: str, app: str) -> str:
@@ -46,7 +80,7 @@ def _actions_path(workspace: str, app: str) -> str:
 def os_actions(app: str, selector: dict, *, timeout_seconds: float = 60.0) -> dict:
     """The app's declared action contracts, verbatim from the server."""
     credential = _credential(selector)
-    workspace = _workspace(selector)
+    workspace = _workspace(selector, credential)
     catalog = os_request(
         credential,
         "GET",
@@ -94,7 +128,7 @@ def os_call(
     timeout_seconds: float = 60.0,
 ) -> dict:
     credential = _credential(selector)
-    workspace = _workspace(selector)
+    workspace = _workspace(selector, credential)
     if confirm:
         raise LocalOsError(
             "--confirm has no effect on the OS lane: confirmation-gated actions "

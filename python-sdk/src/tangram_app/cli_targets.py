@@ -13,7 +13,14 @@ from __future__ import annotations
 
 import sys
 
-from .local_os import LocalOsError, base_url, configured_instances, load_os_credential, os_install
+from .local_os import (
+    LocalOsError,
+    ambient_workspace,
+    base_url,
+    configured_instances,
+    load_os_credential,
+    os_install,
+)
 from .local_store import install_app, list_installed, resolve_installed, resolve_target, uninstall_app
 
 
@@ -50,8 +57,10 @@ def resolve_os_selector(args) -> dict:
             raise TargetError("--os-url conflicts with --instance")
         return {"url": os_url, "token": token, "workspace": workspace, "ambient": False}
     if instance:
-        return {"instance": instance, "workspace": workspace, "ambient": False}
-    return {"instance": None, "workspace": workspace, "ambient": True}
+        return {"instance": instance, "workspace": workspace or None, "ambient": False}
+    # Fully ambient: the persisted context's workspace (`tangram use I/WS`)
+    # fills in when the flag is absent or given bare (`--workspace`).
+    return {"instance": None, "workspace": (workspace or None) or ambient_workspace(), "ambient": True}
 
 
 def _describe(selector: dict, credential: dict | None) -> str:
