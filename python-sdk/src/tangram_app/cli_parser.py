@@ -62,6 +62,8 @@ def build_parser() -> _Parser:
     app_install.add_argument("source")
     app_install.add_argument("--force", action="store_true")  # deprecated → --upgrade
     app_install.add_argument("--workspace")
+    app_install.add_argument("--global", dest="global_install", action="store_true",
+                             help="Deploy instance-wide; conflicts with --workspace")
     app_install.add_argument("--instance")
     app_install.add_argument("--os-url")
     app_install.add_argument("--token")
@@ -138,5 +140,4 @@ def build_parser() -> _Parser:
     sync_mode.add_argument("--approve", metavar="DIGEST")
     sync_mode.add_argument("--rebuild", action="store_true")
     return parser
-
 

@@ -101,16 +101,17 @@ def _profile_url(home: Path, instance: str) -> str | None:
     return None
 
 
-def ambient_context() -> dict:
+def ambient_context(*, ignore_workspace: bool = False) -> dict:
     """Instance + workspace (+ `.HEAD`'s profile_url) of the ambient
     context. Precedence per axis: `TANGRAM_INSTANCE`/`TANGRAM_WORKSPACE` env
     (per-shell/per-agent pinning, the kubectl `--context` lesson) over the
     persisted `.HEAD` — read ONCE. An env instance NEVER pairs with a
     `.HEAD` workspace: that workspace belongs to the persisted instance,
     and carrying it across is the exact cross-instance hazard the model
-    forbids."""
+    forbids. `ignore_workspace` selects an explicit instance-wide scope;
+    workspace defaults have no meaning in that scope."""
     env_instance = os.environ.get("TANGRAM_INSTANCE") or None
-    env_workspace = os.environ.get("TANGRAM_WORKSPACE") or None
+    env_workspace = None if ignore_workspace else os.environ.get("TANGRAM_WORKSPACE") or None
     if env_instance in ("local", "machine"):
         # The machine-context words pin THE MACHINE, exactly like
         # `tangram use local` — they never name an OS instance.
@@ -151,7 +152,7 @@ def ambient_context() -> dict:
     url = head.get("url")
     return {
         "instance": instance or None,
-        "workspace": env_workspace or workspace or None,
+        "workspace": None if ignore_workspace else env_workspace or workspace or None,
         "profile_url": url if isinstance(url, str) and url else None,
     }
 

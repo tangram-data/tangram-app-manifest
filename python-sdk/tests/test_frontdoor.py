@@ -16,6 +16,11 @@ from tangram_app.frontdoor import find_native, main, route
 
 
 class RouteTest(unittest.TestCase):
+    def test_global_install_routing(self):
+        args = ["app", "install", "./connector", "--global", "--instance", "prod"]
+        self.assertEqual(route(args), args)
+        for version in ("--version", "-v"):
+            self.assertIsNone(route(["app", "install", "com.example", "connector", version, "1.0", "--global"]))
     def test_agent_lane_routes_in_process(self):
         self.assertEqual(route(["doctor", "--fix"]), ["doctor", "--fix"])
         self.assertEqual(route(["app", "list"]), ["app", "list"])

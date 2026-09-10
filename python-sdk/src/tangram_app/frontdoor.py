@@ -40,6 +40,12 @@ def route(args: list[str]) -> list[str] | None:
         return None
     if args[0] in _PASSTHROUGH:
         return args
+    if args[:2] == ["app", "install"] and "--global" in args[2:]:
+        # Catalog installs have GROUP NAME --version; package installs belong
+        # to the SDK, including explicitly selected instances.
+        if any(t in ("--version", "-v") or t.startswith(("--version=", "-v=")) for t in args[2:]):
+            return None
+        return args
     if len(args) >= 2 and args[0] == "app" and args[1] in _MACHINE_APP_VERBS:
         rest = args[2:]
         if any(_is_selector(token) for token in rest):

@@ -2,6 +2,34 @@
 
 [Back to the SDK guide](sdk-guide.md)
 
+## Global install scope
+
+`app install SOURCE --global` selects the current Tangram OS instance's shared
+deployment scope (`tangram_os_shared`). It requires an OS instance, ignores
+the ambient workspace, and conflicts with an explicit `--workspace`.
+Use `--instance NAME` or `--os-url URL --token TOKEN` to select the instance
+explicitly. Otherwise the existing ambient-target consent gate applies:
+interactive confirmation or `--yes` for non-interactive execution.
+
+The server's existing shared-app policy still applies: only allowlisted
+system apps and eligible catalog connectors can deploy globally. OAuth
+connectors must support per-user connections. Local workspace-app packages
+are rejected, including on `--dry-run`; this flag does not enable arbitrary
+apps globally. To install an eligible catalog connector, use the native CLI:
+
+```sh
+tangram use prod
+tangram app install com.example connector --version 1.0.0 --global
+# App Hub plan, followed by the same command without --dry-run to apply:
+tangram app pkg hub-install com.example connector 1.0.0 --global --dry-run
+```
+
+Global SDK responses include `scope: "global"`, the resolved `instance`,
+`target`, and internal `workspace`. A workspace-specific deployment takes
+precedence over the shared deployment at runtime.
+
+## Output contract
+
 This page is the reference for the versioned `tangram-app` command surface and
 its machine-readable envelopes.
 

@@ -16,7 +16,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from tangram_app import cli
-from tangram_app.cli_targets import TargetError, resolve_os_selector
+from tangram_app.cli_targets import TargetError, resolve_os_selector, GLOBAL_APP_WORKSPACE
 from tangram_app.local_store import install_app
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "minimal-app"
@@ -72,6 +72,32 @@ class SelectorGrammarTest(unittest.TestCase):
         self.assertTrue(ambient["ambient"])
         self.assertEqual(ambient["instance"], "dev")
 
+    def test_global_scope_ignores_ambient_workspace_but_rejects_explicit_workspace(self):
+        with mock.patch.dict(os.environ, {"TANGRAM_WORKSPACE": "analytics"}):
+            selector = resolve_os_selector(_args(global_install=True))
+        self.assertEqual(selector["instance"], "dev")
+        self.assertEqual(selector["workspace"], GLOBAL_APP_WORKSPACE)
+        self.assertEqual(selector["scope"], "global")
+        for workspace in ("analytics", "prod/analytics", "", "  "):
+            with self.assertRaises(TargetError):
+                resolve_os_selector(_args(global_install=True, workspace=workspace))
+
+    def test_global_explicit_instance_and_url_selectors(self):
+        for kwargs in ({"instance": "prod"}, {"os_url": "https://os.example.com", "token": "fake"}):
+            selector = resolve_os_selector(_args(global_install=True, **kwargs))
+            self.assertFalse(selector["ambient"])
+            self.assertEqual(selector["workspace"], GLOBAL_APP_WORKSPACE)
+        for kwargs in ({"instance": "local"}, {"instance": ""}, {"os_url": "https://x"},
+                       {"instance": "prod", "os_url": "https://x", "token": "t"}):
+            with self.assertRaises(TargetError):
+                resolve_os_selector(_args(global_install=True, **kwargs))
+
+    def test_global_requires_an_os_instance(self):
+        with mock.patch.dict(os.environ, {"TANGRAM_INSTANCE": "local"}):
+            with self.assertRaises(TargetError):
+                resolve_os_selector(_args(global_install=True))
+            self.assertEqual(resolve_os_selector(_args(global_install=True, instance="prod"))["instance"], "prod")
+
     def test_conflicts_refuse_never_precedence(self):
         conflicts = [
             _args(workspace="prod/ws", instance="dev"),
@@ -94,9 +120,10 @@ class SelectorGrammarTest(unittest.TestCase):
 
 
 class _FakeOs(BaseHTTPRequestHandler):
+    requests = []
     def do_POST(self):
         length = int(self.headers.get("Content-Length", "0"))
-        self.rfile.read(length)
+        self.requests.append((self.path, json.loads(self.rfile.read(length))))
         payload = json.dumps({"accepted": True}).encode()
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -122,6 +149,7 @@ class ConsentAndDispatchTest(unittest.TestCase):
             else os.environ.pop("TANGRAM_AGENT_HOME", None)
         )
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _FakeOs)
+        _FakeOs.requests = []
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.addCleanup(self.server.shutdown)
         home = Path(self._home.name)
@@ -139,6 +167,25 @@ class ConsentAndDispatchTest(unittest.TestCase):
         if workspace:
             head["workspace"] = workspace
         (Path(self._home.name) / ".HEAD").write_text(json.dumps(head))
+
+    def test_global_install_posts_to_shared_scope_and_reports_it(self):
+        self._os_context("analytics")
+        code, envelope = _run_cli("app", "install", str(FIXTURE), "--global", "--dry-run", "--yes")
+        self.assertEqual(code, 0, envelope)
+        self.assertEqual(envelope["data"]["deployed"]["scope"], "global")
+        path, body = _FakeOs.requests[-1]
+        self.assertEqual(path, "/api/core/v1/workspaces/tangram_os_shared/apps:install")
+        self.assertTrue(body["dryRun"])
+        self.assertEqual(body["source"]["kind"], "local-package")
+
+    def test_global_install_keeps_ambient_consent_gate(self):
+        code, envelope = _run_cli("app", "install", str(FIXTURE), "--global")
+        self.assertNotEqual(code, 0)
+        self.assertIn("shared across all workspaces", envelope["error"]["message"])
+        self.assertEqual(_FakeOs.requests, [])
+        code, envelope = _run_cli("app", "install", str(FIXTURE), "--global", "--instance", "prod")
+        self.assertEqual(code, 0, envelope)
+        self.assertEqual(envelope["data"]["deployed"]["instance"], "prod")
 
     def test_non_tty_ambient_refuses_without_yes(self):
         code, envelope = _run_cli("app", "install", str(FIXTURE), "--workspace", "demo")

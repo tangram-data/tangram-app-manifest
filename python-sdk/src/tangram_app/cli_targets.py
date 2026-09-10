@@ -32,6 +32,7 @@ class TargetError(ValueError):
 # Bare `--workspace` (ambient-fill request). argv strings cannot contain NUL,
 # so an explicit value can never collide with this sentinel.
 AMBIENT_WORKSPACE = "\x00ambient"
+GLOBAL_APP_WORKSPACE = "tangram_os_shared"
 
 
 def _interactive() -> bool:
@@ -47,6 +48,9 @@ def resolve_os_selector(args) -> dict:
     """Selector grammar: one complete OS target or a refusal."""
     workspace, instance = args.workspace, args.instance
     os_url, token = args.os_url, args.token
+    global_install = getattr(args, "global_install", False)
+    if global_install and workspace is not None:
+        raise TargetError("--global conflicts with --workspace")
     # An EXPLICITLY EMPTY selector (e.g. --workspace "$UNSET_VAR") must
     # refuse, never silently fall back to the ambient context. Bare
     # `--workspace` (the AMBIENT_WORKSPACE sentinel) is the only ambient-fill
@@ -58,6 +62,35 @@ def resolve_os_selector(args) -> dict:
     for name, value in (("--instance", instance), ("--os-url", os_url), ("--token", token)):
         if value is not None and not str(value).strip():
             raise TargetError(f"{name} must not be empty")
+    if global_install:
+        # Global is an explicit scope; neither persisted nor session workspace
+        # defaults may influence it. Instance selection and consent still apply.
+        if instance in ("local", "machine"):
+            raise TargetError("--global requires a Tangram OS instance, not the local machine")
+        if os_url or token:
+            if not (os_url and token):
+                raise TargetError("--os-url and --token go together")
+            if instance:
+                raise TargetError("--os-url conflicts with --instance")
+            return {
+                "url": os_url, "token": token, "workspace": GLOBAL_APP_WORKSPACE,
+                "scope": "global", "ambient": False,
+            }
+        if instance:
+            return {
+                "instance": instance, "workspace": GLOBAL_APP_WORKSPACE,
+                "scope": "global", "ambient": False,
+            }
+        context = ambient_context(ignore_workspace=True)
+        if not context["instance"]:
+            raise TargetError(
+                "--global requires a Tangram OS instance; pass --instance NAME "
+                "or select one with `tangram use INSTANCE`"
+            )
+        return {
+            "instance": context["instance"], "profile_url": context["profile_url"],
+            "workspace": GLOBAL_APP_WORKSPACE, "scope": "global", "ambient": True,
+        }
     if workspace and "/" in workspace:
         qualified_instance, _, qualified_ws = workspace.partition("/")
         if not qualified_instance or not qualified_ws:
@@ -100,10 +133,15 @@ def resolve_os_selector(args) -> dict:
 
 
 def _describe(selector: dict, credential: dict | None) -> str:
+    scope = (
+        "global scope (shared across all workspaces)"
+        if selector.get("scope") == "global"
+        else f"workspace '{selector['workspace']}'"
+    )
     if credential is not None:
         name = credential.get("instance", "explicit-url")
-        return f"instance '{name}' ({base_url(credential)}), workspace '{selector['workspace']}'"
-    return f"{selector.get('url')}, workspace '{selector['workspace']}'"
+        return f"instance '{name}' ({base_url(credential)}), {scope}"
+    return f"{selector.get('url')}, {scope}"
 
 
 def _consent_os_install(selector: dict, description: str, yes: bool) -> None:
@@ -116,6 +154,12 @@ def _consent_os_install(selector: dict, description: str, yes: bool) -> None:
     if not selector["ambient"]:
         return  # explicit selector is deliberate in non-interactive runs
     instances = ", ".join(configured_instances()) or "(none)"
+    if selector.get("scope") == "global":
+        raise TargetError(
+            f"refusing the ambient-context target ({description}) without --yes in a "
+            f"non-interactive run; pass --global --instance NAME (configured: {instances}), "
+            "or --yes to acknowledge this target"
+        )
     raise TargetError(
         f"refusing the ambient-context target ({description}) without --yes in a "
         f"non-interactive run; pass --instance NAME / --workspace INSTANCE/WS "
@@ -155,7 +199,9 @@ def handle_app_install(args) -> dict:
     # refuse — never fall through to the ambient or machine lane.
     if args.workspace is not None and not str(args.workspace).strip():
         raise TargetError("--workspace must not be empty")
-    if not args.workspace:
+    if getattr(args, "global_install", False):
+        selector = resolve_os_selector(args)
+    elif not args.workspace:
         if any((args.instance, args.os_url, args.token)):
             raise TargetError(
                 "--instance/--os-url/--token target a Tangram OS workspace; "
@@ -206,6 +252,8 @@ def handle_app_install(args) -> dict:
         upgrade=replace,
     )
     outcome["instance"] = credential.get("instance") if credential else None
+    if selector.get("scope") == "global":
+        outcome["scope"] = "global"
     return {"deployed": outcome}
 
 
