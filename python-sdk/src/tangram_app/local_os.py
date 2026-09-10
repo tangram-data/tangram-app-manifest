@@ -122,6 +122,40 @@ def read_tree(root: str | Path) -> dict[str, str]:
     return files
 
 
+def os_request(
+    credential: dict,
+    method: str,
+    path: str,
+    body: dict | None = None,
+    *,
+    timeout_seconds: float = 60.0,
+    label: str = "OS request",
+) -> dict:
+    """One authenticated core-server call: Bearer token, no proxy, no
+    redirects (never re-send credentials to another location)."""
+    target = f"{base_url(credential)}{path}"
+    headers = {"Authorization": f"Bearer {credential['token']}"}
+    data = None
+    if body is not None:
+        headers["Content-Type"] = "application/json"
+        data = json.dumps(body).encode("utf-8")
+    request = urllib.request.Request(target, data=data, headers=headers, method=method)
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
+    try:
+        with opener.open(request, timeout=timeout_seconds) as response:
+            return json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        if 300 <= error.code < 400:
+            raise LocalOsError(
+                f"{label} answered a redirect ({error.code}); refusing to re-send "
+                "credentials to another location"
+            ) from None
+        detail = error.read().decode("utf-8", "replace")[:1000]
+        raise LocalOsError(f"{label} answered {error.code}: {detail}") from None
+    except urllib.error.URLError as error:
+        raise LocalOsError(f"could not reach Tangram OS at {target}: {error.reason}") from None
+
+
 def os_install(
     package_root: str | Path,
     workspace: str,
@@ -146,33 +180,10 @@ def os_install(
         "upgrade": upgrade,
         "dryRun": dry_run,
     }
-    target = (
-        f"{base_url(credential)}/api/core/v1/workspaces/"
-        f"{urllib.parse.quote(workspace, safe='')}/apps:install"
+    path = f"/api/core/v1/workspaces/{urllib.parse.quote(workspace, safe='')}/apps:install"
+    result = os_request(
+        credential, "POST", path, body, timeout_seconds=timeout_seconds, label="OS install"
     )
-    request = urllib.request.Request(
-        target,
-        data=json.dumps(body).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {credential['token']}",
-        },
-        method="POST",
-    )
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
-    try:
-        with opener.open(request, timeout=timeout_seconds) as response:
-            result = json.loads(response.read())
-    except urllib.error.HTTPError as error:
-        if 300 <= error.code < 400:
-            raise LocalOsError(
-                f"OS install answered a redirect ({error.code}); refusing to re-send "
-                "credentials to another location"
-            ) from None
-        detail = error.read().decode("utf-8", "replace")[:1000]
-        raise LocalOsError(f"OS install answered {error.code}: {detail}") from None
-    except urllib.error.URLError as error:
-        raise LocalOsError(f"could not reach Tangram OS at {target}: {error.reason}") from None
     return {
         "workspace": workspace,
         "target": base_url(credential),

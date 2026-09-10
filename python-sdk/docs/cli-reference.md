@@ -53,6 +53,8 @@ Translations match the native front door: `app ls` → `app list`,
 | `skill sync` | Project installed apps as managed agent skills (Claude Code + Codex catalogs); reconciles add/update/remove per active context, reports conflicts. ON by default — `app install` runs it automatically (`--no-skills` opts out) |
 | `skill sync --enable \| --disable \| --status \| --approve DIGEST \| --rebuild` | Re-enable / turn off projection (disable removes managed skills), read-only status, approve an app's free-form text by digest, backfill projection records for older installs |
 | `call \| inspect … --package-digest sha256:…` | Refuse when the installed package no longer matches the digest a generated skill was rendered from |
+| `actions APP --workspace WS [--instance N \| --os-url U --token T]` | A workspace app's declared action contracts (effect, confirmation, schemas) from the OS entity-action surface, with the native CLI's stored credentials |
+| `call APP REF --workspace WS --input-json '{…}' [--allow-mutation]` | Perform one workspace app action as you, server-governed (per-type IAM, audited); short refs resolve against the server catalog; confirmation-gated and irreversible actions refuse (use the app UI) |
 
 `TARGET` is a package directory, a capability graph JSON file, or an
 installed app reference — the app id (`com.example/orders`) or its bare

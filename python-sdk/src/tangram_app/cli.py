@@ -34,11 +34,13 @@ from .errors import (
 )
 from .cli_actions import ActionRefError, actions_catalog, attach_url, call_policy, resolve_action_ref
 from .cli_connections import connected_call, handle_connect, handle_disconnect
+from .cli_os_actions import os_actions, os_call, wants_os_lane
 from .cli_targets import (
     handle_app_get,
     handle_app_install,
     handle_app_list,
     handle_app_uninstall,
+    resolve_os_selector,
 )
 from . import skill_projection
 from .cli_skills import install_skills, sync_skills
@@ -307,6 +309,8 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         app = _load_app(resolve_target(args.target))
         return handle_disconnect(app.graph.package.id)
     if args.command == "actions":
+        if wants_os_lane(args):
+            return os_actions(args.target, resolve_os_selector(args))
         app = _load_app(args.target)
         return {"app": app.graph.package.id, "actions": actions_catalog(app)}
     if args.command == "doctor":
@@ -316,6 +320,22 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         report = diagnose()
         return {**report, "applied": applied}
     if args.command == "call":
+        if wants_os_lane(args):
+            if args.local or args.backend or args.connected:
+                raise CliArgumentsError("--workspace/--instance select the OS lane; drop --local/--backend/--connected")
+            return os_call(
+                args.target,
+                args.binding,
+                _read_json_input(args.input_json),
+                resolve_os_selector(args),
+                allow_mutation=args.allow_mutation,
+                confirm=args.confirm,
+                timeout_seconds=args.timeout,
+            )
+        if not (args.local or args.backend or args.connected):
+            raise CliArgumentsError(
+                "one of --local, --backend URL, --connected (or --workspace WS for the OS lane) is required"
+            )
         arguments = _read_json_input(args.input_json)
         app = _load_app(args.target)
         _check_package_digest(app, args)

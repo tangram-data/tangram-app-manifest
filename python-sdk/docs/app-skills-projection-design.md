@@ -205,15 +205,16 @@ Projection follows it:
   app schema introspection, fetched at sync time with the stored
   credentials (`~/.tangram/.credentials`, the lane `local_os.py`
   already reuses).
-- **DEPENDENCY — the workspace call lane.** Today `call` is
-  `--local`/`--connected`/`--backend` only; there is no
-  `call … --workspace` from the CLI, though the governed server-side
-  pipeline (policy, confirmation, audit) exists and is what OS agent
-  tools use. Projecting workspace apps is gated on that verb landing
-  (native CLI or python-sdk over the OS HTTP API — same wire-reuse
-  pattern as the `app install --workspace` lane). Confirmation-gated
-  actions follow the OS's own rules server-side; the CLI adds no
-  consent theater of its own.
+- **The workspace call lane (S3) — LANDED.** The core server gained a
+  PAT-addressable entity-action surface
+  (`GET/POST /api/core/v1/workspaces/{ws}/apps/{app}/actions[…/perform]`,
+  contract catalog identical to the agent tool's, perform as the calling
+  user through the shared lane: per-type IAM, audit surface `cli`), and
+  `tangram actions/call … --workspace WS` ride it with the stored
+  credentials. Unattended posture v1: confirmation-gated and
+  irreversible actions refuse server-side (the component lane's
+  `invocationId` mechanism is the model for lifting this); the CLI adds
+  its usual `--allow-mutation` consent for Reversible effects.
 - **Staleness**: remote installs change without local events. v1
   reconciles at `use` / `sync` / workspace `app` verbs and documents
   that; no polling. A stale skill fails safe — the CLI errors name

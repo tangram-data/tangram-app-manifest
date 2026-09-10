@@ -35,11 +35,17 @@ def build_parser() -> _Parser:
     call = commands.add_parser("call")
     call.add_argument("target")
     call.add_argument("binding")
-    execution = call.add_mutually_exclusive_group(required=True)
+    # Not required at parse time: the OS lane (--workspace/--instance) is a
+    # fourth execution mode; dispatch enforces exactly one.
+    execution = call.add_mutually_exclusive_group()
     execution.add_argument("--backend")
     execution.add_argument("--local", action="store_true")
     execution.add_argument("--connected", action="store_true")
     call.add_argument("--endpoint")
+    call.add_argument("--workspace")
+    call.add_argument("--instance")
+    call.add_argument("--os-url")
+    call.add_argument("--token")
     call.add_argument("--allow-mutation", action="store_true")
     call.add_argument("--confirm", action="store_true")
     call.add_argument("--input-json", default="-")
@@ -71,6 +77,10 @@ def build_parser() -> _Parser:
 
     actions = commands.add_parser("actions")
     actions.add_argument("target")
+    actions.add_argument("--workspace")
+    actions.add_argument("--instance")
+    actions.add_argument("--os-url")
+    actions.add_argument("--token")
 
     doctor = commands.add_parser("doctor")
     doctor.add_argument("--fix", action="store_true")
