@@ -15,7 +15,7 @@ import sys
 
 from .local_os import (
     LocalOsError,
-    ambient_workspace,
+    ambient_context,
     base_url,
     configured_instances,
     load_os_credential,
@@ -41,6 +41,11 @@ def resolve_os_selector(args) -> dict:
     """Selector grammar: one complete OS target or a refusal."""
     workspace, instance = args.workspace, args.instance
     os_url, token = args.os_url, args.token
+    # An EXPLICITLY EMPTY selector (e.g. --instance "$UNSET_VAR") must refuse,
+    # never silently fall back to the ambient context.
+    for name, value in (("--instance", instance), ("--os-url", os_url), ("--token", token)):
+        if value is not None and not str(value).strip():
+            raise TargetError(f"{name} must not be empty")
     if workspace and "/" in workspace:
         qualified_instance, _, qualified_ws = workspace.partition("/")
         if not qualified_instance or not qualified_ws:
@@ -58,9 +63,15 @@ def resolve_os_selector(args) -> dict:
         return {"url": os_url, "token": token, "workspace": workspace, "ambient": False}
     if instance:
         return {"instance": instance, "workspace": workspace or None, "ambient": False}
-    # Fully ambient: the persisted context's workspace (`tangram use I/WS`)
-    # fills in when the flag is absent or given bare (`--workspace`).
-    return {"instance": None, "workspace": (workspace or None) or ambient_workspace(), "ambient": True}
+    # Fully ambient: instance AND workspace come from ONE persisted-context
+    # read (`tangram use I[/WS]`), so a concurrent `use` cannot pair this
+    # read's workspace with a different instance downstream.
+    context = ambient_context()
+    return {
+        "instance": context["instance"],
+        "workspace": (workspace or None) or context["workspace"],
+        "ambient": True,
+    }
 
 
 def _describe(selector: dict, credential: dict | None) -> str:

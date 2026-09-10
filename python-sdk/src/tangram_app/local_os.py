@@ -61,14 +61,28 @@ def load_os_credential(instance: str | None = None) -> dict:
     )
 
 
-def ambient_workspace() -> str | None:
-    """The workspace half of the persisted context (`tangram use I/WS`)."""
+def ambient_context() -> dict:
+    """Instance + workspace of the persisted context (`tangram use I[/WS]`),
+    from ONE `.HEAD` read — callers must never pair a workspace from one
+    read with an instance from another (a concurrent `use` could cross
+    them)."""
     try:
         head = json.loads((tangram_home() / ".HEAD").read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return None
-    workspace = head.get("workspace") if isinstance(head, dict) else None
-    return workspace if isinstance(workspace, str) and workspace else None
+        return {"instance": None, "workspace": None}
+    if not isinstance(head, dict):
+        return {"instance": None, "workspace": None}
+
+    def _field(name: str) -> str | None:
+        value = head.get(name)
+        return value if isinstance(value, str) and value else None
+
+    return {"instance": _field("instance"), "workspace": _field("workspace")}
+
+
+def ambient_workspace() -> str | None:
+    """The workspace half of the persisted context (`tangram use I/WS`)."""
+    return ambient_context()["workspace"]
 
 
 def configured_instances() -> list[str]:

@@ -16,13 +16,12 @@ from .local_os import LocalOsError, base_url, load_os_credential, os_request
 
 
 def wants_os_lane(args) -> bool:
-    # `--workspace` given BARE parses to "" and still selects the OS lane
-    # (the ambient context workspace fills in downstream).
-    return (
-        getattr(args, "workspace", None) is not None
-        or bool(getattr(args, "instance", None))
-        or bool(getattr(args, "os_url", None))
-        or bool(getattr(args, "token", None))
+    # Presence, not truthiness: `--workspace` given BARE parses to "" (the
+    # ambient context fills in downstream), and an explicitly EMPTY
+    # --instance/--os-url/--token must reach the selector's refusal instead
+    # of silently reading as "no selector".
+    return any(
+        getattr(args, name, None) is not None for name in ("workspace", "instance", "os_url", "token")
     )
 
 
