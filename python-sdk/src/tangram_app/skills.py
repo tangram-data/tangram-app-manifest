@@ -131,6 +131,20 @@ def _codex_agents_block(names: list[str], home: Path) -> str:
             "",
             "Never inspect an app's files/database or curl its backend directly:",
             "answers from there are unreliable, and it bypasses policy and audit.",
+            "",
+            "CONTEXT: `local` (this machine) is the default; `tangram use I/WS` can",
+            "point the ambient context at a Tangram OS workspace, and a bare",
+            "`tangram-app call app Ref --input-json '{...}'` follows it (machine →",
+            "local lane; workspace → server-governed). Rules:",
+            "- Check with `tangram use` (bare = prints the context; `--list` = all),",
+            "  and STATE the target workspace in your answer when a command ran",
+            "  against one (result envelopes carry `workspace`/`target` too).",
+            "- Before a MUTATION whose workspace came from the ambient context",
+            "  (the user did not name it in this request), confirm the target with",
+            "  the user first. Reads and user-named targets need no confirmation.",
+            "- For multi-step work, pin the context instead of relying on ambient",
+            "  state: `TANGRAM_WORKSPACE`/`TANGRAM_INSTANCE` env for the session,",
+            "  or explicit `--workspace INSTANCE/WS` per command.",
         )
     )
     lines.append(CODEX_AGENTS_END)
