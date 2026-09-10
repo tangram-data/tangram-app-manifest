@@ -30,6 +30,8 @@ class LocalStoreTest(unittest.TestCase):
         self.addCleanup(self._home.cleanup)
         os.environ["TANGRAM_HOME"] = self._home.name
         self.addCleanup(os.environ.pop, "TANGRAM_HOME", None)
+        os.environ["TANGRAM_AGENT_HOME"] = self._home.name
+        self.addCleanup(os.environ.pop, "TANGRAM_AGENT_HOME", None)
 
     def test_install_from_directory_then_list_resolve_uninstall(self):
         entry = install_app(str(FIXTURE))

@@ -353,9 +353,10 @@ def _converge(
     desired: dict[str, str],
     report: dict,
     apply: bool,
-    protected: set[str] = frozenset(),
+    protected: dict[str, str] | None = None,
     active_context: str = "machine",
 ) -> None:
+    protected = protected or {}
     if root.is_dir():
         for child in sorted(root.iterdir()):
             if not child.is_dir() or child.is_symlink():
@@ -363,11 +364,19 @@ def _converge(
             metadata = _managed_metadata(child)
             if metadata is None:
                 continue
-            if child.name in desired or child.name in protected:
-                # `protected`: allocated to an app still in the store whose
-                # record can't render right now — stale beats deleted.
+            if child.name in desired:
                 continue
             context = metadata.get("tangram-context", "machine")
+            if (
+                context == "machine"
+                and child.name in protected
+                and metadata.get("tangram-app") == protected[child.name]
+            ):
+                # Allocated to a machine app still in the store whose record
+                # can't render right now — stale beats deleted. Identity is
+                # verified so a same-named skill from another context can't
+                # hide behind the reservation.
+                continue
             if context != "machine" and context == active_context:
                 # A managed skill of the ACTIVE context we didn't render
                 # (e.g. written by a newer component) — keep, never thrash.
@@ -461,7 +470,7 @@ def sync(*, apply: bool = True) -> dict:
             freeform = {}
         desired[name] = _render(entry, name, freeform)
 
-    protected = set(names.values()) - set(desired)
+    protected = {name: app_id for app_id, name in names.items() if name not in desired}
     for agent, root in agent_skill_roots().items():
         if apply:
             root.mkdir(parents=True, exist_ok=True)

@@ -48,6 +48,8 @@ class LocalOsTest(unittest.TestCase):
         self.addCleanup(self._home.cleanup)
         os.environ["TANGRAM_HOME"] = self._home.name
         self.addCleanup(os.environ.pop, "TANGRAM_HOME", None)
+        os.environ["TANGRAM_AGENT_HOME"] = self._home.name
+        self.addCleanup(os.environ.pop, "TANGRAM_AGENT_HOME", None)
 
     def _write_credentials(self, url: str):
         home = Path(self._home.name)
