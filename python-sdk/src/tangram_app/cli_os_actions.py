@@ -17,7 +17,10 @@ from .local_os import LocalOsError, base_url, load_os_credential, os_request
 
 def wants_os_lane(args) -> bool:
     return bool(
-        getattr(args, "workspace", None) or getattr(args, "instance", None) or getattr(args, "os_url", None)
+        getattr(args, "workspace", None)
+        or getattr(args, "instance", None)
+        or getattr(args, "os_url", None)
+        or getattr(args, "token", None)
     )
 
 
@@ -51,7 +54,15 @@ def os_actions(app: str, selector: dict, *, timeout_seconds: float = 60.0) -> di
         timeout_seconds=timeout_seconds,
         label="OS actions",
     )
-    return {"workspace": workspace, "target": base_url(credential), **catalog}
+    rows = [
+        # `ref` mirrors the local catalog rows (and feeds the TTY renderer).
+        {"ref": f"{row.get('resourceType')}.{row.get('action')}", **row}
+        for row in catalog.get("actions") or []
+        if isinstance(row, dict)
+    ]
+    # Client-established provenance LAST: the server payload must not be able
+    # to overwrite it.
+    return {**catalog, "actions": rows, "workspace": workspace, "target": base_url(credential)}
 
 
 def _resolve_ref(catalog: dict, ref: str) -> dict:
@@ -113,8 +124,8 @@ def os_call(
         label="OS call",
     )
     return {
-        "workspace": workspace,
-        "app": catalog.get("app", app),
-        "action": f"{row.get('resourceType')}.{row.get('action')}",
         **performed,
+        "workspace": workspace,
+        "app": app,
+        "action": f"{row.get('resourceType')}.{row.get('action')}",
     }
