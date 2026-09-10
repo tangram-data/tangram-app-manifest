@@ -113,9 +113,9 @@ class RendererUnitTest(unittest.TestCase):
 
     def test_apps_actions_and_error_layouts(self):
         apps = render_data("app", {"apps": [
-            {"id": "com.example/orders", "version": "0.1.0", "context": "machine", "state": "installed"}
+            {"id": "com.example/orders", "version": "0.1.0", "context": "local", "state": "installed"}
         ]})
-        self.assertIn("com.example/orders  0.1.0  [machine: installed]", apps)
+        self.assertIn("com.example/orders  0.1.0  [local: installed]", apps)
         self.assertIn("no apps installed", render_data("app", {"apps": []}))
         actions = render_data("actions", {"app": "com.example/orders", "actions": [
             {"ref": "Order.List", "effect": "Stateless", "requiresConfirmation": False, "doc": "List"}

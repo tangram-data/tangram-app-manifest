@@ -117,7 +117,7 @@ def _normalized(entry: dict) -> dict:
     return {
         "id": entry["id"],
         "version": entry.get("version"),
-        "context": "machine",
+        "context": "local",
         "state": "installed",
         "detail": {k: v for k, v in entry.items() if k not in ("id", "version")},
     }

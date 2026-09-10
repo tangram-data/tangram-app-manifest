@@ -135,7 +135,7 @@ class ConsentAndDispatchTest(unittest.TestCase):
         self.assertIn("--yes", envelope["error"]["message"])
         code, envelope = _run_cli("app", "uninstall", "orders", "--yes")
         self.assertEqual(code, 0, envelope)
-        self.assertEqual(envelope["data"]["uninstalled"]["context"], "machine")
+        self.assertEqual(envelope["data"]["uninstalled"]["context"], "local")
 
     def test_normalized_list_and_get(self):
         install_app(str(FIXTURE))
@@ -143,7 +143,7 @@ class ConsentAndDispatchTest(unittest.TestCase):
         row = envelope["data"]["apps"][0]
         self.assertEqual(
             set(row), {"id", "version", "context", "state", "detail"})
-        self.assertEqual(row["context"], "machine")
+        self.assertEqual(row["context"], "local")
         self.assertEqual(row["state"], "installed")
         code, envelope = _run_cli("app", "get", "orders")
         self.assertEqual(envelope["data"]["app"]["id"], "com.example/orders")

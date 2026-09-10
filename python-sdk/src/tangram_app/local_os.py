@@ -54,8 +54,9 @@ def load_os_credential(instance: str | None = None) -> dict:
             raise LocalOsError(
                 "no current instance — pass --instance or run `tangram use <instance>`"
             ) from error
+    quickstart_family = {"quickstart", "local"} if instance in ("quickstart", "local") else {instance}
     for entry in credentials if isinstance(credentials, list) else []:
-        if isinstance(entry, dict) and entry.get("instance") == instance and entry.get("token"):
+        if isinstance(entry, dict) and entry.get("instance") in quickstart_family and entry.get("token"):
             return entry
     raise LocalOsError(
         f"no stored credential for instance {instance!r} — log in with the native CLI"

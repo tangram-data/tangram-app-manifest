@@ -241,7 +241,7 @@ def _render(entry: dict, name: str, freeform: dict) -> str:
         "metadata:",
         f"  managed-by: {MANAGED_BY}",
         f"  tangram-app: {app_id}",
-        "  tangram-context: machine",
+        "  tangram-context: local",
         f"  package-digest: {digest}",
         "---",
         "",
@@ -333,12 +333,12 @@ def _active_context() -> str:
     try:
         head = json.loads((tangram_home() / ".HEAD").read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return "machine"
+        return "local"
     if not isinstance(head, dict):
-        return "machine"
+        return "local"
     instance = head.get("instance")
     if not isinstance(instance, str) or not instance:
-        return "machine"
+        return "local"
     workspace = head.get("workspace")
     if isinstance(workspace, str) and workspace:
         return f"instance:{instance}/workspace:{workspace}"
@@ -365,7 +365,7 @@ def _converge(
     report: dict,
     apply: bool,
     protected: dict[str, str] | None = None,
-    active_context: str = "machine",
+    active_context: str = "local",
 ) -> None:
     protected = protected or {}
     if root.is_dir():
@@ -377,9 +377,11 @@ def _converge(
                 continue
             if child.name in desired:
                 continue
-            context = metadata.get("tangram-context", "machine")
+            context = metadata.get("tangram-context", "local")
+            if context == "machine":  # pre-rename skills
+                context = "local"
             if (
-                context == "machine"
+                context == "local"
                 and child.name in protected
                 and metadata.get("tangram-app") == protected[child.name]
             ):
@@ -388,7 +390,7 @@ def _converge(
                 # verified so a same-named skill from another context can't
                 # hide behind the reservation.
                 continue
-            if context != "machine" and context == active_context:
+            if context != "local" and context == active_context:
                 # A managed skill of the ACTIVE context we didn't render
                 # (e.g. written by a newer component) — keep, never thrash.
                 report["keptActiveContext"].append(f"{agent}:{child.name}")
