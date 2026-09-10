@@ -45,7 +45,7 @@ from .cli_targets import (
 from . import skill_projection
 from .cli_skills import install_skills, sync_skills
 from .skill_projection import sync_after_store_change
-from .local_os import ambient_workspace
+from .local_os import ambient_context
 from .local_store import resolve_target
 from .skills import (
     generate_skill,
@@ -311,7 +311,17 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         return handle_disconnect(app.graph.package.id)
     if args.command == "actions":
         if wants_os_lane(args):
+            if args.local:
+                raise CliArgumentsError("--workspace/--instance select the OS lane; drop --local")
             return os_actions(args.target, resolve_os_selector(args))
+        # Discovery follows the SAME resolved context as execution: an OS
+        # instance context reads the workspace catalog (a missing workspace
+        # is an explicit refusal), the machine context reads the local app.
+        # `--local` reads the local app regardless of context.
+        if not args.local:
+            context = ambient_context()
+            if context["instance"]:
+                return os_actions(args.target, {**context, "ambient": True})
         app = _load_app(args.target)
         return {"app": app.graph.package.id, "actions": actions_catalog(app)}
     if args.command == "doctor":
@@ -321,14 +331,23 @@ def _run(args: argparse.Namespace) -> dict[str, Any]:
         report = diagnose()
         return {**report, "applied": applied}
     if args.command == "call":
-        # Bare `call` follows the ambient context: with `tangram use I/WS`
-        # set it targets that workspace; in the machine context it means the
-        # local lane. (Both previously errored, so strictly additive.)
+        # Bare `call` follows the ambient context, resolved ONCE: an OS
+        # instance context routes to that instance — a missing workspace is
+        # an explicit refusal, never a silent local fallback — and the
+        # machine context means the local lane.
         if not wants_os_lane(args) and not (args.local or args.backend or args.connected):
-            if ambient_workspace():
-                args.workspace = ""
-            else:
-                args.local = True
+            context = ambient_context()
+            if context["instance"]:
+                return os_call(
+                    args.target,
+                    args.binding,
+                    _read_json_input(args.input_json),
+                    {**context, "ambient": True},
+                    allow_mutation=args.allow_mutation,
+                    confirm=args.confirm,
+                    timeout_seconds=args.timeout,
+                )
+            args.local = True
         if wants_os_lane(args):
             if args.local or args.backend or args.connected:
                 raise CliArgumentsError("--workspace/--instance select the OS lane; drop --local/--backend/--connected")

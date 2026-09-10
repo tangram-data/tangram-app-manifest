@@ -105,6 +105,18 @@ class WarmSessionTest(unittest.TestCase):
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.addCleanup(self.server.shutdown)
         self.url = f"http://127.0.0.1:{self.server.server_port}"
+        # Isolate subprocesses from the developer's real ~/.tangram context:
+        # a selected OS context would reroute bare `actions`/`call`.
+        self._tangram_home = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tangram_home.cleanup)
+
+    def _subprocess_env(self) -> dict:
+        return {
+            "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
+            "PATH": os.environ["PATH"],
+            "HOME": os.environ.get("HOME", ""),
+            "TANGRAM_HOME": self._tangram_home.name,
+        }
 
     def test_attach_url_liveness_gates(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -138,11 +150,7 @@ class WarmSessionTest(unittest.TestCase):
                 ],
                 capture_output=True,
                 text=True,
-                env={
-                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
-                    "PATH": os.environ["PATH"],
-                    "HOME": os.environ.get("HOME", ""),
-                },
+                env=self._subprocess_env(),
             )
             envelope = json.loads(completed.stdout)
             self.assertTrue(envelope["ok"], envelope)
@@ -155,11 +163,7 @@ class WarmSessionTest(unittest.TestCase):
             [sys.executable, "-m", "tangram_app", "actions", str(FIXTURE)],
             capture_output=True,
             text=True,
-            env={
-                "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
-                "PATH": os.environ["PATH"],
-                "HOME": os.environ.get("HOME", ""),
-            },
+            env=self._subprocess_env(),
         )
         envelope = json.loads(completed.stdout)
         self.assertTrue(envelope["ok"], envelope)

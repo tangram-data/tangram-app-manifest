@@ -166,6 +166,14 @@ class AmbientWorkspaceContextTest(OsActionsLaneTest):
         self.assertEqual(envelope["data"]["workspace"], "demo")
         self.assertEqual(len(_FakeOs.performed), 1)
 
+    def test_bare_actions_follows_the_ambient_context(self):
+        # Discovery routes exactly like execution: same context, same lane.
+        self._set_head("demo")
+        code, envelope = _run_cli("actions", "todo")
+        self.assertEqual(code, 0, envelope)
+        self.assertEqual(envelope["data"]["workspace"], "demo")
+        self.assertEqual(envelope["data"]["actions"][0]["ref"], "Todo.List")
+
     def test_bare_workspace_flag_uses_ambient(self):
         self._set_head("demo")
         code, envelope = _run_cli("actions", "todo", "--workspace")
@@ -174,13 +182,30 @@ class AmbientWorkspaceContextTest(OsActionsLaneTest):
         self.assertEqual(envelope["data"]["actions"][0]["ref"], "Todo.List")
 
     def test_bare_call_in_machine_context_means_local(self):
-        self._set_head(None)
+        (Path(self._home.name) / ".HEAD").unlink()
         code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
         # Local lane engaged: the failure is target resolution (nothing named
         # 'todo' in the fixture store), not a missing execution flag.
         self.assertNotEqual(code, 0)
         self.assertNotIn("--local", envelope["error"]["message"])
         self.assertEqual(_FakeOs.performed, [])
+
+    def test_bare_call_instance_only_context_refuses_not_local(self):
+        # An incomplete OS target is an explicit refusal, never a silent
+        # local fallback.
+        self._set_head(None)
+        code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
+        self.assertNotEqual(code, 0)
+        self.assertIn("workspace", envelope["error"]["message"])
+        self.assertEqual(_FakeOs.performed, [])
+
+    def test_corrupt_head_fails_explicitly(self):
+        for content in ("{not json", "{}", json.dumps({"instance": 42, "url": "x"})):
+            (Path(self._home.name) / ".HEAD").write_text(content, encoding="utf-8")
+            code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
+            self.assertNotEqual(code, 0, content)
+            self.assertIn("corrupt", envelope["error"]["message"], content)
+            self.assertEqual(_FakeOs.performed, [])
 
     def test_env_workspace_overrides_head(self):
         self._set_head("other")
@@ -205,9 +230,10 @@ class AmbientWorkspaceContextTest(OsActionsLaneTest):
         os.environ["TANGRAM_INSTANCE"] = "dev"
         self.addCleanup(os.environ.pop, "TANGRAM_INSTANCE", None)
         # env instance without env workspace: the .HEAD workspace must NOT
-        # ride along — machine-context local lane engages instead.
+        # ride along — the incomplete OS target refuses instead.
         code, envelope = _run_cli("call", "todo", "List", "--input-json", "{}")
         self.assertNotEqual(code, 0)
+        self.assertIn("workspace", envelope["error"]["message"])
         self.assertEqual(_FakeOs.performed, [])
 
     def test_refusal_lists_visible_workspaces(self):

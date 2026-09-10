@@ -98,7 +98,7 @@ def _consent_os_install(selector: dict, description: str, yes: bool) -> None:
     raise TargetError(
         f"refusing the ambient-context target ({description}) without --yes in a "
         f"non-interactive run; pass --instance NAME / --workspace INSTANCE/WS "
-        f"(configured: {instances}), or drop --workspace to install locally"
+        f"(configured: {instances}), or `tangram use local` for a machine install"
     )
 
 
@@ -131,13 +131,30 @@ def handle_app_install(args) -> dict:
         )
     replace = args.upgrade or args.force
     if not args.workspace:
-        if any((args.instance, args.os_url, args.token, args.dry_run)):
+        if any((args.instance, args.os_url, args.token)):
             raise TargetError(
-                "--instance/--os-url/--token/--dry-run target a Tangram OS workspace; "
+                "--instance/--os-url/--token target a Tangram OS workspace; "
                 "add --workspace WS (or drop them for a machine install)"
             )
-        return {"installed": _normalized(install_app(args.source, force=replace))}
-    selector = resolve_os_selector(args)
+        # Selector-free install follows the resolved context: the machine
+        # context installs into ~/.tangram; an OS context deploys to ITS
+        # workspace (consent-gated below), never silently to the local store.
+        context = ambient_context()
+        if not context["instance"]:
+            if args.dry_run:
+                raise TargetError(
+                    "--dry-run previews a Tangram OS install; add --workspace WS or select an OS context"
+                )
+            return {"installed": _normalized(install_app(args.source, force=replace))}
+        if not context["workspace"]:
+            raise TargetError(
+                f"the context targets instance '{context['instance']}' with no workspace — "
+                f"`tangram use {context['instance']}/WS`, pass --workspace WS, or "
+                "`tangram use local` for a machine install"
+            )
+        selector = {"instance": context["instance"], "workspace": context["workspace"], "ambient": True}
+    else:
+        selector = resolve_os_selector(args)
     if selector.get("url"):
         credential = None
     else:
@@ -147,10 +164,12 @@ def handle_app_install(args) -> dict:
     token = selector.get("token")
     if token == "-":
         token = sys.stdin.read().strip()
+    # The credential the user consented to is the one that executes — no
+    # re-resolution between the prompt and the POST.
     outcome = os_install(
         resolve_target(args.source),
         selector["workspace"],
-        instance=credential.get("instance") if credential else None,
+        credential=credential,
         token=token,
         url=selector.get("url"),
         dry_run=args.dry_run,
@@ -160,11 +179,28 @@ def handle_app_install(args) -> dict:
     return {"deployed": outcome}
 
 
+def _refuse_machine_verb_in_os_context(verb: str, fix: str) -> None:
+    """These verbs manage the machine store only; under an OS context they
+    refuse instead of silently answering from the wrong target (discovery
+    must agree with execution)."""
+    context = ambient_context()
+    if not context["instance"]:
+        return
+    target = context["instance"] + (f"/{context['workspace']}" if context["workspace"] else "")
+    workspace = context["workspace"] or "WS"
+    raise TargetError(
+        f"the context targets Tangram OS '{target}' but `app {verb}` manages this machine's "
+        f"app store only — {fix.format(workspace=workspace)}, or `tangram use local` first"
+    )
+
+
 def handle_app_list() -> dict:
+    _refuse_machine_verb_in_os_context("list", "use `tangram app ls --workspace {workspace}` for workspace apps")
     return {"apps": [_normalized(entry) for entry in list_installed()]}
 
 
 def handle_app_get(ref: str) -> dict:
+    _refuse_machine_verb_in_os_context("get", "use `tangram app get GROUP NAME --workspace {workspace}`")
     entry = resolve_installed(ref)
     if entry is None:
         raise TargetError(f"no installed app matches {ref!r}")
@@ -172,6 +208,9 @@ def handle_app_get(ref: str) -> dict:
 
 
 def handle_app_uninstall(args) -> dict:
+    _refuse_machine_verb_in_os_context(
+        "uninstall", "use `tangram app undeploy GROUP NAME --workspace {workspace}`"
+    )
     entry = resolve_installed(args.ref)
     if entry is None:
         raise TargetError(f"no installed app matches {args.ref!r}")

@@ -112,6 +112,15 @@ class ConsentAndDispatchTest(unittest.TestCase):
              {"instance": "prod", "url": url, "token": "tok2"}]))
         (home / ".HEAD").write_text(json.dumps({"instance": "dev", "url": url}))
 
+    def _machine_context(self):
+        (Path(self._home.name) / ".HEAD").unlink()
+
+    def _os_context(self, workspace: str | None = "demo"):
+        head = {"instance": "dev", "url": f"http://127.0.0.1:{self.server.server_port}"}
+        if workspace:
+            head["workspace"] = workspace
+        (Path(self._home.name) / ".HEAD").write_text(json.dumps(head))
+
     def test_non_tty_ambient_refuses_without_yes(self):
         code, envelope = _run_cli("app", "install", str(FIXTURE), "--workspace", "demo")
         self.assertNotEqual(code, 0)
@@ -129,6 +138,7 @@ class ConsentAndDispatchTest(unittest.TestCase):
         self.assertEqual(envelope["data"]["deployed"]["instance"], "prod")
 
     def test_uninstall_requires_yes_when_non_interactive(self):
+        self._machine_context()
         install_app(str(FIXTURE))
         code, envelope = _run_cli("app", "uninstall", "orders")
         self.assertNotEqual(code, 0)
@@ -138,6 +148,7 @@ class ConsentAndDispatchTest(unittest.TestCase):
         self.assertEqual(envelope["data"]["uninstalled"]["context"], "local")
 
     def test_normalized_list_and_get(self):
+        self._machine_context()
         install_app(str(FIXTURE))
         code, envelope = _run_cli("app", "list")
         row = envelope["data"]["apps"][0]
@@ -151,6 +162,7 @@ class ConsentAndDispatchTest(unittest.TestCase):
         self.assertNotEqual(code, 0)
 
     def test_upgrade_replaces_and_force_warns_deprecated(self):
+        self._machine_context()
         install_app(str(FIXTURE))
         code, envelope = _run_cli("app", "install", str(FIXTURE))
         self.assertNotEqual(code, 0)  # exists, no replace flag
@@ -161,6 +173,41 @@ class ConsentAndDispatchTest(unittest.TestCase):
             code, envelope = _run_cli("app", "install", str(FIXTURE), "--force")
         self.assertEqual(code, 0, envelope)
         self.assertIn("deprecated", err.getvalue())
+
+    def test_selector_free_install_follows_the_os_context(self):
+        self._os_context("demo")
+        code, envelope = _run_cli("app", "install", str(FIXTURE), "--yes")
+        self.assertEqual(code, 0, envelope)
+        deployed = envelope["data"]["deployed"]
+        self.assertEqual(deployed["instance"], "dev")
+        self.assertEqual(deployed["workspace"], "demo")
+
+    def test_selector_free_install_dry_run_previews_in_os_context(self):
+        self._os_context("demo")
+        code, envelope = _run_cli("app", "install", str(FIXTURE), "--dry-run", "--yes")
+        self.assertEqual(code, 0, envelope)
+        self.assertTrue(envelope["data"]["deployed"]["dryRun"])
+
+    def test_selector_free_install_instance_only_context_refuses(self):
+        self._os_context(workspace=None)
+        code, envelope = _run_cli("app", "install", str(FIXTURE), "--yes")
+        self.assertNotEqual(code, 0)
+        self.assertIn("no workspace", envelope["error"]["message"])
+
+    def test_machine_store_verbs_refuse_under_an_os_context(self):
+        self._machine_context()
+        install_app(str(FIXTURE))
+        self._os_context("demo")
+        for argv in (
+            ("app", "list"),
+            ("app", "get", "orders"),
+            ("app", "uninstall", "orders", "--yes"),
+        ):
+            code, envelope = _run_cli(*argv)
+            self.assertNotEqual(code, 0, argv)
+            message = envelope["error"]["message"]
+            self.assertIn("dev/demo", message, argv)
+            self.assertIn("tangram use local", message, argv)
 
 
 if __name__ == "__main__":

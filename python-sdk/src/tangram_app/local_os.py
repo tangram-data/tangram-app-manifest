@@ -81,23 +81,33 @@ def ambient_context() -> dict:
     env_workspace = os.environ.get("TANGRAM_WORKSPACE") or None
     if env_instance:
         return {"instance": env_instance, "workspace": env_workspace}
+    head_path = tangram_home() / ".HEAD"
     try:
-        head = json.loads((tangram_home() / ".HEAD").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        head = None
-    if not isinstance(head, dict):
+        text = head_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        text = ""
+    except OSError as error:
+        raise LocalOsError(f"cannot read {head_path}: {error}") from None
+    if not text.strip():
         return {"instance": None, "workspace": env_workspace}
-
-    def _field(name: str) -> str | None:
-        value = head.get(name)
-        return value if isinstance(value, str) and value else None
-
-    return {"instance": _field("instance"), "workspace": env_workspace or _field("workspace")}
-
-
-def ambient_workspace() -> str | None:
-    """The workspace half of the ambient context."""
-    return ambient_context()["workspace"]
+    # MISSING/empty means the machine context; a CORRUPT or unexpectedly
+    # shaped file must fail explicitly, never silently read as a different
+    # target (the native CLI's decoder rejects the same shapes).
+    try:
+        head = json.loads(text)
+    except ValueError as error:
+        raise LocalOsError(f"{head_path} is corrupt ({error}) — fix or remove it") from None
+    instance = head.get("instance") if isinstance(head, dict) else None
+    workspace = head.get("workspace") if isinstance(head, dict) else None
+    if (
+        not isinstance(head, dict)
+        or "instance" not in head
+        or not isinstance(instance, str)
+        or not isinstance(head.get("url", ""), str)
+        or not isinstance(workspace, (str, type(None)))
+    ):
+        raise LocalOsError(f"{head_path} is corrupt (unexpected context shape) — fix or remove it")
+    return {"instance": instance or None, "workspace": env_workspace or workspace or None}
 
 
 def env_workspace() -> str | None:
@@ -204,6 +214,7 @@ def os_install(
     package_root: str | Path,
     workspace: str,
     *,
+    credential: dict | None = None,
     instance: str | None = None,
     token: str | None = None,
     url: str | None = None,
@@ -211,13 +222,17 @@ def os_install(
     upgrade: bool = False,
     timeout_seconds: float = 300.0,
 ) -> dict:
-    """POST the package to `{base}/api/core/v1/workspaces/{ws}/apps:install`."""
-    if token and url:
-        credential = {"token": token, "url": url}
-    elif token or url:
-        raise LocalOsError("--token and --os-url go together (or use a stored instance)")
-    else:
-        credential = load_os_credential(instance)
+    """POST the package to `{base}/api/core/v1/workspaces/{ws}/apps:install`.
+
+    A preloaded `credential` is used verbatim so the target the caller
+    described (and the user consented to) is the one that executes."""
+    if credential is None:
+        if token and url:
+            credential = {"token": token, "url": url}
+        elif token or url:
+            raise LocalOsError("--token and --os-url go together (or use a stored instance)")
+        else:
+            credential = load_os_credential(instance)
     files = read_tree(package_root)
     body = {
         "source": {"kind": "local-package", "files": files},

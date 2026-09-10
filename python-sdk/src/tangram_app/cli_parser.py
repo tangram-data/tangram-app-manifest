@@ -77,6 +77,7 @@ def build_parser() -> _Parser:
 
     actions = commands.add_parser("actions")
     actions.add_argument("target")
+    actions.add_argument("--local", action="store_true")
     actions.add_argument("--workspace", nargs="?", const="")
     actions.add_argument("--instance")
     actions.add_argument("--os-url")

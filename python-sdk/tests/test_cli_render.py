@@ -21,6 +21,17 @@ def _run(argv, tty):
 
 
 class RenderModeTest(unittest.TestCase):
+    def setUp(self):
+        # Isolate from the developer's real ~/.tangram: a selected OS
+        # context would reroute context-following verbs like `app list`.
+        import tempfile
+
+        self._tangram_home = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tangram_home.cleanup)
+        patcher = mock.patch.dict("os.environ", {"TANGRAM_HOME": self._tangram_home.name})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_non_tty_keeps_the_envelope(self):
         code, out, _ = _run(["doctor"], tty=False)
         envelope = json.loads(out)
