@@ -1,20 +1,20 @@
-# External agent hub
+# App actions and workspace knowledge
 
-Install `tangram-hub` with `tangram-app skill install tangram-hub --user`
+Install `tangram-apps` with `tangram-app skill install tangram-apps --user`
 or `--codex`. This stable skill uses a live catalog; per-app skill projection
 is optional and installing an app does not require a skill refresh for discovery.
 
-The command group is `tangram-app hub` (also routed by the pip `tangram` shim).
+The command group is `tangram-app app` (also routed by the pip `tangram` shim).
 Resolve a target once, then carry `targetRef` through search, inspect and call.
 
 ```text
-hub resolve [--local | --workspace INSTANCE/WORKSPACE]
-hub search QUERY --target-ref REF [--limit N --offset N]
-hub inspect APP#Resource.Action[@operation] --contract DIGEST --target-ref REF
-hub call ACTION --contract DIGEST --target-ref REF --invocation-id UUID --input-json JSON
-hub invocation UUID --target-ref REF
-hub knowledge-search QUERY --target-ref REF
-hub knowledge-read SOURCE_UUID --target-ref REF [--offset N --limit N]
+context resolve [--local | --workspace INSTANCE/WORKSPACE]
+app search QUERY --target-ref REF [--limit N --offset N]
+app inspect APP#Resource.Action[@operation] --contract DIGEST --target-ref REF
+app call ACTION --contract DIGEST --target-ref REF --invocation-id UUID --input-json JSON
+app invocation UUID --target-ref REF
+knowledge search QUERY --target-ref REF
+knowledge read SOURCE_UUID --target-ref REF [--offset N --limit N]
 ```
 
 Target references contain no credentials. They pin the local store or a workspace,

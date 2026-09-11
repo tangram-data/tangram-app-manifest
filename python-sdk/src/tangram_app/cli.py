@@ -143,7 +143,7 @@ def _main(argv: Sequence[str] | None = None) -> int:
         if args.command in ("run", "open"):
             return _run_local_foreground(args, human=human)
         data = _run(args)
-        if command == "hub" and args.hub_command in {"call", "invocation", "inspect"} and data.get("state") in {"pending_approval", "running", "unknown", "failed", "rejected"}:
+        if getattr(args, "capability_command", None) in {"call", "invocation", "inspect"} and data.get("state") in {"pending_approval", "running", "unknown", "failed", "rejected"}:
             _emit({"schemaVersion": COMMAND_SCHEMA_VERSION, "ok": False, "data": data,
                    "error": data.get("error") or {"code": data["state"], "message": "inspect invocation state before continuing"}})
             return 3
@@ -266,7 +266,7 @@ def _skill_parser() -> _Parser:
 
 
 def _run(args: argparse.Namespace) -> dict[str, Any]:
-    if args.command == "hub":
+    if getattr(args, "capability_command", None):
         from .cli_hub import run
         return run(args)
     if args.command == "validate":

@@ -12,16 +12,21 @@ from .local_os import os_request
 from .local_store import list_installed, resolve_installed
 
 
-def add_parser(commands):
-    hub = commands.add_parser("hub", help="Discover and use live capabilities with a pinned target")
-    verbs = hub.add_subparsers(dest="hub_command", required=True)
-    pin = verbs.add_parser("resolve")
+def add_parser(commands, app_commands):
+    context = commands.add_parser("context", help="Resolve a pinned execution context")
+    context_commands = context.add_subparsers(dest="context_command", required=True)
+    pin = context_commands.add_parser("resolve")
+    pin.set_defaults(capability_command="resolve")
+    knowledge = commands.add_parser("knowledge", help="Search and read workspace knowledge")
+    knowledge_commands = knowledge.add_subparsers(dest="knowledge_command", required=True)
     pin.add_argument("--local", action="store_true")
     pin.add_argument("--instance")
     pin.add_argument("--workspace")
     pin.set_defaults(os_url=None, token=None)
     for verb in ("search", "inspect", "call", "invocation", "knowledge-search", "knowledge-read"):
-        p = verbs.add_parser(verb)
+        group = knowledge_commands if verb.startswith("knowledge-") else app_commands
+        p = group.add_parser(verb.removeprefix("knowledge-"))
+        p.set_defaults(capability_command=verb)
         p.add_argument("--target-ref", required=True)
         p.add_argument("--timeout", type=float, default=30)
         if verb in ("search", "knowledge-search"):
@@ -144,10 +149,10 @@ def _local_call(args, target):
 
 
 def run(args):
-    if args.hub_command == "resolve":
+    if args.capability_command == "resolve":
         return resolve(args)
     target, credential = load(args.target_ref)
-    verb = args.hub_command
+    verb = args.capability_command
     if args.timeout <= 0 or args.timeout > 3600:
         raise HubError("invalid_arguments", "timeout must be between 0 and 3600 seconds")
     if hasattr(args, "limit"):
@@ -209,5 +214,5 @@ def run(args):
                 body.update(input=_read_json_input(args.input_json), invocationId=args.invocation_id,
                             allowMutation=args.allow_mutation, approve=args.approve)
             result = os_request(credential, "POST", f"{base}/{verb}", body,
-                                timeout_seconds=args.timeout, label=f"hub {verb}")
+                                timeout_seconds=args.timeout, label=f"{args.command} {verb.removeprefix('knowledge-')}")
     return {**result, "target": target, "targetRef": args.target_ref}

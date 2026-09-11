@@ -18,7 +18,9 @@ from test_sdk import graph_dict
 def run(*args):
     out = StringIO()
     with redirect_stdout(out):
-        status = cli.main(["hub", *args])
+        status = cli.main((["context", "resolve", *args[1:]] if args[0] == "resolve" else
+                                   ["knowledge", args[0].removeprefix("knowledge-"), *args[1:]] if args[0].startswith("knowledge-") else
+                                   ["app", *args]))
     return status, json.loads(out.getvalue())
 
 

@@ -22,7 +22,7 @@ import sys
 
 _PASSTHROUGH = frozenset(
     (
-        "hub", "doctor", "actions", "call", "connect", "disconnect",
+        "context", "knowledge", "doctor", "actions", "call", "connect", "disconnect",
         "validate", "build", "inspect", "run", "open", "skill",
     )
 )
@@ -38,6 +38,8 @@ def route(args: list[str]) -> list[str] | None:
     """The `tangram-app` argv to run in-process, or None → native lane."""
     if not args:
         return None
+    if len(args) >= 2 and args[0] == "app" and args[1] in {"search", "inspect", "call", "invocation"}:
+        return args
     if args[0] in _PASSTHROUGH:
         return args
     if args[:2] == ["app", "install"] and "--global" in args[2:]:

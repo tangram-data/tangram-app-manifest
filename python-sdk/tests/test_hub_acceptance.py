@@ -35,7 +35,9 @@ class HubAcceptanceTest(unittest.TestCase):
         def run(*args):
             out = StringIO()
             with redirect_stdout(out):
-                status = cli.main(["hub", *args])
+                status = cli.main((["context", "resolve", *args[1:]] if args[0] == "resolve" else
+                                   ["knowledge", args[0].removeprefix("knowledge-"), *args[1:]] if args[0].startswith("knowledge-") else
+                                   ["app", *args]))
             result = json.loads(out.getvalue())
             self.assertEqual(status, 0, result)
             return result["data"]

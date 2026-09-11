@@ -16,6 +16,21 @@ from tangram_app.frontdoor import find_native, main, route
 
 
 class RouteTest(unittest.TestCase):
+    def test_capability_commands_use_public_names(self):
+        from tangram_app.cli_parser import build_parser
+        parser = build_parser()
+        for args in (["context", "resolve", "--workspace", "prod/demo"],
+                     ["knowledge", "search", "query", "--target-ref", "ref"],
+                     ["knowledge", "read", "id", "--target-ref", "ref"],
+                     ["app", "search", "query", "--target-ref", "ref"],
+                     ["app", "inspect", "app#Todo.List", "--contract", "v1", "--target-ref", "ref"],
+                     ["app", "call", "app#Todo.List", "--contract", "v1", "--target-ref", "ref", "--invocation-id", "id"],
+                     ["app", "invocation", "id", "--target-ref", "ref"]):
+            self.assertEqual(route(args), args)
+            self.assertTrue(parser.parse_args(args).capability_command)
+        self.assertNotIn("hub", parser.format_help())
+        self.assertIsNone(route(["hub", "call"]))
+
     def test_global_install_routing(self):
         args = ["app", "install", "./connector", "--global", "--instance", "prod"]
         self.assertEqual(route(args), args)

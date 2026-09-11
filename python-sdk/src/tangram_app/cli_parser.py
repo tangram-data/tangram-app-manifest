@@ -11,7 +11,6 @@ def build_parser() -> _Parser:
     parser.add_argument("--json", action="store_true", help="force the JSON envelope on a TTY")
     commands = parser.add_subparsers(dest="command", required=True)
     from .cli_hub import add_parser
-    add_parser(commands)
 
     build = commands.add_parser("build")
     build.add_argument("package")
@@ -60,6 +59,7 @@ def build_parser() -> _Parser:
 
     app_group = commands.add_parser("app")
     app_commands = app_group.add_subparsers(dest="app_command", required=True)
+    add_parser(commands, app_commands)
     app_install = app_commands.add_parser("install")
     app_install.add_argument("source")
     app_install.add_argument("--force", action="store_true")  # deprecated → --upgrade
