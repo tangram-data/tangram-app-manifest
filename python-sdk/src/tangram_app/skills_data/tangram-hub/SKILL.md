@@ -53,3 +53,7 @@ capability requires Tangram OS. Other source types need their own app actions.
 
 The CLI emits one JSON envelope and nonzero status for incomplete or failed
 invocations. Inspect structured states and error codes, not message wording.
+
+A `failed` record with `retryable: true` means a known pre-dispatch failure.
+After resolving it, retry with a new invocation UUID; reusing the old UUID
+returns its stored failure. Never apply this rule to `running` or `unknown`.

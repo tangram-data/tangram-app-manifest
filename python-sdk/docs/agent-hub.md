@@ -52,3 +52,7 @@ after retrieval. Local knowledge retrieval reports `unsupported_capability`.
 No automatic retries, exactly-once external-API guarantee, or autonomous
 approval grant is implied. Journal retention/cleanup and independent approver
 integration are future operational extensions.
+
+A `failed` record with `retryable: true` means a known pre-dispatch failure.
+After resolving it, retry with a new invocation UUID; reusing the old UUID
+returns its stored failure. Never apply this rule to `running` or `unknown`.
