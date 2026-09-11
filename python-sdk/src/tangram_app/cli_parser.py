@@ -10,6 +10,8 @@ def build_parser() -> _Parser:
     parser = _Parser(prog="tangram-app")
     parser.add_argument("--json", action="store_true", help="force the JSON envelope on a TTY")
     commands = parser.add_subparsers(dest="command", required=True)
+    from .cli_hub import add_parser
+    add_parser(commands)
 
     build = commands.add_parser("build")
     build.add_argument("package")
@@ -140,4 +142,3 @@ def build_parser() -> _Parser:
     sync_mode.add_argument("--approve", metavar="DIGEST")
     sync_mode.add_argument("--rebuild", action="store_true")
     return parser
-

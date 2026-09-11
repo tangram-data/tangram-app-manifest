@@ -17,7 +17,7 @@ from .models import CapabilityGraph
 SKILL_FORMAT_VERSION = "1"
 _SKILL_NAME = re.compile(r"[^a-z0-9-]+")
 BUILDER_SKILL_NAME = "tangram-app-builder"
-PACKAGED_SKILLS = ("tangram-app-builder", "tangram-connector-builder")
+PACKAGED_SKILLS = ("tangram-app-builder", "tangram-connector-builder", "tangram-hub")
 
 
 def packaged_skill_text(name: str) -> str:
@@ -70,6 +70,7 @@ CODEX_AGENTS_END = "<!-- <<< tangram skills <<< -->"
 
 # What each packaged skill is for, phrased to follow "Before …," in the guide.
 _CODEX_SKILL_GUIDANCE = {
+    "tangram-hub": "answering requests involving the user's installed apps or app data, including unfamiliar apps not named by the user",
     "tangram-app-builder": "building or modifying a Tangram app (manifest, actions, FastAPI backend)",
     "tangram-connector-builder": (
         "building a Tangram connector that maps an external SaaS HTTP API into governed actions"
@@ -109,6 +110,12 @@ def _codex_agents_block(names: list[str], home: Path) -> str:
         ref = _tilde_path(home / "prompts" / f"{name}.md")
         what = _CODEX_SKILL_GUIDANCE.get(name, f"working with the {name} skill")
         lines.append(f"- Before {what}, read and follow `{ref}` first.")
+    if "tangram-hub" in names:
+        lines += ["", "Use the stable Tangram hub skill to discover live capabilities, including newly installed apps.",
+                  "Pin the target with `tangram-app hub resolve` and carry its targetRef through search, inspect and call.",
+                  "App-specific skills are optional workflow guidance; do not change global context or rewrite skills to discover apps.",
+                  CODEX_AGENTS_END]
+        return "\n".join(lines) + "\n"
     # Usage guidance rides INLINE (not behind a pointer): for "use the app"
     # asks the block is the only text guaranteed to be in context, and an
     # extra read step is exactly what gets skipped.

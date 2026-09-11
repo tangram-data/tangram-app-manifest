@@ -22,7 +22,7 @@ import sys
 
 _PASSTHROUGH = frozenset(
     (
-        "doctor", "actions", "call", "connect", "disconnect",
+        "hub", "doctor", "actions", "call", "connect", "disconnect",
         "validate", "build", "inspect", "run", "open", "skill",
     )
 )

@@ -71,6 +71,12 @@ def install_app(source: str, *, force: bool = False) -> dict:
             # Validated record the skills projection renders from —
             # `skill sync` never recompiles packages.
             "projection": projection_block(app),
+            "capabilities": [
+                {"action": tool.id, "description": tool.description,
+                 "effect": tool.effect, "requiresConfirmation": tool.requires_confirmation,
+                 "contract": app.graph.package.digest}
+                for tool in app.tools()
+            ],
         }
         (destination / _ENTRY_FILE).write_text(json.dumps(entry), encoding="utf-8")
         return entry

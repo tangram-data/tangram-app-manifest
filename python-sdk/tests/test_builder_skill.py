@@ -152,7 +152,7 @@ class InstallBuilderSkillTest(unittest.TestCase):
             self.assertTrue((home / ".claude" / "skills" / name / "SKILL.md").is_file())
             self.assertTrue((home / ".codex" / "prompts" / f"{name}.md").is_file())
         installed = payload["data"]["installed"]
-        self.assertEqual(len(installed), 4)
+        self.assertEqual(len(installed), 2 * len(PACKAGED_SKILLS))
         self.assertEqual({row["scope"] for row in installed}, {"user", "codex"})
         self.assertIn("agents", payload["data"])
         self.assertTrue((home / ".codex" / "AGENTS.md").is_file())
