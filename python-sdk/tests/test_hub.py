@@ -105,6 +105,60 @@ class HubTest(unittest.TestCase):
         self.assertEqual(status, 3)
         self.assertEqual(envelope["error"]["code"], "unsupported_capability")
 
+    def test_broken_legacy_app_does_not_abort_search(self):
+        with patch("tangram_app.cli_hub.list_installed", return_value=[{"id": "broken/app"}]), \
+             patch("tangram_app.cli_hub._installed", side_effect=ValueError("broken")):
+            status, result = run("search", "", "--target-ref", self.pin["targetRef"])
+        self.assertEqual(status, 0)
+        self.assertEqual(result["data"]["unavailableApps"], [{"app": "broken/app", "code": "catalog_unavailable"}])
+
+    def test_workspace_wire_and_knowledge_paging(self):
+        (self.home / ".credentials").write_text(json.dumps([{"instance": "dev", "url": "localhost", "token": "one"}]))
+        pin = run("resolve", "--workspace", "dev/demo")[1]["data"]
+        common = ["--target-ref", pin["targetRef"]]
+        with patch("tangram_app.cli_hub.os_request", return_value={"state": "succeeded"}) as request:
+            key = str(uuid.uuid4())
+            status, result = run("call", "group/app#Item.Write", "--contract", "v1", "--invocation-id", key,
+                                 "--input-json", '{"title":"hello"}', "--allow-mutation", "--approve", *common)
+            self.assertEqual(status, 0, result)
+            self.assertEqual(request.call_args.args[2], "/api/core/v1/workspaces/demo/hub/call")
+            self.assertEqual(request.call_args.args[3], {"action": "group/app#Item.Write", "contract": "v1", "input": {"title": "hello"},
+                                                      "invocationId": key, "allowMutation": True, "approve": True})
+        with patch("tangram_app.cli_hub.os_request", return_value={"state": "running", "results": []}):
+            self.assertEqual(run("knowledge-search", "hello", *common)[0], 0)
+            self.assertNotEqual(run("knowledge-search", "hello", "--offset", "1", *common)[0], 0)
+        source = str(uuid.uuid4())
+        with patch("tangram_app.cli_hub.os_request", return_value={"text": "abcdefgh", "extractor": "test"}) as request:
+            status, result = run("knowledge-read", source, "--offset", "2", "--limit", "3", *common)
+            self.assertEqual(result["data"]["text"], "cde")
+            self.assertEqual(result["data"]["nextOffset"], 5)
+            self.assertEqual(request.call_args.args[2], f"/api/core/v1/knowledge/documents/{source}/text?workspace=demo")
+        with patch("tangram_app.cli_hub.os_request", return_value={"text": None}):
+            self.assertEqual(run("knowledge-read", source, *common)[1]["error"]["code"], "source_not_found")
+
+    def test_cli_mutation_gate_approval_resume_and_unknown(self):
+        app = TangramApp.from_graph(CapabilityGraph.from_dict(graph_dict()))
+        entry = {"id": "com.example/orders", "root": str(self.home)}
+        class Bound:
+            graph = app.graph
+            async def call(self, binding, arguments):
+                raise RuntimeError("response lost")
+        with patch("tangram_app.cli_hub.resolve_installed", return_value=entry), \
+             patch("tangram_app.cli_hub.TangramApp.from_package", return_value=app), \
+             patch("tangram_app.cli._load_app", return_value=app), \
+             patch("tangram_app.cli.attach_url", return_value="http://127.0.0.1:1234"), \
+             patch.object(TangramApp, "bind", return_value=Bound()) as bind:
+            command = ["call", "com.example/orders#Order.Approve@approveOrder", "--contract", "sha256:fixture",
+                       "--target-ref", self.pin["targetRef"], "--invocation-id", str(uuid.uuid4()), "--input-json", '{"orderId":1}']
+            self.assertEqual(run(*command)[1]["error"]["code"], "policy_denied")
+            command.append("--allow-mutation")
+            self.assertEqual(run(*command)[1]["data"]["state"], "pending_approval")
+            bind.assert_not_called()
+            command.append("--approve")
+            self.assertEqual(run(*command)[1]["data"]["state"], "unknown")
+            self.assertEqual(run(*command)[1]["data"]["state"], "unknown")
+            self.assertEqual(bind.call_count, 1)
+
     def test_inspect_and_call_use_frozen_contract_and_existing_host(self):
         app = TangramApp.from_graph(CapabilityGraph.from_dict(graph_dict()))
         entry = {"id": "com.example/orders", "root": str(self.home)}

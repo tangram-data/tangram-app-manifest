@@ -76,13 +76,18 @@ def _tokens(text: str) -> set[str]:
 def _local_search(query: str, limit: int, offset: int) -> dict:
     wanted = _tokens(query)
     rows = []
+    unavailable = []
     for entry in list_installed():
         # Installed projection is catalog metadata, not authorization or executable schema.
         block = entry.get("projection") or {}
         freeform = block.get("freeform") or {}
         candidates = entry.get("capabilities")
         if candidates is None:
-            _, app = _installed(entry["id"])
+            try:
+                _, app = _installed(entry["id"])
+            except Exception:
+                unavailable.append({"app": entry["id"], "code": "catalog_unavailable"})
+                continue
             candidates = [{"action": tool.id, "description": tool.description, "effect": tool.effect,
                            "requiresConfirmation": tool.requires_confirmation, "contract": app.graph.package.digest}
                           for tool in app.tools()]
@@ -95,7 +100,8 @@ def _local_search(query: str, limit: int, offset: int) -> dict:
             rows.append({**item, "score": score, "descriptionTrust": "app-provided-data"})
     rows.sort(key=lambda row: (-row["score"], row["action"]))
     return {"candidates": rows[offset:offset + limit],
-            "nextOffset": offset + limit if offset + limit < len(rows) else None}
+            "nextOffset": offset + limit if offset + limit < len(rows) else None,
+            "unavailableApps": unavailable}
 
 
 def _local_call(args, target):
@@ -109,11 +115,6 @@ def _local_call(args, target):
     validate(arguments, binding.input_schema)
     if action.effect.value != "Stateless" and not args.allow_mutation:
         raise HubError("policy_denied", "this action requires --allow-mutation")
-    record, execute = hub_journal.claim(args.invocation_id,
-        {"target": target, "action": binding.id, "contract": args.contract, "input": arguments},
-        gated=action.requires_confirmation, approved=args.approve)
-    if not execute:
-        return record
     # Existing call owns policy, request rendering, schema validation, audit and runtime.
     connector = app.graph.runtime_requirements.get("backend") == "connector"
     argv = ["call", entry["root"], binding.id, "--connected" if connector else "--local",
@@ -123,8 +124,16 @@ def _local_call(args, target):
         argv.append("--allow-mutation")
     if args.approve:
         argv.append("--confirm")
+    parsed = build_parser().parse_args(argv)
+    record, execute = hub_journal.claim(args.invocation_id,
+        {"target": target, "action": binding.id, "contract": args.contract, "input": arguments},
+        gated=action.requires_confirmation, approved=args.approve)
+    if not execute:
+        return record
     try:
-        result = _run(build_parser().parse_args(argv))
+        result = _run(parsed)
+    except KeyboardInterrupt:
+        return hub_journal.complete(record, "unknown", error={"code": "interrupted", "message": "interrupted; reconcile before retrying", "retryable": False})
     except Exception as error:
         code, _, message = _error_details(error)
         # Conservative: even output validation or transport failure can follow a committed write.
@@ -181,7 +190,9 @@ def run(args):
             document = os_request(credential, "GET", path, timeout_seconds=args.timeout, label="knowledge read")
             if document is None:
                 raise HubError("source_not_found", "no readable extracted text for this source")
-            text = document.get("text", "")
+            text = document.get("text") if isinstance(document, dict) else None
+            if not isinstance(text, str):
+                raise HubError("source_not_found", "no readable extracted text for this source")
             result = {"sourceId": args.source_id, "text": text[args.offset:args.offset + args.limit],
                       "offset": args.offset, "nextOffset": args.offset + args.limit if args.offset + args.limit < len(text) else None,
                       "provenance": {key: value for key, value in document.items() if key != "text"}}
