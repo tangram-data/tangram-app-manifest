@@ -7,7 +7,7 @@ import urllib.parse
 import uuid
 
 from .app import TangramApp
-from .hub_target import HubError, digest, load, resolve
+from .hub_target import HubError, load, resolve
 from .local_os import os_request
 from .local_store import list_installed, resolve_installed
 
@@ -136,6 +136,8 @@ def _local_call(args, target):
         return hub_journal.complete(record, "unknown", error={"code": "interrupted", "message": "interrupted; reconcile before retrying", "retryable": False})
     except Exception as error:
         code, _, message = _error_details(error)
+        if code in {"local_runtime_failed", "invalid_input", "capability_graph_stale", "policy_denied", "confirmation_required"}:
+            return hub_journal.complete(record, "failed", error={"code": code, "message": message, "retryable": True})
         # Conservative: even output validation or transport failure can follow a committed write.
         return hub_journal.complete(record, "unknown", error={"code": code, "message": message, "retryable": False})
     return hub_journal.complete(record, "succeeded", result=result)
