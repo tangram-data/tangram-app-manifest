@@ -4,7 +4,8 @@ Install `tangram-apps` with `tangram-app skill install tangram-apps --user`
 or `--codex`. This stable skill uses a live catalog; per-app skill projection
 is optional and installing an app does not require a skill refresh for discovery.
 
-The command group is `tangram-app app` (also routed by the pip `tangram` shim).
+The command groups are `tangram app`, `tangram context`, and `tangram knowledge`
+(also available through `tangram-app`).
 Resolve a target once, then carry `targetRef` through search, inspect and call.
 
 ```text
@@ -56,3 +57,8 @@ integration are future operational extensions.
 A `failed` record with `retryable: true` means a known pre-dispatch failure.
 After resolving it, retry with a new invocation UUID; reusing the old UUID
 returns its stored failure. Never apply this rule to `running` or `unknown`.
+
+Installing `tangram-apps` also updates command spellings in existing
+`tangram-hub` skill and Codex prompt copies within that installation scope.
+Their old names remain usable and custom prose is preserved; the CLI has no
+`hub` command alias. Symlinked legacy copies must be replaced before upgrading.

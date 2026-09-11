@@ -45,8 +45,8 @@ Report workspace provenance when presenting results from a workspace.
 
 ## Workspace knowledge
 
-Use `knowledge search 'query' --target-ref REF` for permission-filtered
-knowledge. Use `knowledge read SOURCE_UUID --target-ref REF` for a returned
+Use `tangram-app knowledge search 'query' --target-ref REF` for permission-filtered
+knowledge. Use `tangram-app knowledge read SOURCE_UUID --target-ref REF` for a returned
 knowledge-document source, following `nextOffset` with `--offset` as needed.
 Preserve provenance and freshness information. Local targets report that this
 capability requires Tangram OS. Other source types need their own app actions.

@@ -25,6 +25,28 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 class BuilderSkillSyncTest(unittest.TestCase):
+    def test_apps_install_migrates_legacy_skill_commands(self):
+        from tangram_app.skills import install_packaged_skill, install_packaged_skill_codex
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            legacy = [root / "claude/skills/tangram-hub/SKILL.md",
+                      root / "codex/prompts/tangram-hub.md",
+                      root / "codex/skills/tangram-hub/SKILL.md"]
+            for path in legacy:
+                path.parent.mkdir(parents=True)
+                path.write_text("custom note\n`tangram-app hub call`\n`tangram hub resolve`\n`hub knowledge-read ID`\n")
+            install_packaged_skill("tangram-apps", root / "claude/skills")
+            install_packaged_skill_codex("tangram-apps", root / "codex")
+            for path in legacy:
+                self.assertEqual(path.read_text(), "custom note\n`tangram-app app call`\n`tangram context resolve`\n`tangram-app knowledge read ID`\n")
+            legacy[0].unlink()
+            outside = root / "outside.md"
+            outside.write_text("tangram-app hub call")
+            legacy[0].symlink_to(outside)
+            with self.assertRaises(FileExistsError):
+                install_packaged_skill("tangram-apps", root / "claude/skills")
+            self.assertEqual(outside.read_text(), "tangram-app hub call")
+
     def test_all_shipped_copies_are_identical(self):
         """Package data is the copy releases ship; the repo-autoload copies
         (.claude/skills) and the plugin copies (skills/) must never drift."""

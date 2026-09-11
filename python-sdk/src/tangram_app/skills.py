@@ -52,7 +52,10 @@ def install_packaged_skill(name: str, skills_root: str | Path, *, force: bool = 
     target = packaged_skill_target(name, skills_root)
     if target.parent.is_symlink():
         raise FileExistsError(f"skill directory {target.parent} is a symlink — refusing to write through it")
-    return _write_skill(target, text, force=force)
+    installed = _write_skill(target, text, force=force)
+    if name == "tangram-apps":
+        _migrate_legacy_app_commands(Path(skills_root) / "tangram-hub" / "SKILL.md")
+    return installed
 
 
 def install_packaged_skill_codex(
@@ -62,7 +65,33 @@ def install_packaged_skill_codex(
     (`/<name>`) under `<codex-home>/prompts/`. Standalone — no Claude Code
     installation is assumed or referenced."""
     text = packaged_skill_text(name)
-    return _write_skill(packaged_skill_codex_target(name, codex_home), text, force=force)
+    target = packaged_skill_codex_target(name, codex_home)
+    installed = _write_skill(target, text, force=force)
+    if name == "tangram-apps":
+        _migrate_legacy_app_commands(target.parent / "tangram-hub.md")
+        _migrate_legacy_app_commands(target.parent.parent / "skills" / "tangram-hub" / "SKILL.md")
+    return installed
+
+
+def _migrate_legacy_app_commands(target: Path) -> None:
+    """Keep old skill references usable; preserve custom prose and the old identity."""
+    if target.is_symlink() or target.parent.is_symlink():
+        raise FileExistsError(f"legacy skill {target} is a symlink; replace it with a regular file before upgrading")
+    if not target.exists():
+        return
+    existing = target.read_text(encoding="utf-8")
+    updated = existing
+    for prefix in ("tangram-app", "tangram"):
+        updated = updated.replace(f"{prefix} hub resolve", f"{prefix} context resolve")
+        for verb in ("search", "inspect", "call", "invocation"):
+            updated = updated.replace(f"{prefix} hub {verb}", f"{prefix} app {verb}")
+        updated = updated.replace(f"{prefix} hub knowledge-search", f"{prefix} knowledge search")
+        updated = updated.replace(f"{prefix} hub knowledge-read", f"{prefix} knowledge read")
+        updated = updated.replace(f"{prefix} hub`", f"{prefix} app`")
+    updated = updated.replace("`hub knowledge-search", "`tangram-app knowledge search")
+    updated = updated.replace("`hub knowledge-read", "`tangram-app knowledge read")
+    if updated != existing:
+        target.write_text(updated, encoding="utf-8")
 
 
 CODEX_AGENTS_BEGIN = "<!-- >>> tangram skills >>> -->"
