@@ -89,6 +89,16 @@ class LocalStoreTest(unittest.TestCase):
         self.assertFalse(Path(entry["root"]).exists())
         self.assertTrue(lock_path.is_file())
 
+    def test_uninstall_idle_commits_by_rename_and_leaves_no_trash(self):
+        from tangram_app.local_store import tangram_home
+
+        entry = install_app(str(FIXTURE))
+        uninstall_app_idle("com.example/orders")
+        self.assertFalse(Path(entry["root"]).exists())
+        trash = tangram_home() / ".trash"
+        if trash.is_dir():
+            self.assertEqual(list(trash.iterdir()), [])
+
     def test_install_from_directory_then_list_resolve_uninstall(self):
         entry = install_app(str(FIXTURE))
         self.assertEqual(entry["id"], "com.example/orders")

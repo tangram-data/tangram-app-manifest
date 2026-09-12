@@ -16,9 +16,11 @@ import json
 import os
 from pathlib import Path
 import shutil
+import sys
 import tarfile
 import tempfile
 import urllib.request
+import uuid
 import zipfile
 
 from .app import TangramApp
@@ -128,10 +130,13 @@ def uninstall_app(ref: str) -> dict:
 def uninstall_app_idle(ref: str) -> dict:
     """Uninstall only an idle, data-free package, serialized with session
     startup via the stable out-of-tree project lock (which startup acquires
-    too, and revalidates package existence under). The lock file lives
-    outside the deleted tree, so no holder is ever left on a doomed inode.
-    Refuses any `.preview` run data — that removal stays a deliberate
-    `uninstall` without this guard."""
+    too, and revalidates package existence under). Deletion commits by an
+    atomic rename out of the store, then removes the detached tree — a
+    pre-upgrade startup (which knows only the in-tree lock) either sees the
+    intact package while our held legacy lock excludes it, or no package at
+    all; it can never interleave with a partial deletion, and the store
+    never holds half-removed state. Refuses any `.preview` run data — that
+    removal stays a deliberate `uninstall` without this guard."""
     entry = resolve_installed(ref)
     if entry is None:
         raise LocalStoreError(f"no installed app matches {ref!r}")
@@ -165,7 +170,24 @@ def uninstall_app_idle(ref: str) -> dict:
                     f"{entry['id']} has local run data ({', '.join(sorted(leftovers)[:5])}) — "
                     "uninstall it deliberately without --require-idle to delete that data"
                 )
-        shutil.rmtree(root)
+        # Atomic commit: after the rename the package is gone from the store
+        # path in one step (same filesystem — .trash sits beside apps/).
+        trash_root = tangram_home() / ".trash"
+        trash_root.mkdir(parents=True, exist_ok=True)
+        detached = trash_root / f"{root.name}.{uuid.uuid4().hex}"
+        try:
+            os.rename(root, detached)
+        except OSError as error:
+            raise LocalStoreError(
+                f"could not detach {entry['id']} for removal: {error}"
+            ) from error
+        try:
+            shutil.rmtree(detached)
+        except OSError as error:
+            # The uninstall already committed; the detached tree is store-
+            # invisible. Diagnostics only (stderr never pollutes the JSON
+            # envelope).
+            print(f"warning: detached package left at {detached}: {error}", file=sys.stderr)
     finally:
         if legacy_lock is not None:
             legacy_lock.close()
