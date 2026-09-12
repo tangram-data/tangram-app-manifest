@@ -275,7 +275,17 @@ class LocalSourceRuntime:
         spec = BackendSpec.from_project(app.source_root)
         _verify_python(self.python)
         preview = _safe_preview_dir(spec.root)
+        # Stable lock first, then the legacy in-tree lock — the same order
+        # the idle uninstall uses. The legacy lock is acquired AND RETAINED
+        # for the session lifetime so pre-upgrade sessions (which hold only
+        # the in-tree lock) and this one exclude each other both ways.
         project_lock = _ProjectLock.acquire(project_lock_path(spec.root))
+        try:
+            legacy_lock = _ProjectLock.acquire(preview / "runtime.lock")
+        except LocalRuntimeError:
+            project_lock.close()
+            raise
+        project_lock = _HeldLocks(project_lock, legacy_lock)
         # The package can be uninstalled between reading the spec and taking
         # the lock; revalidate under it before touching any state.
         if not (spec.root / "manifests").is_dir():
@@ -508,6 +518,18 @@ def _safe_preview_dir(root: Path) -> Path:
         raise LocalRuntimeError(f"could not prepare .preview: {error}") from error
     return preview
 
+
+
+class _HeldLocks:
+    """Several held locks closed as one, so every session close/error path
+    keeps its single `.close()` call."""
+
+    def __init__(self, *locks) -> None:
+        self._locks = locks
+
+    def close(self) -> None:
+        for lock in self._locks:
+            lock.close()
 
 
 def project_lock_path(root: Path) -> Path:

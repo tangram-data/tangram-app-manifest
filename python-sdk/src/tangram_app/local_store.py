@@ -144,14 +144,15 @@ def uninstall_app_idle(ref: str) -> dict:
         raise LocalStoreError(
             f"{entry['id']} has a live local session — stop it before uninstalling"
         ) from error
+    legacy_lock = None
     try:
         # A pre-upgrade CLI session holds the legacy in-tree lock instead;
-        # honor it too rather than deleting under a running old session.
+        # honor it, and RETAIN it through the deletion so an old-version
+        # startup cannot grab it between the check and the rmtree.
         legacy = root / ".preview" / "runtime.lock"
         if legacy.is_file():
             try:
                 legacy_lock = _ProjectLock.acquire(legacy)
-                legacy_lock.close()
             except LocalRuntimeError as error:
                 raise LocalStoreError(
                     f"{entry['id']} has a live local session — stop it before uninstalling"
@@ -166,6 +167,8 @@ def uninstall_app_idle(ref: str) -> dict:
                 )
         shutil.rmtree(root)
     finally:
+        if legacy_lock is not None:
+            legacy_lock.close()
         lock.close()
     return entry
 
