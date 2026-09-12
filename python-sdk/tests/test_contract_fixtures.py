@@ -22,7 +22,7 @@ import os
 import pathlib
 import unittest
 
-from tangram_app.models import CapabilityEffect, ActionCapability, OperationBinding
+from tangram_app.models import ActionCapability, CapabilityEffect, CapabilityGraphError
 from tangram_app.policy import (
     DecisionKind,
     InvocationRequest,
@@ -40,21 +40,29 @@ def _load(name):
     return json.loads((_CONTRACTS / name).read_text(encoding="utf-8"))
 
 
+def _raw_declaration(effect, requires_confirmation):
+    """A raw capability object as the compiler emits it; `effect` is omitted
+    entirely when None so the missing-field path is the one exercised."""
+    raw = {
+        "id": "Thing.Do",
+        "resourceType": "Thing",
+        "name": "Do",
+        "description": "fixture",
+        "idempotent": False,
+        "requiresConfirmation": requires_confirmation,
+        "bindings": [
+            {"id": "Thing.Do@v1", "operationId": "op", "method": "post", "path": "/op", "inputSchema": {}}
+        ],
+    }
+    if effect is not None:
+        raw["effect"] = effect
+    return raw
+
+
 def _action(effect, requires_confirmation):
-    binding = OperationBinding(
-        id="v1", operation_id="op", method="post", path="/op", input_schema={}
-    )
-    return ActionCapability(
-        id="Thing.Do",
-        resource_type="Thing",
-        name="Do",
-        description="fixture",
-        effect=CapabilityEffect(effect),
-        idempotent=False,
-        requires_confirmation=requires_confirmation,
-        required_privileges=(),
-        bindings=(binding,),
-    )
+    # Through the production validator, not the dataclass constructor — the
+    # from_dict gate is exactly what the canonical deny relies on.
+    return ActionCapability.from_dict(_raw_declaration(effect, requires_confirmation), "cap")
 
 
 @unittest.skipUnless(_CONTRACTS.is_dir(), "tangram-desktop checkout not available")
@@ -69,9 +77,10 @@ class ContractFixturesTest(unittest.TestCase):
             verdict = case["verdict"]
             with self.subTest(effect=effect, requiresConfirmation=flag):
                 if effect is None or effect not in {e.value for e in CapabilityEffect}:
-                    # Canonical deny: the model layer refuses the declaration.
+                    # Canonical deny: the production validator refuses the
+                    # declaration (missing and malformed alike).
                     self.assertEqual(verdict, "deny")
-                    with self.assertRaises(Exception):
+                    with self.assertRaises(CapabilityGraphError):
                         _action(effect, flag)
                     continue
                 action = _action(effect, flag)
