@@ -79,6 +79,9 @@ def build_parser() -> _Parser:
     app_uninstall = app_commands.add_parser("uninstall")
     app_uninstall.add_argument("ref")
     app_uninstall.add_argument("--yes", action="store_true")
+    # Refuse unless idle and data-free, serialized with session startup via
+    # the project lock (machine callers like the desktop pass this).
+    app_uninstall.add_argument("--require-idle", action="store_true")
 
     actions = commands.add_parser("actions")
     actions.add_argument("target")

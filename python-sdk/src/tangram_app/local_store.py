@@ -125,6 +125,41 @@ def uninstall_app(ref: str) -> dict:
     return entry
 
 
+def uninstall_app_idle(ref: str) -> dict:
+    """Uninstall only an idle, data-free package, serialized with session
+    startup: the same `.preview/runtime.lock` flock that `run`/`call` acquire
+    is held from the check through the deletion, so a session can neither be
+    running nor start mid-uninstall. Refuses any `.preview` content besides
+    the lock file — run data removal stays a deliberate `uninstall` without
+    this guard."""
+    entry = resolve_installed(ref)
+    if entry is None:
+        raise LocalStoreError(f"no installed app matches {ref!r}")
+    from .local_runtime import LocalRuntimeError, _ProjectLock
+
+    preview = Path(entry["root"]) / ".preview"
+    preview.mkdir(parents=True, exist_ok=True)
+    try:
+        lock = _ProjectLock.acquire(preview / "runtime.lock")
+    except LocalRuntimeError as error:
+        raise LocalStoreError(
+            f"{entry['id']} has a live local session — stop it before uninstalling"
+        ) from error
+    try:
+        leftovers = [p.name for p in preview.iterdir() if p.name != "runtime.lock"]
+        if leftovers:
+            raise LocalStoreError(
+                f"{entry['id']} has local run data ({', '.join(sorted(leftovers)[:5])}) — "
+                "uninstall it deliberately without --require-idle to delete that data"
+            )
+        # The held lock's fd survives the unlink; startup racing this rmtree
+        # finds no package to boot.
+        shutil.rmtree(entry["root"])
+    finally:
+        lock.close()
+    return entry
+
+
 def resolve_target(target: str | Path) -> Path:
     """CLI targets: an existing path wins; otherwise try the store."""
     path = Path(target)

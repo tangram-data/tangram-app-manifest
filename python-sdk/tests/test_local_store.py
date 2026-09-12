@@ -19,6 +19,7 @@ from tangram_app.local_store import (
     resolve_installed,
     resolve_target,
     uninstall_app,
+    uninstall_app_idle,
 )
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "minimal-app"
@@ -37,6 +38,34 @@ class LocalStoreTest(unittest.TestCase):
             if previous_agent_home
             else os.environ.pop("TANGRAM_AGENT_HOME", None)
         )
+
+    def test_uninstall_idle_removes_a_data_free_package(self):
+        entry = install_app(str(FIXTURE))
+        removed = uninstall_app_idle("com.example/orders")
+        self.assertEqual(removed["id"], "com.example/orders")
+        self.assertFalse(Path(entry["root"]).exists())
+
+    def test_uninstall_idle_refuses_run_data(self):
+        entry = install_app(str(FIXTURE))
+        preview = Path(entry["root"]) / ".preview"
+        preview.mkdir()
+        (preview / "pgdata").mkdir()
+        with self.assertRaisesRegex(LocalStoreError, "local run data"):
+            uninstall_app_idle("com.example/orders")
+        self.assertTrue((preview / "pgdata").is_dir())
+
+    @unittest.skipIf(os.name == "nt", "POSIX flock only")
+    def test_uninstall_idle_refuses_a_live_session(self):
+        import fcntl
+
+        entry = install_app(str(FIXTURE))
+        preview = Path(entry["root"]) / ".preview"
+        preview.mkdir()
+        with (preview / "runtime.lock").open("a+b") as holder:
+            fcntl.flock(holder.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaisesRegex(LocalStoreError, "live local session"):
+                uninstall_app_idle("com.example/orders")
+        self.assertTrue(Path(entry["root"]).exists())
 
     def test_install_from_directory_then_list_resolve_uninstall(self):
         entry = install_app(str(FIXTURE))

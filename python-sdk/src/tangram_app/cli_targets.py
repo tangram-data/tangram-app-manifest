@@ -22,7 +22,14 @@ from .local_os import (
     load_os_credential,
     os_install,
 )
-from .local_store import install_app, list_installed, resolve_installed, resolve_target, uninstall_app
+from .local_store import (
+    install_app,
+    list_installed,
+    resolve_installed,
+    resolve_target,
+    uninstall_app,
+    uninstall_app_idle,
+)
 
 
 class TargetError(ValueError):
@@ -296,4 +303,5 @@ def handle_app_uninstall(args) -> dict:
     if entry is None:
         raise TargetError(f"no installed app matches {args.ref!r}")
     _consent_uninstall(entry["id"], args.yes)
-    return {"uninstalled": _normalized(uninstall_app(args.ref))}
+    remove = uninstall_app_idle if getattr(args, "require_idle", False) else uninstall_app
+    return {"uninstalled": _normalized(remove(args.ref))}
