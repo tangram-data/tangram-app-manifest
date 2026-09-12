@@ -67,6 +67,28 @@ class LocalStoreTest(unittest.TestCase):
                 uninstall_app_idle("com.example/orders")
         self.assertTrue(Path(entry["root"]).exists())
 
+    @unittest.skipIf(os.name == "nt", "POSIX flock only")
+    def test_uninstall_idle_refuses_when_the_stable_lock_is_held(self):
+        import fcntl
+
+        from tangram_app.local_runtime import project_lock_path
+
+        entry = install_app(str(FIXTURE))
+        with project_lock_path(Path(entry["root"])).open("a+b") as holder:
+            fcntl.flock(holder.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaisesRegex(LocalStoreError, "live local session"):
+                uninstall_app_idle("com.example/orders")
+        self.assertTrue(Path(entry["root"]).exists())
+
+    def test_uninstall_idle_leaves_the_stable_lock_outside_the_deleted_tree(self):
+        from tangram_app.local_runtime import project_lock_path
+
+        entry = install_app(str(FIXTURE))
+        lock_path = project_lock_path(Path(entry["root"]))
+        uninstall_app_idle("com.example/orders")
+        self.assertFalse(Path(entry["root"]).exists())
+        self.assertTrue(lock_path.is_file())
+
     def test_install_from_directory_then_list_resolve_uninstall(self):
         entry = install_app(str(FIXTURE))
         self.assertEqual(entry["id"], "com.example/orders")

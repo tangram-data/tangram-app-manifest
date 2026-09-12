@@ -275,7 +275,12 @@ class LocalSourceRuntime:
         spec = BackendSpec.from_project(app.source_root)
         _verify_python(self.python)
         preview = _safe_preview_dir(spec.root)
-        project_lock = _ProjectLock.acquire(preview / "runtime.lock")
+        project_lock = _ProjectLock.acquire(project_lock_path(spec.root))
+        # The package can be uninstalled between reading the spec and taking
+        # the lock; revalidate under it before touching any state.
+        if not (spec.root / "manifests").is_dir():
+            project_lock.close()
+            raise LocalRuntimeError("the app package was removed before the session could start")
         database: LocalPostgres | None = None
         try:
             if needs_postgres:
@@ -502,6 +507,24 @@ def _safe_preview_dir(root: Path) -> Path:
     except OSError as error:
         raise LocalRuntimeError(f"could not prepare .preview: {error}") from error
     return preview
+
+
+
+def project_lock_path(root: Path) -> Path:
+    """The project lifecycle lock, OUTSIDE the project tree: a lock inside
+    the package would be unlinked by uninstall while a holder keeps only the
+    doomed inode, letting a fresh open+flock on the recreated path defeat
+    the serialization. Keyed by the canonical root path; the file is never
+    deleted (unlink would recreate the same inode-swap hole on the lock
+    itself)."""
+    import hashlib
+
+    real = str(Path(root).resolve())
+    digest = hashlib.sha256(real.encode("utf-8")).hexdigest()[:32]
+    home = os.environ.get("TANGRAM_HOME")
+    locks = (Path(home) if home else Path.home() / ".tangram") / "locks"
+    locks.mkdir(parents=True, exist_ok=True)
+    return locks / f"{digest}.lock"
 
 
 class _ProjectLock:

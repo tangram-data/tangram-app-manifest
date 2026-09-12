@@ -127,34 +127,44 @@ def uninstall_app(ref: str) -> dict:
 
 def uninstall_app_idle(ref: str) -> dict:
     """Uninstall only an idle, data-free package, serialized with session
-    startup: the same `.preview/runtime.lock` flock that `run`/`call` acquire
-    is held from the check through the deletion, so a session can neither be
-    running nor start mid-uninstall. Refuses any `.preview` content besides
-    the lock file — run data removal stays a deliberate `uninstall` without
-    this guard."""
+    startup via the stable out-of-tree project lock (which startup acquires
+    too, and revalidates package existence under). The lock file lives
+    outside the deleted tree, so no holder is ever left on a doomed inode.
+    Refuses any `.preview` run data — that removal stays a deliberate
+    `uninstall` without this guard."""
     entry = resolve_installed(ref)
     if entry is None:
         raise LocalStoreError(f"no installed app matches {ref!r}")
-    from .local_runtime import LocalRuntimeError, _ProjectLock
+    from .local_runtime import LocalRuntimeError, _ProjectLock, project_lock_path
 
-    preview = Path(entry["root"]) / ".preview"
-    preview.mkdir(parents=True, exist_ok=True)
+    root = Path(entry["root"])
     try:
-        lock = _ProjectLock.acquire(preview / "runtime.lock")
+        lock = _ProjectLock.acquire(project_lock_path(root))
     except LocalRuntimeError as error:
         raise LocalStoreError(
             f"{entry['id']} has a live local session — stop it before uninstalling"
         ) from error
     try:
-        leftovers = [p.name for p in preview.iterdir() if p.name != "runtime.lock"]
-        if leftovers:
-            raise LocalStoreError(
-                f"{entry['id']} has local run data ({', '.join(sorted(leftovers)[:5])}) — "
-                "uninstall it deliberately without --require-idle to delete that data"
-            )
-        # The held lock's fd survives the unlink; startup racing this rmtree
-        # finds no package to boot.
-        shutil.rmtree(entry["root"])
+        # A pre-upgrade CLI session holds the legacy in-tree lock instead;
+        # honor it too rather than deleting under a running old session.
+        legacy = root / ".preview" / "runtime.lock"
+        if legacy.is_file():
+            try:
+                legacy_lock = _ProjectLock.acquire(legacy)
+                legacy_lock.close()
+            except LocalRuntimeError as error:
+                raise LocalStoreError(
+                    f"{entry['id']} has a live local session — stop it before uninstalling"
+                ) from error
+        preview = root / ".preview"
+        if preview.is_dir():
+            leftovers = [p.name for p in preview.iterdir() if p.name != "runtime.lock"]
+            if leftovers:
+                raise LocalStoreError(
+                    f"{entry['id']} has local run data ({', '.join(sorted(leftovers)[:5])}) — "
+                    "uninstall it deliberately without --require-idle to delete that data"
+                )
+        shutil.rmtree(root)
     finally:
         lock.close()
     return entry
