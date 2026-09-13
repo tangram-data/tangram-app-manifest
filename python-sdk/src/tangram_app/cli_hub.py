@@ -428,5 +428,11 @@ def _run_pinned(args):
                     result = os_request(credential, "GET", f"{base}/invocations/{args.invocation_id}",
                                         timeout_seconds=max(1, min(30, deadline - time.monotonic())), label="invocation status")
                 if result.get("state") == "pending_approval" and native_error:
-                    result = {**result, "error": native_error}
+                    if native_error.get("code") == "invalid_target":
+                        # The frozen endpoint can never reach a native approver;
+                        # resume would repeat it forever. Reconcile a new target.
+                        result = {**result, "state": "failed", "retryMode": "reconcile",
+                                  "error": {**native_error, "retryable": False}}
+                    else:
+                        result = {**result, "error": native_error}
     return {**result, "target": target, "targetRef": args.target_ref}

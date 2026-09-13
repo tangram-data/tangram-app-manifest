@@ -64,6 +64,17 @@ class WorkspaceApprovalTest(unittest.TestCase):
                 self.assertEqual(len(calls),2)
                 if state == 'pending_approval': self.assertEqual(result['error']['code'],'approver_unavailable')
 
+    def test_invalid_target_is_not_resumable(self):
+        # A frozen endpoint that can never reach an approver must reconcile,
+        # not stay pending with a resume that repeats the same broken target.
+        result,calls,_ = self.pipeline(HubError('invalid_target', 'endpoint carries a path'),
+            [{'state':'pending_approval'}, {'state':'pending_approval'}])
+        self.assertEqual(result['state'],'failed')
+        self.assertEqual(result['retryMode'],'reconcile')
+        self.assertEqual(result['error']['code'],'invalid_target')
+        self.assertFalse(result['error']['retryable'])
+        self.assertEqual(len(calls),2)
+
     def test_failed_reconciliation_retains_native_expiry_without_claiming_server_expiry(self):
         native_error = {'code':'approval_expired','message':'Challenge expired','retryable':False}
         result,calls,_ = self.pipeline(lambda *a,**k: {'state':'expired','error':native_error},
