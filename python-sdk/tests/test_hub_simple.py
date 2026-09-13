@@ -130,6 +130,29 @@ class SimpleHubTest(unittest.TestCase):
         self.assertEqual(result['error']['code'], 'policy_denied')
         self.assertEqual(result['data']['target']['workspace'], 'demo')
 
+    def test_queue_full_is_known_not_submitted_and_resumes_same_receipt(self):
+        self.remote()
+        from tangram_app.cli_parser import build_parser
+        from tangram_app.cli_hub import run as hub_run
+        seen = []
+        def server(cred, method, path, body=None, **kwargs):
+            seen.append(body)
+            if len(seen) == 1:
+                return {'state':'failed','retryMode':'resume','error':{'code':'approval_queue_full',
+                        'message':'Nothing registered or dispatched','retryable':True}}
+            return {'state':'succeeded'}
+        with patch('tangram_app.cli_hub.os_request', side_effect=server), patch('tangram_app.workspace_approval.request') as prompt:
+            args = build_parser().parse_args(['app','call','g/a#Thing.Do@do','--contract','v1',
+                                              '--workspace','dev/demo','--input','{}'])
+            result = hub_run(args)
+            self.assertEqual(result['state'],'failed')
+            self.assertEqual(result['error']['code'],'approval_queue_full')
+            self.assertTrue(result['error']['retryable'])
+            self.assertIn('resumeCommand',result)
+            self.assertEqual(hub_run(build_parser().parse_args(['app','resume',result['invocationId']]))['state'],'succeeded')
+        self.assertEqual(seen[0],seen[1])
+        prompt.assert_not_called()
+
     def test_receipt_failure_prevents_dispatch(self):
         self.local()
         with patch('tangram_app.hub_receipts.save', side_effect=OSError('disk full')), patch('tangram_app.desktop_invocation.call') as execute:

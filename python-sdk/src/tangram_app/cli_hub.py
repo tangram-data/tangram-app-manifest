@@ -409,8 +409,17 @@ def _run_pinned(args):
                     native_error = {"code": error.code, "message": str(error), "retryable": True}
                 # The helper's reply is advisory. Only the server journal releases execution.
                 # Keep the exact frozen body/UUID, including after a lost decision response.
-                result = os_request(credential, "GET", f"{base}/invocations/{args.invocation_id}",
-                                    timeout_seconds=max(1, min(30, deadline - time.monotonic())), label="approval status")
+                try:
+                    result = os_request(credential, "GET", f"{base}/invocations/{args.invocation_id}",
+                                        timeout_seconds=max(1, min(30, deadline - time.monotonic())), label="approval status")
+                except Exception:
+                    # Keep the native diagnosis without mistaking advisory state
+                    # for a durable outcome (another caller may have dispatched).
+                    result = {"state": "unknown", "error": {"code": "approval_status_unavailable",
+                              "message": "The server invocation state could not be confirmed. Resume this same invocation to reconcile; do not create a new ID.",
+                              "retryable": True}}
+                    if native_error:
+                        result["approvalError"] = native_error
                 if result.get("state") == "approved" and time.monotonic() < deadline:
                     result = os_request(credential, "POST", f"{base}/call", body,
                                         timeout_seconds=max(1, deadline - time.monotonic()), label="execute approved invocation")

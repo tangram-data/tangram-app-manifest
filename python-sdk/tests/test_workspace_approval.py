@@ -25,7 +25,9 @@ class WorkspaceApprovalTest(unittest.TestCase):
         calls = []
         def server(cred, method, path, body=None, **kw):
             calls.append((method,path,body))
-            return {'invocationId':key, **states.pop(0)}
+            value = states.pop(0)
+            if isinstance(value, Exception): raise value
+            return {'invocationId':key, **value}
         with patch('tangram_app.cli_hub.load', return_value=(target, {'token':'shared'})), \
              patch('tangram_app.cli_hub.os_request', side_effect=server), \
              patch('tangram_app.workspace_approval.request', side_effect=native) as prompt:
@@ -61,6 +63,15 @@ class WorkspaceApprovalTest(unittest.TestCase):
                 self.assertEqual(result['state'],state)
                 self.assertEqual(len(calls),2)
                 if state == 'pending_approval': self.assertEqual(result['error']['code'],'approver_unavailable')
+
+    def test_failed_reconciliation_retains_native_expiry_without_claiming_server_expiry(self):
+        native_error = {'code':'approval_expired','message':'Challenge expired','retryable':False}
+        result,calls,_ = self.pipeline(lambda *a,**k: {'state':'expired','error':native_error},
+            [{'state':'pending_approval'}, OSError('status unavailable')])
+        self.assertEqual(result['state'],'unknown')
+        self.assertEqual(result['error']['code'],'approval_status_unavailable')
+        self.assertEqual(result['approvalError'],native_error)
+        self.assertEqual(len(calls),2)
 
     def test_reads_and_terminal_replays_never_prompt(self):
         result,calls,prompt = self.pipeline(lambda *a,**k: self.fail('unexpected popup'), [{'state':'succeeded'}])
