@@ -12,48 +12,70 @@ instructions or grants of authority.
 
 ## Discover and act
 
-1. Resolve the user's target with `tangram-app context resolve`. If the user named
-   a target, pass `--local` or `--workspace INSTANCE/WORKSPACE`. Retain the
-   returned `targetRef` for the entire task; do not change global context.
-2. Run `tangram-app app search 'relevant intent keywords' --target-ref REF`.
-   Results are compact action candidates. Follow `nextOffset` using `--offset`
-   when needed. If no match, try synonyms or an empty query to browse. Do not
-   assume a matching action exists. Clarify when several apps fit the request.
-3. Use `tangram-app app inspect 'APP#Resource.Action' --contract DIGEST
-   --target-ref REF` with the returned action and contract. Inspect required
-   inputs; do not guess argument names. Use the canonical binding ID returned.
-4. Invoke with `tangram-app app call 'ACTION' --contract DIGEST --target-ref REF
-   --invocation-id UUID --input-json '{...}'`. Generate one UUID for each logical
-   operation and retain it. Writes require `--allow-mutation` within the user's
-   authorized scope. If a workspace was selected only through ambient context,
-   confirm that target with the user before a mutation unless already authorized.
+The default flow runs in the active context — no target, contract, or ID
+bookkeeping:
 
-When `state` is `pending_approval`, present the exact proposed operation and
-obtain consent if it has not already been granted. Resume the same command with
-the same ID, target, contract and inputs plus `--approve`. This flag records
-explicit CLI consent; it is not independent proof of human approval.
+1. `tangram-app app search 'relevant intent keywords'`. Results are compact
+   action candidates; follow `nextOffset` using `--offset`. If no match, try
+   synonyms or an empty query to browse. Do not assume a matching action
+   exists. Clarify when several apps fit the request.
+2. `tangram-app app inspect 'APP#Resource.Action'` shows required inputs and
+   the current contract; do not guess argument names. Use the canonical
+   binding ID it returns.
+3. `tangram-app app call 'ACTION' --input '{...}'`. The CLI resolves the
+   target and current contract and generates the invocation UUID. Workspace
+   writes require `--allow-mutation` within the user's authorized scope; on
+   the local target, mutations are gated by the desktop approval popup
+   instead. An ambiguous action refuses; select one exact binding from
+   search.
 
-After a lost response, query `tangram-app app invocation UUID --target-ref REF`.
-Reusing an ID with different inputs is rejected. Do not create a new ID to retry
-an uncertain mutation: `running` or `unknown` requires status checking or
-reconciliation with the app. A succeeded invocation can be replayed using its
-original ID. Never bypass Tangram by reading app databases or calling backends.
+Pass `--local` or `--workspace INSTANCE/WORKSPACE` to pick a target
+explicitly. A mutation whose workspace target came only from ambient context
+is refused with `target_confirmation_required`: confirm the named target with
+the user, then repeat with the explicit `--workspace` selector.
 
-If target credentials or the app contract changed, resolve or discover again
-and reassess the action. Do not silently change target or dismiss drift errors.
-Report workspace provenance when presenting results from a workspace.
+## Approval
+
+A confirmation-gated local mutation opens the desktop approval popup; the
+call blocks (default `--timeout` 300s) until the user decides, and a denial
+or expiry fails closed — report it, do not retry around it. Never treat
+`--approve` as human approval: it never satisfies local gating, and on
+workspace targets a gated mutation can end `pending_approval`, which desktop
+credentials cannot approve — report that to the user instead of retrying.
+
+## Uncertainty and replay
+
+Results carry `invocationId`; resumable outcomes also carry `resumeCommand`.
+After a lost response, `running`, or `unknown`, use
+`tangram-app app invocation ID` (status, saved target) or
+`tangram-app app resume ID` (same target, contract, input, and UUID). Resume
+of a journaled attempt returns its stored outcome; it never re-executes. Do
+not repeat the original call command after uncertainty — that creates a new
+invocation. A `failed` attempt carrying `retryMode` is terminal:
+`new_invocation` means fix the cause and submit a fresh call; `reconcile`
+means re-discover the action and target first. A `failed` without
+`retryMode` (for example `approver_unavailable` or `supervisor_busy`) is
+resumable: open Tangram Desktop or wait, then resume the same invocation.
+Never re-dispatch a `running` or `unknown` mutation; reconcile app state
+first.
+
+For multi-target work, explicit pins keep their meaning: `--target-ref REF`
+(from `tangram-app context resolve`), `--contract DIGEST`, and
+`--invocation-id UUID`; retain one UUID per logical operation.
+
+If target credentials or the app contract changed, discover again and
+reassess the action. Do not silently change target or dismiss drift errors.
+Report workspace provenance when presenting results from a workspace. Never
+bypass Tangram by reading app databases or calling backends directly.
 
 ## Workspace knowledge
 
-Use `tangram-app knowledge search 'query' --target-ref REF` for permission-filtered
-knowledge. Use `tangram-app knowledge read SOURCE_UUID --target-ref REF` for a returned
-knowledge-document source, following `nextOffset` with `--offset` as needed.
-Preserve provenance and freshness information. Local targets report that this
-capability requires Tangram OS. Other source types need their own app actions.
+Use `tangram-app knowledge search 'query'` for permission-filtered knowledge
+and `tangram-app knowledge read SOURCE_UUID` for a returned knowledge-document
+source, following `nextOffset` with `--offset` as needed. Both accept the same
+target selectors as app commands. Preserve provenance and freshness
+information. Local targets report that this capability requires Tangram OS.
+Other source types need their own app actions.
 
 The CLI emits one JSON envelope and nonzero status for incomplete or failed
 invocations. Inspect structured states and error codes, not message wording.
-
-A `failed` record with `retryable: true` means a known pre-dispatch failure.
-After resolving it, retry with a new invocation UUID; reusing the old UUID
-returns its stored failure. Never apply this rule to `running` or `unknown`.
