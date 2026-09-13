@@ -41,7 +41,7 @@ def authenticated_supervisor():
             return False
         owned.append(code.value)
         rule = cf.CFStringCreateWithCString(None,
-            b'anchor apple generic and certificate leaf[subject.OU] = "S7A9QSG6L4" and identifier "tangram-local-runtime-spike"',
+            b'anchor apple generic and certificate leaf[subject.OU] = "S7A9QSG6L4" and identifier "tangram-local-runtime-spike" and !entitlement["com.apple.security.get-task-allow"] exists',
             0x08000100)  # UTF-8; production Tangram signing team, not caller configuration
         owned.append(rule)
         requirement = ptr()

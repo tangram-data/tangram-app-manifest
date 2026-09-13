@@ -121,8 +121,6 @@ def _local_call(args, target):
     if action.effect.value != "Stateless" or action.requires_confirmation:
         from .desktop_invocation import call as desktop_call
         return desktop_call(args, arguments)
-    if action.effect.value != "Stateless" and not args.allow_mutation:
-        raise HubError("policy_denied", "this action requires --allow-mutation")
     # Existing call owns policy, request rendering, schema validation, audit and runtime.
     connector = app.graph.runtime_requirements.get("backend") == "connector"
     argv = ["call", entry["root"], binding.id, "--connected" if connector else "--local",
