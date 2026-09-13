@@ -34,7 +34,7 @@ class DesktopInvocationTest(unittest.TestCase):
         request = {"invocationId": "i", "action": "g/a#Thing.Do", "contract": "digest", "input": {}, "timeoutSeconds": 30}
         app = types.SimpleNamespace(graph=types.SimpleNamespace(package=types.SimpleNamespace(digest="digest"), runtime_requirements={"backend": "connector"}))
         action = types.SimpleNamespace(effect=types.SimpleNamespace(value="Irreversible"), requires_confirmation=True, resource_type="Thing", name="Do")
-        binding = types.SimpleNamespace(id="g/a#Thing.Do", input_schema={}, operation_id="doThing")
+        binding = types.SimpleNamespace(id="g/a#Thing.Do@doThing", input_schema={}, operation_id="doThing")
         metadata = ({"root": "/fixture"}, app, action, binding)
         for decision, trusted in [('', False), ('{"execute":"other"}', False), ('{"execute":"i"}', False), ('{"execute":"i"}', True)]:
             approved = decision == '{"execute":"i"}' and trusted
@@ -59,7 +59,7 @@ class DesktopInvocationTest(unittest.TestCase):
             request = {"invocationId": "i", "action": "g/a#Thing.Do", "contract": "digest", "input": {}, "timeoutSeconds": 30}
             app = types.SimpleNamespace(graph=types.SimpleNamespace(package=types.SimpleNamespace(digest="digest"), runtime_requirements={}))
             action = types.SimpleNamespace(effect=types.SimpleNamespace(value="Irreversible"), requires_confirmation=True, resource_type="Thing", name="Do")
-            binding = types.SimpleNamespace(id="g/a#Thing.Do", input_schema={}, operation_id="doThing")
+            binding = types.SimpleNamespace(id="g/a#Thing.Do@doThing", input_schema={}, operation_id="doThing")
             testcase = self
             class Input(io.StringIO):
                 def readline(self, *args):

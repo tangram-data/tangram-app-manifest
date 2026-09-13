@@ -149,7 +149,12 @@ class HubTest(unittest.TestCase):
                        "--target-ref", self.pin["targetRef"], "--invocation-id", str(uuid.uuid4()), "--input-json", '{"orderId":1}']
             self.assertEqual(run(*command)[1]["data"]["state"], "succeeded")
             self.assertEqual(run(*command, "--allow-mutation", "--approve")[1]["data"]["state"], "succeeded")
-            self.assertEqual(desktop.call_count, 2)
+            command[1] = "com.example/orders#Order.Approve"
+            self.assertEqual(run(*command)[1]["data"]["state"], "succeeded")
+            self.assertEqual(desktop.call_count, 3)
+            for call in desktop.call_args_list:
+                self.assertEqual(call.args[0].action, "com.example/orders#Order.Approve@approveOrder")
+                self.assertEqual(call.args[1], {"orderId": 1})
             bind.assert_not_called()
 
     def test_inspect_and_call_use_frozen_contract_and_existing_host(self):

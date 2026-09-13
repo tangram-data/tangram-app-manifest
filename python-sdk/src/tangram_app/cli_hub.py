@@ -120,7 +120,12 @@ def _local_call(args, target):
     validate(arguments, binding.input_schema)
     if action.effect.value != "Stateless" or action.requires_confirmation:
         from .desktop_invocation import call as desktop_call
-        return desktop_call(args, arguments)
+        # Resolve the optional @operation suffix before freezing the desktop
+        # request so the worker and approver bind the same canonical action.
+        from copy import copy
+        canonical = copy(args)
+        canonical.action = binding.id
+        return desktop_call(canonical, arguments)
     # Existing call owns policy, request rendering, schema validation, audit and runtime.
     connector = app.graph.runtime_requirements.get("backend") == "connector"
     argv = ["call", entry["root"], binding.id, "--connected" if connector else "--local",
