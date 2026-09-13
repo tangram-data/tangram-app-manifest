@@ -113,6 +113,20 @@ def _local_search(query: str, limit: int, offset: int) -> dict:
             "unavailableApps": unavailable}
 
 
+def _complete(record, state, **fields):
+    from . import hub_journal
+    try:
+        return hub_journal.complete(record, state, **fields)
+    except HubError as error:
+        if error.code != "invocation_conflict":
+            raise
+        # Completion lost a race after the attempt already ran; the journal owns
+        # the outcome. Surface unknown — not a pre-dispatch failure — so resume
+        # reads the stored result instead of advising a new invocation.
+        raise HubError("journal_conflict",
+                       "The invocation journal changed while recording this attempt; resume to read its stored outcome.") from error
+
+
 def _local_call(args, target):
     from . import hub_journal
     from .cli import _read_json_input, _run, _error_details
@@ -144,18 +158,26 @@ def _local_call(args, target):
         {"target": target, "action": binding.id, "contract": args.contract, "input": arguments},
         gated=action.requires_confirmation, approved=args.approve)
     if not execute:
+        # Old records may advertise retryable=True, but a journaled attempt is
+        # immutable. Never suggest that resume will execute it again.
+        if record.get("state") == "failed":
+            return {**record, "retryMode": "new_invocation",
+                    "error": {**record.get("error", {}), "retryable": False},
+                    "retryAdvice": "This attempt is terminal. After resolving the failure, submit a new call; resume only returns its stored result."}
         return record
     try:
         result = _run(parsed)
     except KeyboardInterrupt:
-        return hub_journal.complete(record, "unknown", error={"code": "interrupted", "message": "interrupted; reconcile before retrying", "retryable": False})
+        return _complete(record, "unknown", error={"code": "interrupted", "message": "interrupted; reconcile before retrying", "retryable": False})
     except Exception as error:
         code, _, message = _error_details(error)
         if code in {"local_runtime_failed", "invalid_input", "capability_graph_stale", "policy_denied", "confirmation_required"}:
-            return hub_journal.complete(record, "failed", error={"code": code, "message": message, "retryable": True})
+            return _complete(record, "failed", retryMode="new_invocation",
+                retryAdvice="This attempt is terminal. After resolving the failure, submit a new call; resume only returns its stored result.",
+                error={"code": code, "message": message, "retryable": False})
         # Conservative: even output validation or transport failure can follow a committed write.
-        return hub_journal.complete(record, "unknown", error={"code": code, "message": message, "retryable": False})
-    return hub_journal.complete(record, "succeeded", result=result)
+        return _complete(record, "unknown", error={"code": code, "message": message, "retryable": False})
+    return _complete(record, "succeeded", result=result)
 
 
 def _current_contract(args, target, credential):
@@ -165,19 +187,35 @@ def _current_contract(args, target, credential):
         _, binding = app.graph.resolve(args.action)
         args.action = binding.id
         return app.graph.package.digest
-    # Enumerate the governed catalog, not a fuzzy first match. A bare action
-    # may select a binding only when exactly one operation exists.
+    # Search for this action, then require exact identity. A bare action must
+    # still inspect all matching pages to detect multiple operation bindings.
     ws = urllib.parse.quote(target["workspace"], safe="")
+    import time
     candidates = []
     offset = 0
-    for _ in range(100):
+    deadline = time.monotonic() + args.timeout
+    for _ in range(10):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise HubError("catalog_timeout", "Contract lookup timed out; use an explicit --contract or try again.")
         page = os_request(credential, "POST", f"/api/core/v1/workspaces/{ws}/hub/search",
-                          {"query": "", "limit": 100, "offset": offset},
-                          timeout_seconds=args.timeout, label="resolve action contract")
+                          {"query": args.action, "limit": 100, "offset": offset},
+                          timeout_seconds=remaining, label="resolve action contract")
+        if not isinstance(page, dict):
+            raise HubError("invalid_catalog", "Workspace catalog must return an object.")
         if page.get("error"):
-            raise HubError(page["error"].get("code", "catalog_failed"), page["error"].get("message", "Catalog lookup failed"))
-        candidates.extend(row for row in page.get("candidates", [])
-                          if row.get("action") == args.action or row.get("action", "").startswith(args.action + "@"))
+            error = page["error"]
+            if not isinstance(error, dict):
+                raise HubError("invalid_catalog", "Workspace catalog returned a malformed error.")
+            raise HubError(error.get("code", "catalog_failed"), error.get("message", "Catalog lookup failed"))
+        rows = page.get("candidates")
+        if not isinstance(rows, list):
+            raise HubError("invalid_catalog", "Workspace catalog must return a candidates list.")
+        for row in rows:
+            if not isinstance(row, dict) or any(not isinstance(row.get(key), str) or not row[key] for key in ("action", "contract")):
+                raise HubError("invalid_catalog", "Each catalog candidate must include a nonempty action and contract.")
+            if row["action"] == args.action or row["action"].startswith(args.action + "@"):
+                candidates.append(row)
         next_offset = page.get("nextOffset")
         if next_offset is None:
             break
@@ -253,13 +291,36 @@ def run(args):
         if metadata.get("effect") != "Stateless" or metadata.get("requiresConfirmation", True):
             raise HubError("target_confirmation_required",
                            f"Mutation targets {target['instance']}/{target['workspace']}. Confirm it, then pass --workspace {target['instance']}/{target['workspace']}.")
-    hub_receipts.save(args)
     try:
+        # Inside the classification block: a receipt conflict is a genuine
+        # pre-dispatch failure and must return the structured failed/reconcile
+        # envelope, not a bare CLI error. A receipt that cannot be written at
+        # all also blocks dispatch — and resume would have nothing to load, so
+        # it must classify as failed/new_invocation, never unknown.
+        try:
+            hub_receipts.save(args)
+        except HubError:
+            raise
+        # BaseException: an interrupt during save must also classify as
+        # pre-dispatch — there is no receipt for a resumeCommand to load.
+        except BaseException as error:
+            raise HubError("receipt_unavailable",
+                           f"Could not save the local resume receipt; nothing was dispatched: {error}") from error
         result = _run_pinned(args)
     except (Exception, KeyboardInterrupt) as error:
         code, _, message = _error_details(error) if isinstance(error, Exception) else ("interrupted", 3, "Call interrupted")
-        result = {"state": "unknown", "error": {"code": code, "message": message}, "target": target, "targetRef": args.target_ref}
-    return {**result, "invocationId": args.invocation_id, "resumeCommand": f"tangram app resume {args.invocation_id}"}
+        pre_dispatch = code in {"invalid_input", "approver_unavailable", "idempotency_conflict", "invocation_conflict",
+                                "contract_changed", "capability_graph_stale", "unknown_binding", "ambiguous_action",
+                                "invalid_target", "target_changed", "receipt_unavailable"}
+        result = {"state": "failed" if pre_dispatch else "unknown",
+                  "error": {"code": code, "message": message, "retryable": code == "approver_unavailable"},
+                  "target": target, "targetRef": args.target_ref}
+        if pre_dispatch and code != "approver_unavailable":
+            result["retryMode"] = "new_invocation" if code in {"invalid_input", "receipt_unavailable"} else "reconcile"
+    result = {**result, "invocationId": args.invocation_id}
+    if result.get("retryMode") not in {"new_invocation", "reconcile"}:
+        result["resumeCommand"] = f"tangram app resume {args.invocation_id}"
+    return result
 
 
 def _run_pinned(args):

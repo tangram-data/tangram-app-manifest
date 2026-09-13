@@ -10,6 +10,7 @@ def call(args, arguments):
     path = tangram_home() / "runtime.json"
     if not path.is_file():
         raise HubError("approver_unavailable", "Open Tangram Desktop to approve this action, then retry.")
+    attempted = False
     try:
         record = json.loads(path.read_text())
         port, token, generation = record["port"], record["token"], record["generation"]
@@ -25,12 +26,15 @@ def call(args, arguments):
         class NoRedirect(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, *unused, **kwargs): return None
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
+        attempted = True
         with opener.open(request, timeout=args.timeout + 15) as response:
             result = json.load(response)
         if result.get("invocationId") != args.invocation_id:
             raise ValueError("supervisor returned another invocation")
         return result
-    except (OSError, ValueError, KeyError) as error:
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        if not attempted:
+            raise HubError("approver_unavailable", f"Desktop invocation was not sent: {error}. Open or repair Tangram Desktop, then resume this invocation.") from error
         raise HubError("supervisor_unavailable", f"Desktop invocation did not complete: {error}. "
                        f"Do not create another invocation ID; retry {args.invocation_id} to reconcile its result.") from error
 

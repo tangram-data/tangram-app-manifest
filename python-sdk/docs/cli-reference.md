@@ -170,8 +170,12 @@ approval. Results include the resolved target.
 Before dispatch, the CLI saves the frozen target reference, action, contract,
 input, and invocation ID in the owner-only `~/.tangram/hub/invocations.sqlite3`
 database (under `TANGRAM_HOME` when overridden). Inputs are retained for explicit
-resume; this receipt is not an approval grant. Results and uncertain failures
-include `invocationId` and `resumeCommand`:
+resume; this receipt is not an approval grant. Receipts are retained without
+automatic pruning so recovery information is not silently removed. Re-calling
+the same frozen request with explicit consent flags updates those flags for
+later resume; it never creates independent human-approval authority.
+Results and uncertain failures include `invocationId`; resumable outcomes also
+include `resumeCommand`:
 
 ```sh
 tangram app invocation <invocationId>  # status, using the saved target
@@ -185,3 +189,12 @@ result is `unknown`. Repeating the original simple command creates a **new
 invocation**, so use the returned resume command after uncertainty. Older
 invocations without a client receipt still support `app invocation --target-ref
 ...`; they cannot use `app resume`.
+
+Known failures before dispatch return `failed`, not `unknown`. Invalid input
+must be corrected in a new invocation. An unavailable desktop can be opened or
+repaired and the saved request resumed. A journaled terminal read failure has
+`retryable: false` and `retryMode: "new_invocation"`: after fixing its cause,
+submit a new call. Resume of that ID only returns the stored outcome; it never
+reexecutes the attempt. Remote contract lookup searches for the requested action
+and checks exact matches across at most ten pages within the lookup timeout;
+large result sets require an explicit contract instead of guessing a binding.

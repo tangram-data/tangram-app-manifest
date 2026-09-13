@@ -79,3 +79,12 @@ class DesktopInvocationTest(unittest.TestCase):
             for path in (project_lock_path(root), root / ".preview/runtime.lock"):
                 lock = _ProjectLock.acquire(path)
                 lock.close()
+
+    def test_invalid_discovery_is_a_pre_dispatch_failure(self):
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"TANGRAM_HOME": home}):
+            Path(home, "runtime.json").write_text('{')
+            with patch('urllib.request.OpenerDirector.open') as send:
+                with self.assertRaises(HubError) as caught:
+                    desktop_invocation.call(types.SimpleNamespace(), {})
+            self.assertEqual(caught.exception.code, 'approver_unavailable')
+            send.assert_not_called()

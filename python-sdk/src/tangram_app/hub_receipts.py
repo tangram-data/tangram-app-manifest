@@ -24,5 +24,10 @@ def save(args):
             for field in ("target_ref", "action", "contract", "input_json"):
                 if previous[field] != request[field]:
                     raise HubError("invocation_conflict", "This invocation ID already belongs to a different frozen request.")
+            # Consent flags are caller intent, not an approval grant. Preserve
+            # the latest explicit intent for this same frozen request so resume
+            # cannot silently restore older flags after a pending approval.
+            previous.update({field: request[field] for field in ("approve", "allow_mutation", "timeout")})
+            db.execute("UPDATE client_request SET payload = ? WHERE id = ?", (json.dumps(previous), args.invocation_id))
         else:
             db.execute("INSERT INTO client_request VALUES (?, ?)", (args.invocation_id, json.dumps(request)))
