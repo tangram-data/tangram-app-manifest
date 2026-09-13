@@ -38,13 +38,23 @@ def managed_pkl_path() -> Path:
     return tangram_home() / "bin" / ("pkl.exe" if os.name == "nt" else "pkl")
 
 
+def _system_pkl_paths() -> tuple[Path, ...]:
+    # Finder-launched desktop workers inherit a minimal PATH without Homebrew.
+    # Resolve only known executables; do not run a login shell to discover PATH.
+    if platform.system() == "Darwin":
+        return (Path("/opt/homebrew/bin/pkl"), Path("/usr/local/bin/pkl"))
+    return ()
+
+
 def find_pkl() -> str | None:
-    """PATH first, then the doctor-managed copy."""
+    """PATH, then the managed copy, then standard macOS installations."""
     on_path = shutil.which("pkl")
     if on_path:
         return on_path
-    managed = managed_pkl_path()
-    return str(managed) if managed.is_file() and os.access(managed, os.X_OK) else None
+    for candidate in (managed_pkl_path(), *_system_pkl_paths()):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
 
 
 def _postgres_hint() -> str:

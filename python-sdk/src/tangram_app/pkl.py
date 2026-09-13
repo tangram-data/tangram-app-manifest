@@ -46,12 +46,13 @@ class PklEvaluator:
     def __init__(
         self, executable: str | Path = "pkl", *, timeout_seconds: float = 30.0
     ) -> None:
-        resolved = shutil.which(str(executable))
-        if resolved is None and str(executable) == "pkl":
-            # Fall back to the doctor-managed copy (no PATH edits needed).
+        if str(executable) == "pkl":
+            # Share discovery with doctor, including GUI processes' minimal PATH.
             from .local_doctor import find_pkl
 
             resolved = find_pkl()
+        else:
+            resolved = shutil.which(str(executable))
         if resolved is None:
             raise PklNotFoundError(
                 f"Pkl executable {str(executable)!r} was not found; run "

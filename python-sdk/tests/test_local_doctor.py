@@ -24,6 +24,9 @@ class DiagnoseTest(unittest.TestCase):
         self.addCleanup(self._home.cleanup)
         os.environ["TANGRAM_HOME"] = self._home.name
         self.addCleanup(os.environ.pop, "TANGRAM_HOME", None)
+        system_paths = mock.patch("tangram_app.local_doctor._system_pkl_paths", return_value=())
+        system_paths.start()
+        self.addCleanup(system_paths.stop)
 
     def test_report_shape_and_required_gating(self):
         report = diagnose()
@@ -57,7 +60,53 @@ class DiagnoseTest(unittest.TestCase):
             self.assertEqual(find_pkl(), "/usr/bin/pkl")
 
     def test_fix_is_noop_when_pkl_present(self):
-        self.assertEqual(fix(), [])  # host has pkl on PATH
+        with mock.patch("tangram_app.local_doctor.shutil.which", return_value="/usr/bin/pkl"):
+            self.assertEqual(fix(), [])
+
+    def test_gui_path_uses_system_pkl_for_doctor_and_evaluator(self):
+        from tangram_app.pkl import PklEvaluator
+
+        installed = Path(self._home.name) / "homebrew/bin/pkl"
+        installed.parent.mkdir(parents=True)
+        installed.write_text("#!/bin/sh\necho '42'\n")
+        installed.chmod(0o755)
+        module = Path(self._home.name) / "test.pkl"
+        module.write_text("value = 42\n")
+        with mock.patch.dict(os.environ, {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin"}), \
+                mock.patch("tangram_app.local_doctor._system_pkl_paths", return_value=(installed,)), \
+                mock.patch("tangram_app.local_doctor.install_pkl") as install:
+            report = diagnose()
+            pkl = next(c for c in report["checks"] if c["name"] == "pkl")
+            self.assertTrue(pkl["ok"])
+            self.assertEqual(pkl["detail"], str(installed))
+            self.assertEqual(fix(), [])
+            install.assert_not_called()
+            evaluator = PklEvaluator()
+            self.assertEqual(evaluator.executable, str(installed))
+            self.assertEqual(evaluator.evaluate(module, expression=None,
+                                               root_dir=module.parent, project_dir=None), 42)
+            managed = managed_pkl_path()
+            managed.parent.mkdir(parents=True)
+            managed.write_text("#!/bin/sh\nexit 0\n")
+            managed.chmod(0o755)
+            self.assertEqual(find_pkl(), str(managed))
+
+    def test_system_fallback_rejects_nonexecutable_and_directory(self):
+        candidate = Path(self._home.name) / "pkl"
+        candidate.write_text("not executable")
+        candidate.chmod(0o644)
+        with mock.patch("tangram_app.local_doctor.shutil.which", return_value=None), \
+                mock.patch("tangram_app.local_doctor._system_pkl_paths", return_value=(candidate, candidate.parent)):
+            self.assertIsNone(find_pkl())
+
+    def test_explicit_pkl_path_does_not_fall_back(self):
+        from tangram_app.pkl import PklEvaluator
+        from tangram_app.errors import PklNotFoundError
+
+        with mock.patch("tangram_app.local_doctor.find_pkl") as fallback:
+            with self.assertRaises(PklNotFoundError):
+                PklEvaluator(Path(self._home.name) / "missing-pkl")
+            fallback.assert_not_called()
 
     def test_bad_download_never_clobbers_working_binary(self):
         from tangram_app.local_doctor import DoctorError
