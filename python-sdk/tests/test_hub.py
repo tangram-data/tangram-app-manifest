@@ -125,7 +125,7 @@ class HubTest(unittest.TestCase):
             self.assertEqual(status, 0, result)
             self.assertEqual(request.call_args.args[2], "/api/core/v1/workspaces/demo/hub/call")
             self.assertEqual(request.call_args.args[3], {"action": "group/app#Item.Write", "contract": "v1", "input": {"title": "hello"},
-                                                      "invocationId": key, "allowMutation": True, "approve": True})
+                                                      "invocationId": key, "allowMutation": True})
         with patch("tangram_app.cli_hub.os_request", return_value={"state": "running", "results": []}):
             self.assertEqual(run("knowledge-search", "hello", *common)[0], 0)
             self.assertNotEqual(run("knowledge-search", "hello", "--offset", "1", *common)[0], 0)

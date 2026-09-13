@@ -198,3 +198,37 @@ submit a new call. Resume of that ID only returns the stored outcome; it never
 reexecutes the attempt. Remote contract lookup searches for the requested action
 and checks exact matches across at most ten pages within the lookup timeout;
 large result sets require an explicit contract instead of guessing a binding.
+
+### Native workspace approvals
+
+`tangram app call ACTION --workspace INSTANCE/WORKSPACE --input '{...}'` submits
+one frozen request. Reads run directly; a mutation or confirmation-gated action
+opens the signed Tangram Desktop approval dialog and waits. The CLI checks the
+server journal after the decision and executes the same invocation only if the
+server has recorded a valid native approval. `--approve` remains parseable for
+compatibility but does not grant approval. A call expresses mutation intent;
+workspace actions still require the native signature regardless of
+`--allow-mutation`. Standalone local-development policy remains separate.
+
+If Desktop is absent, the key is not enrolled, or the decision cannot be confirmed,
+the response explains why. Keep the invocation ID and use
+`tangram app resume INVOCATION_ID`; do not create another ID after an uncertain
+execution. A denied or expired invocation is terminal. An ambient-context
+mutation still requires an explicit confirmed `--workspace INSTANCE/WORKSPACE`.
+
+One-time setup for a workspace account:
+
+1. The operator configures the server's `TANGRAM_WORKSPACE_APPROVAL_REGISTRY`
+   file with its canonical origin and an initially empty `keys` list.
+2. Run `tangram app approval-enroll --workspace INSTANCE/WORKSPACE` with a
+   provisioned Desktop release. The native dialog creates a protected Secure
+   Enclave key and exports its public enrollment record.
+3. The operator independently verifies the account and fingerprint and adds
+   that public record to the registry. Ordinary agent/session tokens cannot
+   enroll keys through the server API.
+
+Local Tangram OS needs no HTTPS certificate: `http://localhost:8081` is mapped
+to `http://127.0.0.1:8081` for native approval. Use that literal origin in the
+registry. Remote origins require HTTPS. Redirects and proxies are refused.
+The native decision may require Touch ID or a macOS password in addition to
+clicking Allow/Deny. The CLI never receives private key material.

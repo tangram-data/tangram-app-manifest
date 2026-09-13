@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import urllib.parse
 import uuid
 
@@ -23,7 +24,7 @@ def add_parser(commands, app_commands):
     pin.add_argument("--instance")
     pin.add_argument("--workspace")
     pin.set_defaults(os_url=None, token=None)
-    for verb in ("search", "inspect", "call", "invocation", "resume", "knowledge-search", "knowledge-read"):
+    for verb in ("search", "inspect", "call", "invocation", "resume", "approval-enroll", "knowledge-search", "knowledge-read"):
         group = knowledge_commands if verb.startswith("knowledge-") else app_commands
         p = group.add_parser(verb.removeprefix("knowledge-"))
         p.set_defaults(capability_command=verb)
@@ -32,7 +33,7 @@ def add_parser(commands, app_commands):
         p.add_argument("--instance")
         p.add_argument("--workspace")
         p.set_defaults(os_url=None, token=None)
-        p.add_argument("--timeout", type=float, default=300 if verb in ("call", "resume") else 30)
+        p.add_argument("--timeout", type=float, default=300 if verb in ("call", "resume", "approval-enroll") else 30)
         if verb in ("search", "knowledge-search"):
             p.add_argument("query")
             p.add_argument("--limit", type=int, default=10)
@@ -44,7 +45,7 @@ def add_parser(commands, app_commands):
             p.add_argument("--input-json", "--input", default="-")
             p.add_argument("--invocation-id", help="Unique UUID; reuse for status/replay, never change inputs")
             p.add_argument("--allow-mutation", action="store_true")
-            p.add_argument("--approve", action="store_true", help="Explicit consent to this exact request; not independent human approval proof")
+            p.add_argument("--approve", action="store_true", help="Deprecated compatibility flag; never grants human approval")
         if verb in ("invocation", "resume"):
             p.add_argument("invocation_id")
         if verb == "knowledge-read":
@@ -360,7 +361,10 @@ def _run_pinned(args):
     else:
         ws = urllib.parse.quote(target["workspace"], safe="")
         base = f"/api/core/v1/workspaces/{ws}/hub"
-        if verb == "knowledge-search":
+        if verb == "approval-enroll":
+            from .workspace_approval import request as native_request
+            result = native_request(target, credential, timeout=args.timeout)
+        elif verb == "knowledge-search":
             if args.offset:
                 raise HubError("unsupported_pagination", "knowledge search currently supports bounded results, not offsets")
             result = os_request(credential, "POST", "/api/core/v1/knowledge/search",
@@ -390,7 +394,30 @@ def _run_pinned(args):
             if verb == "call":
                 from .cli import _read_json_input
                 body.update(input=_read_json_input(args.input_json), invocationId=args.invocation_id,
-                            allowMutation=args.allow_mutation, approve=args.approve)
+                            allowMutation=True)
+            deadline = time.monotonic() + args.timeout
             result = os_request(credential, "POST", f"{base}/{verb}", body,
                                 timeout_seconds=args.timeout, label=f"{args.command} {verb.removeprefix('knowledge-')}")
+            if verb == "call" and result.get("state") == "pending_approval":
+                from .workspace_approval import request as native_request
+                native_error = None
+                try:
+                    native = native_request(target, credential, invocation_id=args.invocation_id,
+                                            timeout=max(0, deadline - time.monotonic()))
+                    native_error = native.get("error")
+                except HubError as error:
+                    native_error = {"code": error.code, "message": str(error), "retryable": True}
+                # The helper's reply is advisory. Only the server journal releases execution.
+                # Keep the exact frozen body/UUID, including after a lost decision response.
+                result = os_request(credential, "GET", f"{base}/invocations/{args.invocation_id}",
+                                    timeout_seconds=max(1, min(30, deadline - time.monotonic())), label="approval status")
+                if result.get("state") == "approved" and time.monotonic() < deadline:
+                    result = os_request(credential, "POST", f"{base}/call", body,
+                                        timeout_seconds=max(1, deadline - time.monotonic()), label="execute approved invocation")
+                while result.get("state") == "running" and time.monotonic() < deadline:
+                    time.sleep(min(.5, max(0, deadline - time.monotonic())))
+                    result = os_request(credential, "GET", f"{base}/invocations/{args.invocation_id}",
+                                        timeout_seconds=max(1, min(30, deadline - time.monotonic())), label="invocation status")
+                if result.get("state") == "pending_approval" and native_error:
+                    result = {**result, "error": native_error}
     return {**result, "target": target, "targetRef": args.target_ref}

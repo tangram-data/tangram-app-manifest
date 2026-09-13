@@ -121,8 +121,8 @@ class SimpleHubTest(unittest.TestCase):
             if path.endswith('/search'):
                 return {'candidates': [{'action': 'g/a#Thing.Do@do', 'contract': 'digest'}]}
             self.assertTrue(path.endswith('/call'))
-            self.assertFalse(body['approve'])
-            self.assertFalse(body['allowMutation'])
+            self.assertNotIn('approve', body)
+            self.assertTrue(body['allowMutation'])
             return {'state': 'rejected', 'error': {'code': 'policy_denied', 'message': 'No grant'}}
         with patch('tangram_app.cli_hub.os_request', side_effect=server):
             status, result = run('call', 'g/a#Thing.Do', '--workspace', 'dev/demo', '--input', '{}')
@@ -200,23 +200,20 @@ class SimpleHubTest(unittest.TestCase):
             self.assertEqual(response['retryMode'], 'new_invocation')
             self.assertNotIn('resumeCommand', response)
 
-    def test_receipt_preserves_latest_explicit_consent_for_resume(self):
+    def test_resume_never_sends_caller_approval_authority(self):
         self.remote()
         seen = []
-        def server(cred, method, path, body, **kwargs):
-            self.assertTrue(path.endswith('/call'))
-            seen.append(body)
+        def server(cred, method, path, body=None, **kwargs):
+            if method == 'POST': seen.append(body)
             return {'state': 'pending_approval'}
-        with patch('tangram_app.cli_hub.os_request', side_effect=server):
+        with patch('tangram_app.cli_hub.os_request', side_effect=server), patch('tangram_app.workspace_approval.request', return_value={'error': {'code': 'approver_unavailable', 'message': 'not installed'}}):
             common = ['call', 'g/a#Thing.Do@do', '--contract', 'v1', '--workspace', 'dev/demo', '--input', '{}']
             _, result = run(*common)
             key = result['data']['invocationId']
             run(*common, '--invocation-id', key, '--allow-mutation', '--approve')
             run('resume', key)
-        self.assertFalse(seen[0]['approve'])
-        self.assertTrue(seen[1]['approve'])
-        self.assertTrue(seen[2]['approve'])
-        self.assertTrue(seen[2]['allowMutation'])
+        self.assertEqual(len(seen), 3)
+        self.assertTrue(all('approve' not in body and body['allowMutation'] for body in seen))
         self.assertEqual({body['invocationId'] for body in seen}, {key})
 
     def test_remote_catalog_shape_is_validated(self):
