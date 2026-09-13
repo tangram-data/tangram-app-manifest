@@ -23,25 +23,29 @@ def add_parser(commands, app_commands):
     pin.add_argument("--instance")
     pin.add_argument("--workspace")
     pin.set_defaults(os_url=None, token=None)
-    for verb in ("search", "inspect", "call", "invocation", "knowledge-search", "knowledge-read"):
+    for verb in ("search", "inspect", "call", "invocation", "resume", "knowledge-search", "knowledge-read"):
         group = knowledge_commands if verb.startswith("knowledge-") else app_commands
         p = group.add_parser(verb.removeprefix("knowledge-"))
         p.set_defaults(capability_command=verb)
-        p.add_argument("--target-ref", required=True)
-        p.add_argument("--timeout", type=float, default=300 if verb == "call" else 30)
+        p.add_argument("--target-ref")
+        p.add_argument("--local", action="store_true")
+        p.add_argument("--instance")
+        p.add_argument("--workspace")
+        p.set_defaults(os_url=None, token=None)
+        p.add_argument("--timeout", type=float, default=300 if verb in ("call", "resume") else 30)
         if verb in ("search", "knowledge-search"):
             p.add_argument("query")
             p.add_argument("--limit", type=int, default=10)
             p.add_argument("--offset", type=int, default=0)
         if verb in ("inspect", "call"):
             p.add_argument("action", help="Canonical app#Resource.Action[@operation] from discovery")
-            p.add_argument("--contract", required=True)
+            p.add_argument("--contract")
         if verb == "call":
-            p.add_argument("--input-json", default="-")
-            p.add_argument("--invocation-id", required=True, help="Unique UUID; reuse for status/replay, never change inputs")
+            p.add_argument("--input-json", "--input", default="-")
+            p.add_argument("--invocation-id", help="Unique UUID; reuse for status/replay, never change inputs")
             p.add_argument("--allow-mutation", action="store_true")
             p.add_argument("--approve", action="store_true", help="Explicit consent to this exact request; not independent human approval proof")
-        if verb == "invocation":
+        if verb in ("invocation", "resume"):
             p.add_argument("invocation_id")
         if verb == "knowledge-read":
             p.add_argument("source_id")
@@ -154,7 +158,111 @@ def _local_call(args, target):
     return hub_journal.complete(record, "succeeded", result=result)
 
 
+def _current_contract(args, target, credential):
+    if credential is None:
+        app_id, _ = _parts(args.action)
+        _, app = _installed(app_id)
+        _, binding = app.graph.resolve(args.action)
+        args.action = binding.id
+        return app.graph.package.digest
+    # Enumerate the governed catalog, not a fuzzy first match. A bare action
+    # may select a binding only when exactly one operation exists.
+    ws = urllib.parse.quote(target["workspace"], safe="")
+    candidates = []
+    offset = 0
+    for _ in range(100):
+        page = os_request(credential, "POST", f"/api/core/v1/workspaces/{ws}/hub/search",
+                          {"query": "", "limit": 100, "offset": offset},
+                          timeout_seconds=args.timeout, label="resolve action contract")
+        if page.get("error"):
+            raise HubError(page["error"].get("code", "catalog_failed"), page["error"].get("message", "Catalog lookup failed"))
+        candidates.extend(row for row in page.get("candidates", [])
+                          if row.get("action") == args.action or row.get("action", "").startswith(args.action + "@"))
+        next_offset = page.get("nextOffset")
+        if next_offset is None:
+            break
+        if type(next_offset) is not int or next_offset <= offset:
+            raise HubError("invalid_catalog", "workspace catalog returned invalid pagination")
+        offset = next_offset
+    else:
+        raise HubError("catalog_too_large", "use an explicit action and --contract for this catalog")
+    unique = {(row["action"], row["contract"]) for row in candidates}
+    if len(unique) != 1:
+        raise HubError("ambiguous_action" if unique else "action_not_found",
+                       "Select one exact action binding from app search; no unique match exists in this target.")
+    args.action, contract = unique.pop()
+    return contract
+
+
 def run(args):
+    from . import hub_receipts
+    from .cli import _read_json_input, _error_details
+    from argparse import Namespace
+
+    verb = args.capability_command
+    if verb == "resolve":
+        return resolve(args)
+    explicit = bool(args.target_ref is not None or args.local or args.instance is not None or args.workspace is not None)
+    if args.target_ref is not None and (args.local or args.instance is not None or args.workspace is not None):
+        raise HubError("invalid_target", "--target-ref conflicts with context selectors")
+    if args.timeout <= 0 or args.timeout > 3600:
+        raise HubError("invalid_arguments", "timeout must be between 0 and 3600 seconds")
+    if verb in ("invocation", "resume"):
+        try:
+            args.invocation_id = str(uuid.UUID(args.invocation_id))
+        except ValueError:
+            raise HubError("invalid_arguments", "invocation ID must be a UUID") from None
+        receipt = hub_receipts.get(args.invocation_id)
+        if receipt is not None:
+            if explicit:
+                selected = args.target_ref if args.target_ref is not None else resolve(args)["targetRef"]
+                if load(selected)[0] != load(receipt["target_ref"])[0]:
+                    raise HubError("invalid_target", "the invocation belongs to a different target")
+            args.target_ref = receipt["target_ref"]
+        if verb == "resume":
+            if receipt is None:
+                raise HubError("invocation_not_found", "No saved request for this ID; use app invocation with an explicit target to check server status.")
+            saved = Namespace(**receipt, capability_command="call", command="app", local=False,
+                              instance=None, workspace=None, os_url=None, token=None)
+            saved.timeout = args.timeout
+            return run(saved)
+    if args.target_ref is None:
+        args.target_ref = resolve(args)["targetRef"]
+    target, credential = load(args.target_ref)
+    if verb in ("call", "inspect") and args.contract is None:
+        args.contract = _current_contract(args, target, credential)
+    if verb != "call":
+        return _run_pinned(args)
+    args.invocation_id = args.invocation_id or str(uuid.uuid4())
+    try:
+        args.invocation_id = str(uuid.UUID(args.invocation_id))
+    except ValueError:
+        raise HubError("invalid_arguments", "invocation ID must be a UUID") from None
+    # Freeze stdin once, before dispatch; resume never reads new input.
+    args.input_json = json.dumps(_read_json_input(args.input_json), allow_nan=False, sort_keys=True)
+    if credential is None:
+        _, _, _, binding = _local_inspect(args.action, args.contract)
+        args.action = binding.id
+    elif not explicit:
+        ws = urllib.parse.quote(target["workspace"], safe="")
+        metadata = os_request(credential, "POST", f"/api/core/v1/workspaces/{ws}/hub/inspect",
+                              {"action": args.action, "contract": args.contract},
+                              timeout_seconds=args.timeout, label="inspect ambient workspace action")
+        if metadata.get("error"):
+            raise HubError(metadata["error"].get("code", "inspect_failed"), metadata["error"].get("message", "Action inspection failed"))
+        if metadata.get("effect") != "Stateless" or metadata.get("requiresConfirmation", True):
+            raise HubError("target_confirmation_required",
+                           f"Mutation targets {target['instance']}/{target['workspace']}. Confirm it, then pass --workspace {target['instance']}/{target['workspace']}.")
+    hub_receipts.save(args)
+    try:
+        result = _run_pinned(args)
+    except (Exception, KeyboardInterrupt) as error:
+        code, _, message = _error_details(error) if isinstance(error, Exception) else ("interrupted", 3, "Call interrupted")
+        result = {"state": "unknown", "error": {"code": code, "message": message}, "target": target, "targetRef": args.target_ref}
+    return {**result, "invocationId": args.invocation_id, "resumeCommand": f"tangram app resume {args.invocation_id}"}
+
+
+def _run_pinned(args):
     if args.capability_command == "resolve":
         return resolve(args)
     target, credential = load(args.target_ref)

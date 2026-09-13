@@ -146,3 +146,42 @@ Stable error codes currently include:
 - `internal_error`.
 
 Agents should branch on `ok` and `error.code`, not parse human messages.
+
+### Simple calls in the active context
+
+```sh
+tangram app search 'orders'
+tangram app inspect 'com.example/orders#Order.List'
+tangram app call 'com.example/orders#Order.List' --input '{}'
+```
+
+`--target-ref`, `--contract`, and `--invocation-id` are optional. The CLI
+resolves the active context once, resolves the exact action binding and current
+contract, and generates an invocation UUID. `--input` aliases `--input-json`;
+omitting both reads JSON from stdin. Ambiguous actions refuse. Explicit pins
+retain their existing meaning.
+
+Use `--local` or `--workspace INSTANCE/WORKSPACE` to override active context.
+Selectors cannot be combined with `--target-ref`. Local gated mutations use the
+desktop approval popup. Remote mutations require an explicit target and retain
+the server's policy and approval behavior; this does not add remote desktop
+approval. Results include the resolved target.
+
+Before dispatch, the CLI saves the frozen target reference, action, contract,
+input, and invocation ID in the owner-only `~/.tangram/hub/invocations.sqlite3`
+database (under `TANGRAM_HOME` when overridden). Inputs are retained for explicit
+resume; this receipt is not an approval grant. Results and uncertain failures
+include `invocationId` and `resumeCommand`:
+
+```sh
+tangram app invocation <invocationId>  # status, using the saved target
+tangram app resume <invocationId>      # same target, input, contract and UUID
+```
+
+Resume does not follow a changed active context or refresh a changed contract.
+The governing journal still prevents replay of running or completed executions.
+A missing response can mean the action committed; reconcile app state when the
+result is `unknown`. Repeating the original simple command creates a **new
+invocation**, so use the returned resume command after uncertainty. Older
+invocations without a client receipt still support `app invocation --target-ref
+...`; they cannot use `app resume`.

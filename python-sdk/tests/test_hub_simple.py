@@ -1,0 +1,148 @@
+import json
+import os
+import unittest
+from unittest.mock import patch
+from tangram_app import TangramApp, CapabilityGraph, hub_receipts
+from test_sdk import graph_dict
+from test_hub import run
+import test_hub
+
+class SimpleHubTest(unittest.TestCase):
+    setUp = test_hub.HubTest.setUp
+
+    def local(self):
+        app = TangramApp.from_graph(CapabilityGraph.from_dict(graph_dict()))
+        p = patch('tangram_app.cli_hub._installed', return_value=({'root': str(self.home)}, app))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_simple_read_without_flags(self):
+        self.local()
+        from tangram_app.cli_parser import build_parser
+        from tangram_app.cli_hub import run as hub_run
+        with patch('tangram_app.cli._run', return_value={'orders': []}) as execute:
+            args = build_parser().parse_args(['app', 'call', 'com.example/orders#Order.List', '--input', '{}'])
+            result = hub_run(args)
+        self.assertEqual(result['state'], 'succeeded')
+        self.assertEqual(result['target']['lane'], 'local')
+        self.assertEqual(execute.call_args.args[0].package_digest, 'sha256:fixture')
+        self.assertIsNotNone(hub_receipts.get(result['invocationId']))
+
+    def test_timeout_resume_ignores_changed_ambient(self):
+        self.local()
+        def fail(args, arguments):
+            self.assertEqual(hub_receipts.get(args.invocation_id)['action'], 'com.example/orders#Order.Approve@approveOrder')
+            raise OSError('response lost')
+        with patch('tangram_app.desktop_invocation.call', side_effect=fail):
+            status, result = run('call', 'com.example/orders#Order.Approve', '--input', '{"orderId":1}')
+        self.assertNotEqual(status, 0)
+        data = result['data']
+        self.assertEqual(data['state'], 'unknown')
+        with patch.dict(os.environ, {'TANGRAM_INSTANCE': 'unrelated', 'TANGRAM_WORKSPACE': 'production'}), patch('tangram_app.desktop_invocation.call', return_value={'state': 'succeeded'}) as execute:
+            status, resumed = run('resume', data['invocationId'])
+        self.assertEqual(status, 0, resumed)
+        self.assertEqual(execute.call_args.args[0].invocation_id, data['invocationId'])
+        self.assertEqual(execute.call_args.args[1], {'orderId': 1})
+        self.assertEqual(resumed['data']['target']['lane'], 'local')
+
+    def test_resume_refuses_contract_drift(self):
+        self.local()
+        with patch('tangram_app.desktop_invocation.call', return_value={'state': 'unknown'}):
+            _, result = run('call', 'com.example/orders#Order.Approve', '--input', '{"orderId":1}')
+        graph = graph_dict(); graph['package']['digest'] = 'sha256:changed'
+        changed = TangramApp.from_graph(CapabilityGraph.from_dict(graph))
+        with patch('tangram_app.cli_hub._installed', return_value=({'root': str(self.home)}, changed)), patch('tangram_app.desktop_invocation.call') as execute:
+            status, result = run('resume', result['data']['invocationId'])
+        self.assertNotEqual(status, 0)
+        self.assertEqual(result['error']['code'], 'contract_changed')
+        execute.assert_not_called()
+
+    def test_conflicting_context_and_input_are_refused(self):
+        self.local()
+        self.assertNotEqual(run('search', '', '--local', '--target-ref', self.pin['targetRef'])[0], 0)
+        with patch('tangram_app.desktop_invocation.call', return_value={'state': 'succeeded'}) as execute:
+            _, first = run('call', 'com.example/orders#Order.Approve', '--input', '{"orderId":1}')
+            status, second = run('call', 'com.example/orders#Order.Approve', '--input', '{"orderId":2}', '--invocation-id', first['data']['invocationId'])
+            self.assertNotEqual(status, 0)
+            self.assertEqual(second['error']['code'], 'invocation_conflict')
+            self.assertEqual(execute.call_count, 1)
+
+    def remote(self):
+        (self.home / '.credentials').write_text(json.dumps([{'instance': 'dev', 'url': 'localhost', 'token': 'one'}]))
+        env = patch.dict(os.environ, {'TANGRAM_INSTANCE': 'dev', 'TANGRAM_WORKSPACE': 'demo'})
+        env.start(); self.addCleanup(env.stop)
+
+    def test_remote_refuses_ambient_mutation(self):
+        self.remote()
+        def server(cred, method, path, body, **kwargs):
+            self.assertIn('/workspaces/demo/', path)
+            if path.endswith('/search'):
+                return {'candidates': [{'action': 'g/a#Thing.Do@do', 'contract': 'digest'}], 'nextOffset': None}
+            if path.endswith('/inspect'):
+                return {'effect': 'Reversible', 'requiresConfirmation': False}
+            self.fail('mutation dispatched')
+        with patch('tangram_app.cli_hub.os_request', side_effect=server):
+            status, result = run('call', 'g/a#Thing.Do', '--input', '{}')
+        self.assertNotEqual(status, 0)
+        self.assertEqual(result['error']['code'], 'target_confirmation_required')
+
+    def test_remote_read_freezes_context(self):
+        self.remote()
+        def server(cred, method, path, body, **kwargs):
+            self.assertIn('/workspaces/demo/', path)
+            if path.endswith('/search'):
+                os.environ['TANGRAM_WORKSPACE'] = 'changed'
+                return {'candidates': [{'action': 'g/a#Thing.List@list', 'contract': 'digest'}], 'nextOffset': None}
+            if path.endswith('/inspect'):
+                return {'effect': 'Stateless', 'requiresConfirmation': False}
+            self.assertEqual(body['action'], 'g/a#Thing.List@list')
+            self.assertEqual(body['contract'], 'digest')
+            self.assertIsNotNone(hub_receipts.get(body['invocationId']))
+            return {'state': 'succeeded', 'result': []}
+        with patch('tangram_app.cli_hub.os_request', side_effect=server):
+            status, result = run('call', 'g/a#Thing.List', '--input', '{}')
+        self.assertEqual(status, 0, result)
+        self.assertEqual(result['data']['target']['workspace'], 'demo')
+
+    def test_remote_ambiguous_action_and_catalog_errors_do_not_dispatch(self):
+        self.remote()
+        cases = [({'candidates': [{'action': 'g/a#Thing.Do@one', 'contract': 'v1'}, {'action': 'g/a#Thing.Do@two', 'contract': 'v1'}]}, 'ambiguous_action'),
+                 ({'error': {'code': 'permission_denied', 'message': 'No catalog access'}}, 'permission_denied')]
+        for page, expected in cases:
+            with self.subTest(expected=expected), patch('tangram_app.cli_hub.os_request', return_value=page) as request:
+                status, result = run('call', 'g/a#Thing.Do', '--input', '{}')
+            self.assertNotEqual(status, 0)
+            self.assertEqual(result['error']['code'], expected)
+            self.assertEqual(request.call_count, 1)
+
+    def test_explicit_workspace_mutation_preserves_server_policy(self):
+        self.remote()
+        def server(cred, method, path, body, **kwargs):
+            if path.endswith('/search'):
+                return {'candidates': [{'action': 'g/a#Thing.Do@do', 'contract': 'digest'}]}
+            self.assertTrue(path.endswith('/call'))
+            self.assertFalse(body['approve'])
+            self.assertFalse(body['allowMutation'])
+            return {'state': 'rejected', 'error': {'code': 'policy_denied', 'message': 'No grant'}}
+        with patch('tangram_app.cli_hub.os_request', side_effect=server):
+            status, result = run('call', 'g/a#Thing.Do', '--workspace', 'dev/demo', '--input', '{}')
+        self.assertNotEqual(status, 0)
+        self.assertEqual(result['error']['code'], 'policy_denied')
+        self.assertEqual(result['data']['target']['workspace'], 'demo')
+
+    def test_receipt_failure_prevents_dispatch(self):
+        self.local()
+        with patch('tangram_app.hub_receipts.save', side_effect=OSError('disk full')), patch('tangram_app.desktop_invocation.call') as execute:
+            status, result = run('call', 'com.example/orders#Order.Approve', '--input', '{"orderId":1}')
+        self.assertNotEqual(status, 0)
+        execute.assert_not_called()
+
+    def test_status_uses_receipt_even_when_context_changes(self):
+        self.local()
+        with patch('tangram_app.desktop_invocation.call', return_value={'state': 'succeeded'}):
+            _, result = run('call', 'com.example/orders#Order.Approve', '--input', '{"orderId":1}')
+        key = result['data']['invocationId']
+        with patch.dict(os.environ, {'TANGRAM_INSTANCE': 'other', 'TANGRAM_WORKSPACE': 'prod'}), patch('tangram_app.desktop_invocation.status', return_value={'state': 'succeeded', 'invocationId': key}):
+            status, result = run('invocation', key)
+        self.assertEqual(status, 0, result)
+        self.assertEqual(result['data']['target']['lane'], 'local')
