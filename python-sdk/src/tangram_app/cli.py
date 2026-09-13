@@ -115,6 +115,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _main(argv: Sequence[str] | None = None) -> int:
     supplied = list(sys.argv[1:] if argv is None else argv)
+    if supplied == ["supervisor-worker"]:
+        from .supervisor_worker import main as worker_main
+        return worker_main()
     if supplied == ["--version"]:
         # Version-negotiation contract: machine-readable, standard envelope.
         from . import __version__

@@ -138,28 +138,19 @@ class HubTest(unittest.TestCase):
         with patch("tangram_app.cli_hub.os_request", return_value={"text": None}):
             self.assertEqual(run("knowledge-read", source, *common)[1]["error"]["code"], "source_not_found")
 
-    def test_cli_mutation_gate_approval_resume_and_unknown(self):
+    def test_cli_mutation_uses_desktop_even_with_caller_approval_flags(self):
         app = TangramApp.from_graph(CapabilityGraph.from_dict(graph_dict()))
         entry = {"id": "com.example/orders", "root": str(self.home)}
-        class Bound:
-            graph = app.graph
-            async def call(self, binding, arguments):
-                raise RuntimeError("response lost")
         with patch("tangram_app.cli_hub.resolve_installed", return_value=entry), \
              patch("tangram_app.cli_hub.TangramApp.from_package", return_value=app), \
-             patch("tangram_app.cli._load_app", return_value=app), \
-             patch("tangram_app.cli.attach_url", return_value="http://127.0.0.1:1234"), \
-             patch.object(TangramApp, "bind", return_value=Bound()) as bind:
+             patch("tangram_app.desktop_invocation.call", return_value={"state": "succeeded", "result": 1}) as desktop, \
+             patch.object(TangramApp, "bind") as bind:
             command = ["call", "com.example/orders#Order.Approve@approveOrder", "--contract", "sha256:fixture",
                        "--target-ref", self.pin["targetRef"], "--invocation-id", str(uuid.uuid4()), "--input-json", '{"orderId":1}']
-            self.assertEqual(run(*command)[1]["error"]["code"], "policy_denied")
-            command.append("--allow-mutation")
-            self.assertEqual(run(*command)[1]["data"]["state"], "pending_approval")
+            self.assertEqual(run(*command)[1]["data"]["state"], "succeeded")
+            self.assertEqual(run(*command, "--allow-mutation", "--approve")[1]["data"]["state"], "succeeded")
+            self.assertEqual(desktop.call_count, 2)
             bind.assert_not_called()
-            command.append("--approve")
-            self.assertEqual(run(*command)[1]["data"]["state"], "unknown")
-            self.assertEqual(run(*command)[1]["data"]["state"], "unknown")
-            self.assertEqual(bind.call_count, 1)
 
     def test_inspect_and_call_use_frozen_contract_and_existing_host(self):
         app = TangramApp.from_graph(CapabilityGraph.from_dict(graph_dict()))

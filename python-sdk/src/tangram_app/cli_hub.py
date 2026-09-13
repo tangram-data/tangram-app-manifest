@@ -28,7 +28,7 @@ def add_parser(commands, app_commands):
         p = group.add_parser(verb.removeprefix("knowledge-"))
         p.set_defaults(capability_command=verb)
         p.add_argument("--target-ref", required=True)
-        p.add_argument("--timeout", type=float, default=30)
+        p.add_argument("--timeout", type=float, default=300 if verb == "call" else 30)
         if verb in ("search", "knowledge-search"):
             p.add_argument("query")
             p.add_argument("--limit", type=int, default=10)
@@ -118,6 +118,9 @@ def _local_call(args, target):
     entry, app, action, binding = _local_inspect(args.action, args.contract)
     arguments = _read_json_input(args.input_json)
     validate(arguments, binding.input_schema)
+    if action.effect.value != "Stateless" or action.requires_confirmation:
+        from .desktop_invocation import call as desktop_call
+        return desktop_call(args, arguments)
     if action.effect.value != "Stateless" and not args.allow_mutation:
         raise HubError("policy_denied", "this action requires --allow-mutation")
     # Existing call owns policy, request rendering, schema validation, audit and runtime.
@@ -161,7 +164,7 @@ def run(args):
             raise HubError("invalid_arguments", f"limit must be 1..{maximum}; offset must be nonnegative")
     if verb in ("call", "invocation"):
         try:
-            uuid.UUID(args.invocation_id)
+            args.invocation_id = str(uuid.UUID(args.invocation_id))
         except ValueError:
             raise HubError("invalid_arguments", "invocation ID must be a UUID") from None
     if credential is None:
@@ -176,7 +179,10 @@ def run(args):
             result = _local_call(args, target)
         elif verb == "invocation":
             from .hub_journal import get
-            result = get(args.invocation_id, target)
+            from .desktop_invocation import status as desktop_status
+            result = desktop_status(args)
+            if result is None:
+                result = get(args.invocation_id, target)
         else:
             raise HubError("unsupported_capability", "knowledge retrieval requires a workspace target")
     else:
