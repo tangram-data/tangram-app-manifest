@@ -35,6 +35,8 @@ class DesktopInvocationTest(unittest.TestCase):
         app = types.SimpleNamespace(graph=types.SimpleNamespace(package=types.SimpleNamespace(digest="digest"), runtime_requirements={"backend": "connector"}))
         action = types.SimpleNamespace(effect=types.SimpleNamespace(value="Irreversible"), requires_confirmation=True, resource_type="Thing", name="Do")
         binding = types.SimpleNamespace(id="g/a#Thing.Do@doThing", input_schema={}, operation_id="doThing")
+        action.bindings = (binding,)
+        app.graph.actions = (action,)
         metadata = ({"root": "/fixture"}, app, action, binding)
         for decision, trusted in [('', False), ('{"execute":"other"}', False), ('{"execute":"i"}', False), ('{"execute":"i"}', True)]:
             approved = decision == '{"execute":"i"}' and trusted
@@ -47,6 +49,8 @@ class DesktopInvocationTest(unittest.TestCase):
                     supervisor_worker.main()
                 messages = [json.loads(line) for line in output.getvalue().splitlines()]
                 self.assertEqual(messages[0]["state"], "prepared")
+                self.assertEqual(messages[0]["declarations"], [{"resourceType": "Thing", "name": "Do",
+                    "effect": "Irreversible", "requiresConfirmation": True, "operationId": "doThing"}])
                 self.assertEqual(inspect.call_count, 2 if decision == '{"execute":"i"}' else 1)
                 self.assertEqual(run.call_count, 1 if approved else 0)
                 self.assertEqual(messages[-1]["state"], "succeeded" if approved else "failed")
@@ -60,6 +64,8 @@ class DesktopInvocationTest(unittest.TestCase):
             app = types.SimpleNamespace(graph=types.SimpleNamespace(package=types.SimpleNamespace(digest="digest"), runtime_requirements={}))
             action = types.SimpleNamespace(effect=types.SimpleNamespace(value="Irreversible"), requires_confirmation=True, resource_type="Thing", name="Do")
             binding = types.SimpleNamespace(id="g/a#Thing.Do@doThing", input_schema={}, operation_id="doThing")
+            action.bindings = (binding,)
+            app.graph.actions = (action,)
             testcase = self
             class Input(io.StringIO):
                 def readline(self, *args):
@@ -97,6 +103,8 @@ class DesktopInvocationTest(unittest.TestCase):
             app = types.SimpleNamespace(graph=types.SimpleNamespace(package=types.SimpleNamespace(digest="digest"), runtime_requirements={}))
             action = types.SimpleNamespace(effect=types.SimpleNamespace(value="Irreversible"), requires_confirmation=True, resource_type="Thing", name="Do")
             binding = types.SimpleNamespace(id="g/a#Thing.Do@doThing", input_schema={}, operation_id="doThing")
+            action.bindings = (binding,)
+            app.graph.actions = (action,)
             wire = ""
             for key in ("first", "second"):
                 wire += json.dumps({"invocationId": key, "action": binding.id, "contract": "digest",
@@ -230,3 +238,25 @@ class DesktopInvocationTest(unittest.TestCase):
                 desktop.return_value = {"state": "pending_approval"}
                 self.assertEqual(_local_call(args, target)["state"], "pending_approval")
                 desktop.assert_called_once()
+
+    def test_multi_binding_source_fails_before_preparation_or_execution(self):
+        request = {"invocationId": "i", "action": "g/a#Thing.Do@second", "contract": "digest", "input": {}, "timeoutSeconds": 30}
+        action = types.SimpleNamespace(bindings=(object(), object()))
+        binding = types.SimpleNamespace(input_schema={})
+        app = types.SimpleNamespace(graph=types.SimpleNamespace(runtime_requirements={}))
+        output = io.StringIO()
+        with patch("sys.stdin", io.StringIO(json.dumps(request) + "\n")), contextlib.redirect_stdout(output), \
+             patch("tangram_app.cli_hub._local_inspect", return_value=({"root": "/unused"}, app, action, binding)), \
+             patch("tangram_app.cli._run") as execute, \
+             patch("tangram_app.local_runtime._ProjectLock.acquire") as acquire:
+            supervisor_worker.main()
+        messages = [json.loads(line) for line in output.getvalue().splitlines()]
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]["state"], "failed")
+        self.assertEqual(messages[0]["error"]["code"], "unsupported_action_binding")
+        self.assertIn("Nothing was dispatched", messages[0]["error"]["message"])
+        # Terminal for this ID: reconcile, never a same-ID resume loop.
+        self.assertEqual(messages[0]["retryMode"], "reconcile")
+        self.assertFalse(messages[0]["error"]["retryable"])
+        execute.assert_not_called()
+        acquire.assert_not_called()

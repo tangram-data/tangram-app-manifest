@@ -35,6 +35,13 @@ def main():
                 entry, app, action, binding = _local_inspect(request["action"], request["contract"])
                 validate(request["input"], binding.input_schema)
             connector = app.graph.runtime_requirements.get("backend") == "connector"
+            # The local facade routes by resource/action, not operation suffix.
+            # Refuse unsupported ambiguity before locking or asking for approval.
+            if not connector and len(action.bindings) != 1:
+                from .hub_target import HubError
+                raise HubError("unsupported_action_binding",
+                    "Local Desktop execution does not support actions with multiple operation bindings, "
+                    "including an explicit @operation suffix. Split these into separate actions. Nothing was dispatched.")
             if session_root is not None and entry["root"] != session_root:
                 raise ValueError("supervisor session cannot switch app roots")
             if not connector and not locks:
@@ -68,7 +75,11 @@ def main():
             emit({"state": "prepared", "action": binding.id, "contract": app.graph.package.digest,
                   "effect": action.effect.value, "requiresConfirmation": action.requires_confirmation,
                   "input": request["input"], "root": entry["root"], "connector": connector,
-                  "resourceType": action.resource_type, "actionName": action.name, "operationId": binding.operation_id})
+                  "resourceType": action.resource_type, "actionName": action.name, "operationId": binding.operation_id,
+                  "declarations": [{"resourceType": item.resource_type, "name": item.name,
+                      "effect": item.effect.value, "requiresConfirmation": item.requires_confirmation,
+                      "operationId": item.bindings[0].operation_id}
+                      for item in app.graph.actions if len(item.bindings) == 1]})
             decision = json.loads(sys.stdin.readline(4096))
             if decision != {"execute": request["invocationId"]}:
                 raise ValueError("supervisor did not authorize this invocation")
@@ -98,7 +109,13 @@ def main():
             return 0
     except Exception as error:
         code, _, message = _error_details(error)
-        emit({"state": "failed", "error": {"code": code, "message": message}})
+        envelope = {"state": "failed", "error": {"code": code, "message": message}}
+        # A binding refusal is terminal for this ID: resume replays the same
+        # refusal forever, so route the caller to rediscovery instead.
+        if code == "unsupported_action_binding":
+            envelope["retryMode"] = "reconcile"
+            envelope["error"]["retryable"] = False
+        emit(envelope)
     finally:
         for lock in reversed(locks):
             lock.close()
