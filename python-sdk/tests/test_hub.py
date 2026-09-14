@@ -34,6 +34,27 @@ class HubTest(unittest.TestCase):
         self.addCleanup(env.stop)
         self.pin = run("resolve", "--local")[1]["data"]
 
+    def test_standalone_status_survives_stale_discovery_and_desktop_restart(self):
+        key = str(uuid.uuid4())
+        record, _ = hub_journal.claim(key, self.request(), gated=False, approved=False)
+        completed = hub_journal.complete(record, "succeeded", result={"id": 42})
+        (self.home / "runtime.json").write_text(json.dumps({"port": 1234, "token": "fixture", "generation": "g"}))
+        with patch("tangram_app.desktop_invocation.status", side_effect=HubError("supervisor_unavailable", "refused")) as desktop:
+            status, envelope = run("invocation", key, "--target-ref", self.pin["targetRef"])
+            self.assertEqual(status, 0)
+            self.assertEqual(envelope["data"]["result"], completed["result"])
+            desktop.assert_not_called()
+            desktop.side_effect = None
+            desktop.return_value = {"invocationId": key, "state": "unknown"}
+            self.assertEqual(run("invocation", key, "--target-ref", self.pin["targetRef"])[1]["data"]["state"], "succeeded")
+            desktop.assert_not_called()
+
+    def test_desktop_unavailability_is_preserved_without_standalone_record(self):
+        with patch("tangram_app.desktop_invocation.status", side_effect=HubError("supervisor_unavailable", "refused")):
+            status, envelope = run("invocation", str(uuid.uuid4()), "--target-ref", self.pin["targetRef"])
+        self.assertNotEqual(status, 0)
+        self.assertEqual(envelope["error"]["code"], "supervisor_unavailable")
+
     def test_live_install_discovery_without_skill_sync(self):
         ref = self.pin["targetRef"]
         self.assertEqual(run("search", "reimbursements", "--target-ref", ref)[1]["data"]["candidates"], [])

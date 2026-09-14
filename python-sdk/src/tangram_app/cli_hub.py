@@ -138,15 +138,31 @@ def _local_call(args, target):
     arguments = _read_json_input(args.input_json)
     validate(arguments, binding.input_schema)
     from .local_store import tangram_home
-    if (action.effect.value != "Stateless" or action.requires_confirmation
-            or (tangram_home() / "runtime.json").is_file()):
-        from .desktop_invocation import call as desktop_call
+    gated = action.effect.value != "Stateless" or action.requires_confirmation
+    standalone_record = None
+    if not gated:
+        try:
+            standalone_record = hub_journal.get(args.invocation_id, target)
+        except HubError as error:
+            if error.code != "invocation_not_found":
+                raise
+    # Keep a standalone read on its original journal after Desktop restarts.
+    # The claim below still checks its frozen action, contract and input.
+    if gated or (standalone_record is None and (tangram_home() / "runtime.json").is_file()):
+        from .desktop_invocation import call as desktop_call, DesktopNotRunningError
         # Resolve the optional @operation suffix before freezing the desktop
         # request so the worker and approver bind the same canonical action.
         from copy import copy
         canonical = copy(args)
         canonical.action = binding.id
-        return desktop_call(canonical, arguments)
+        try:
+            return desktop_call(canonical, arguments)
+        except DesktopNotRunningError:
+            if gated:
+                raise
+            # A stale discovery file must not disable standalone reads.
+            # Never fall back after a timeout, response loss or refusal from
+            # a live supervisor, and never bypass approval for a mutation.
     # Existing call owns policy, request rendering, schema validation, audit and runtime.
     connector = app.graph.runtime_requirements.get("backend") == "connector"
     argv = ["call", entry["root"], binding.id, "--connected" if connector else "--local",
@@ -154,12 +170,13 @@ def _local_call(args, target):
             "--timeout", str(args.timeout)]
     if args.allow_mutation:
         argv.append("--allow-mutation")
-    if args.approve:
-        argv.append("--confirm")
+    # This path only runs ungated stateless actions; --approve must never
+    # become --confirm or a journaled consent record here (it is a deprecated
+    # compatibility flag, not human approval).
     parsed = build_parser().parse_args(argv)
     record, execute = hub_journal.claim(args.invocation_id,
         {"target": target, "action": binding.id, "contract": args.contract, "input": arguments},
-        gated=action.requires_confirmation, approved=args.approve)
+        gated=action.requires_confirmation, approved=False)
     if not execute:
         # Old records may advertise retryable=True, but a journaled attempt is
         # immutable. Never suggest that resume will execute it again.
@@ -355,9 +372,16 @@ def _run_pinned(args):
         elif verb == "invocation":
             from .hub_journal import get
             from .desktop_invocation import status as desktop_status
-            result = desktop_status(args)
-            if result is None:
+            # An existing standalone record owns this diagnostic ID, even
+            # while Desktop is unavailable or has an older read attempt.
+            try:
                 result = get(args.invocation_id, target)
+            except HubError as error:
+                if error.code != "invocation_not_found":
+                    raise
+                result = desktop_status(args)
+                if result is None:
+                    raise error
         else:
             raise HubError("unsupported_capability", "knowledge retrieval requires a workspace target")
     else:

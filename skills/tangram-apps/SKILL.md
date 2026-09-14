@@ -51,10 +51,12 @@ After a lost response, `running`, or `unknown`, use
 `tangram-app app resume ID` (same target, contract, input, and UUID). Resume
 of a journaled attempt returns its stored outcome; it never re-executes. Do
 not repeat the original call command after uncertainty — that creates a new
-invocation. A `failed` attempt carrying `retryMode` is terminal:
-`new_invocation` means fix the cause and submit a fresh call; `reconcile`
-means re-discover the action and target first. A `failed` without
-`retryMode` (for example `approver_unavailable` or `supervisor_busy`) is
+invocation. A `failed` attempt's `retryMode` says what to do next:
+`new_invocation` is terminal — fix the cause and submit a fresh call;
+`reconcile` is terminal — re-discover the action and target first;
+`resume` (for example a `supervisor_busy` queue expiry) means retry the
+same invocation with `app resume ID` once the desktop is free. A `failed`
+without `retryMode` (for example `approver_unavailable`) is likewise
 resumable: open Tangram Desktop or wait, then resume the same invocation.
 Never re-dispatch a `running` or `unknown` mutation; reconcile app state
 first.

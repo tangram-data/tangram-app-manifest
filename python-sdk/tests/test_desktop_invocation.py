@@ -123,7 +123,7 @@ class DesktopInvocationTest(unittest.TestCase):
         from tangram_app.cli_hub import _local_call
         with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"TANGRAM_HOME": home}):
             Path(home, "runtime.json").write_text("{}")
-            args = types.SimpleNamespace(action="g/a#Thing.List", contract="digest", input_json="{}")
+            args = types.SimpleNamespace(action="g/a#Thing.List", contract="digest", input_json="{}", invocation_id="read-fixture")
             action = types.SimpleNamespace(effect=types.SimpleNamespace(value="Stateless"), requires_confirmation=False)
             binding = types.SimpleNamespace(id="g/a#Thing.List@listThings", input_schema={})
             with patch("tangram_app.cli_hub._local_inspect", return_value=({}, None, action, binding)), \
@@ -132,3 +132,101 @@ class DesktopInvocationTest(unittest.TestCase):
                 self.assertEqual(_local_call(args, {"lane": "local"})["state"], "succeeded")
                 self.assertEqual(desktop.call_args.args[0].action, binding.id)
                 standalone.assert_not_called()
+
+    def test_connection_refused_is_known_not_sent(self):
+        import errno
+        import uuid
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"TANGRAM_HOME": home}), \
+             patch("socket.create_connection", side_effect=ConnectionRefusedError(errno.ECONNREFUSED, "refused")):
+            Path(home, "runtime.json").write_text(json.dumps({
+                "port": 1234, "token": "fixture", "generation": "g"}))
+            args = types.SimpleNamespace(invocation_id=str(uuid.uuid4()), action="g/a#Thing.Do", contract="digest", timeout=1)
+            with self.assertRaises(desktop_invocation.DesktopNotRunningError) as caught:
+                desktop_invocation.call(args, {})
+            self.assertEqual(caught.exception.code, "approver_unavailable")
+            self.assertIn("this request was not sent", str(caught.exception))
+
+    def test_response_loss_is_not_classified_as_not_sent(self):
+        import errno
+        import urllib.error
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"TANGRAM_HOME": home}):
+            Path(home, "runtime.json").write_text(json.dumps({"port": 1234, "token": "fixture", "generation": "g"}))
+            args = types.SimpleNamespace(invocation_id="i", action="g/a#Thing.Do", contract="digest", timeout=1)
+            for failure in (TimeoutError("timeout"), ConnectionResetError(errno.ECONNRESET, "reset")):
+                with self.subTest(failure=type(failure).__name__), \
+                     patch("urllib.request.OpenerDirector.open", side_effect=urllib.error.URLError(failure)):
+                    with self.assertRaises(HubError) as caught:
+                        desktop_invocation.call(args, {})
+                    self.assertNotIsInstance(caught.exception, desktop_invocation.DesktopNotRunningError)
+                    self.assertEqual(caught.exception.code, "supervisor_unavailable")
+
+    def test_stale_desktop_discovery_falls_back_only_for_ungated_reads(self):
+        import errno
+        import uuid
+        from tangram_app.cli_hub import _local_call
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"TANGRAM_HOME": home}), \
+             patch("socket.create_connection", side_effect=ConnectionRefusedError(errno.ECONNREFUSED, "refused")):
+            Path(home, "runtime.json").write_text(json.dumps({
+                "port": 1234, "token": "fixture", "generation": "g"}))
+            app = types.SimpleNamespace(graph=types.SimpleNamespace(runtime_requirements={}))
+            binding = types.SimpleNamespace(id="g/a#Thing.Do@doThing", input_schema={})
+            for effect, confirmation in (("Stateless", False), ("Stateless", True), ("Reversible", False)):
+                args = types.SimpleNamespace(action=binding.id, contract="digest", input_json="{}",
+                    invocation_id=str(uuid.uuid4()), timeout=1, allow_mutation=False, approve=False)
+                action = types.SimpleNamespace(effect=types.SimpleNamespace(value=effect), requires_confirmation=confirmation)
+                with self.subTest(effect=effect, confirmation=confirmation), \
+                     patch("tangram_app.cli_hub._local_inspect", return_value=({"root": home}, app, action, binding)), \
+                     patch("tangram_app.cli._run", return_value={"value": 42}) as standalone:
+                    if effect == "Stateless" and not confirmation:
+                        result = _local_call(args, {"lane": "local"})
+                        self.assertEqual(result["state"], "succeeded")
+                        standalone.assert_called_once()
+                    else:
+                        with self.assertRaises(desktop_invocation.DesktopNotRunningError):
+                            _local_call(args, {"lane": "local"})
+                        standalone.assert_not_called()
+
+    def test_read_does_not_fall_back_after_ambiguous_desktop_failure(self):
+        from tangram_app.cli_hub import _local_call
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"TANGRAM_HOME": home}):
+            Path(home, "runtime.json").write_text("{}")
+            args = types.SimpleNamespace(action="g/a#Thing.List", contract="digest", input_json="{}", invocation_id="read-fixture")
+            action = types.SimpleNamespace(effect=types.SimpleNamespace(value="Stateless"), requires_confirmation=False)
+            binding = types.SimpleNamespace(id=args.action, input_schema={})
+            with patch("tangram_app.cli_hub._local_inspect", return_value=({}, None, action, binding)), \
+                 patch("tangram_app.desktop_invocation.call", side_effect=HubError("supervisor_unavailable", "response lost")), \
+                 patch("tangram_app.cli._run") as standalone:
+                with self.assertRaises(HubError):
+                    _local_call(args, {"lane": "local"})
+                standalone.assert_not_called()
+
+    def test_standalone_read_replay_stays_on_its_journal_after_desktop_restart(self):
+        from tangram_app import hub_journal
+        from tangram_app.cli_hub import _local_call
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"TANGRAM_HOME": home}):
+            Path(home, "runtime.json").write_text("{}")
+            target = {"lane": "local"}
+            args = types.SimpleNamespace(action="g/a#Thing.List", contract="digest", input_json="{}",
+                invocation_id="read-fixture", timeout=1, allow_mutation=False, approve=False)
+            action = types.SimpleNamespace(effect=types.SimpleNamespace(value="Stateless"), requires_confirmation=False)
+            binding = types.SimpleNamespace(id=args.action, input_schema={})
+            app = types.SimpleNamespace(graph=types.SimpleNamespace(runtime_requirements={}))
+            record, _ = hub_journal.claim(args.invocation_id,
+                {"target": target, "action": binding.id, "contract": args.contract, "input": {}},
+                gated=False, approved=False)
+            completed = hub_journal.complete(record, "succeeded", result={"value": 42})
+            with patch("tangram_app.cli_hub._local_inspect", return_value=({"root": home}, app, action, binding)), \
+                 patch("tangram_app.desktop_invocation.call") as desktop, \
+                 patch("tangram_app.cli._run") as standalone:
+                self.assertEqual(_local_call(args, target), completed)
+                args.input_json = '{"changed": true}'
+                with self.assertRaises(HubError) as caught:
+                    _local_call(args, target)
+                self.assertEqual(caught.exception.code, "idempotency_conflict")
+                desktop.assert_not_called()
+                standalone.assert_not_called()
+                # A legacy standalone record must never authorize a gated call.
+                action.requires_confirmation = True
+                desktop.return_value = {"state": "pending_approval"}
+                self.assertEqual(_local_call(args, target)["state"], "pending_approval")
+                desktop.assert_called_once()

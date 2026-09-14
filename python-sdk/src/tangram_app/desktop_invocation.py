@@ -1,4 +1,5 @@
 """Blocking desktop invocation transport; never silently falls back."""
+import errno
 import json
 import urllib.request
 import urllib.error
@@ -6,10 +7,17 @@ from .hub_target import HubError
 from .local_store import tangram_home
 
 
+class DesktopNotRunningError(HubError):
+    """This attempt did not send a request; only ungated reads may fall back."""
+
+    def __init__(self, message):
+        super().__init__("approver_unavailable", message)
+
+
 def call(args, arguments):
     path = tangram_home() / "runtime.json"
     if not path.is_file():
-        raise HubError("approver_unavailable", "Open Tangram Desktop to approve this action, then retry.")
+        raise DesktopNotRunningError("Open Tangram Desktop to approve this action, then resume this invocation.")
     attempted = False
     try:
         record = json.loads(path.read_text())
@@ -33,6 +41,11 @@ def call(args, arguments):
             raise ValueError("supervisor returned another invocation")
         return result
     except (OSError, ValueError, KeyError, TypeError) as error:
+        reason = error.reason if isinstance(error, urllib.error.URLError) else error
+        if attempted and isinstance(reason, OSError) and reason.errno == errno.ECONNREFUSED:
+            raise DesktopNotRunningError(
+                "Desktop connection was refused; this request was not sent. "
+                "Open Tangram Desktop and resume this invocation.") from error
         if not attempted:
             raise HubError("approver_unavailable", f"Desktop invocation was not sent: {error}. Open or repair Tangram Desktop, then resume this invocation.") from error
         raise HubError("supervisor_unavailable", f"Desktop invocation did not complete: {error}. "
