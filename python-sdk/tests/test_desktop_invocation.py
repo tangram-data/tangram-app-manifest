@@ -88,3 +88,47 @@ class DesktopInvocationTest(unittest.TestCase):
                     desktop_invocation.call(types.SimpleNamespace(), {})
             self.assertEqual(caught.exception.code, 'approver_unavailable')
             send.assert_not_called()
+
+    def test_persistent_worker_reuses_locks_and_revalidates_each_invocation(self):
+        from tangram_app.local_runtime import _ProjectLock, project_lock_path, LocalRuntimeError
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"TANGRAM_HOME": home}):
+            root = Path(home, "app")
+            (root / "manifests").mkdir(parents=True)
+            app = types.SimpleNamespace(graph=types.SimpleNamespace(package=types.SimpleNamespace(digest="digest"), runtime_requirements={}))
+            action = types.SimpleNamespace(effect=types.SimpleNamespace(value="Irreversible"), requires_confirmation=True, resource_type="Thing", name="Do")
+            binding = types.SimpleNamespace(id="g/a#Thing.Do@doThing", input_schema={}, operation_id="doThing")
+            wire = ""
+            for key in ("first", "second"):
+                wire += json.dumps({"invocationId": key, "action": binding.id, "contract": "digest",
+                                    "input": {}, "timeoutSeconds": 30, "persistent": True}) + "\n"
+                wire += json.dumps({"execute": key}) + "\n" + json.dumps({"finished": key}) + "\n"
+            output = io.StringIO()
+            testcase = self
+            class Input(io.StringIO):
+                def readline(self, *args):
+                    if self.tell() > 0:
+                        with testcase.assertRaises(LocalRuntimeError):
+                            _ProjectLock.acquire(project_lock_path(root))
+                    return super().readline(*args)
+            with patch("sys.stdin", Input(wire)), contextlib.redirect_stdout(output), \
+                 patch("tangram_app.cli_hub._local_inspect", return_value=({"root": str(root)}, app, action, binding)) as inspect:
+                supervisor_worker.main()
+            self.assertEqual(inspect.call_count, 4)
+            self.assertEqual([json.loads(line)["state"] for line in output.getvalue().splitlines()],
+                             ["prepared", "validated", "idle"] * 2)
+            lock = _ProjectLock.acquire(project_lock_path(root))
+            lock.close()
+
+    def test_reads_use_desktop_runtime_when_desktop_is_present(self):
+        from tangram_app.cli_hub import _local_call
+        with tempfile.TemporaryDirectory() as home, patch.dict(os.environ, {"TANGRAM_HOME": home}):
+            Path(home, "runtime.json").write_text("{}")
+            args = types.SimpleNamespace(action="g/a#Thing.List", contract="digest", input_json="{}")
+            action = types.SimpleNamespace(effect=types.SimpleNamespace(value="Stateless"), requires_confirmation=False)
+            binding = types.SimpleNamespace(id="g/a#Thing.List@listThings", input_schema={})
+            with patch("tangram_app.cli_hub._local_inspect", return_value=({}, None, action, binding)), \
+                 patch("tangram_app.desktop_invocation.call", return_value={"state": "succeeded"}) as desktop, \
+                 patch("tangram_app.cli._run") as standalone:
+                self.assertEqual(_local_call(args, {"lane": "local"})["state"], "succeeded")
+                self.assertEqual(desktop.call_args.args[0].action, binding.id)
+                standalone.assert_not_called()

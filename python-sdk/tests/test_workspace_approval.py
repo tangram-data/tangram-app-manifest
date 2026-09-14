@@ -89,4 +89,31 @@ class WorkspaceApprovalTest(unittest.TestCase):
         prompt.assert_not_called()
         self.assertEqual(len(calls),1)
 
+
+    def test_missing_enrollment_opens_setup_without_dispatching(self):
+        result, calls, prompt = self.pipeline(lambda *a, **kw: {'state': 'enrollment_created'},
+            [{'state': 'failed', 'setupRequired': True,
+              'error': {'code': 'approver_unavailable', 'retryable': True}}])
+        self.assertEqual(result['state'], 'failed')
+        self.assertEqual(result['approvalSetup']['state'], 'enrollment_created')
+        self.assertTrue(prompt.call_args.kwargs['setup'])
+        self.assertEqual(len(calls), 1)
+
+    def test_setup_failure_preserves_original_server_error(self):
+        result, calls, _ = self.pipeline(HubError('approver_unavailable', 'Desktop unavailable'),
+            [{'state': 'failed', 'setupRequired': True,
+              'error': {'code': 'approver_unavailable', 'message': 'Registry not configured'}}])
+        self.assertEqual(result['error']['message'], 'Registry not configured')
+        self.assertEqual(result['approvalError']['message'], 'Desktop unavailable')
+        self.assertEqual(len(calls), 1)
+
+    def test_older_server_missing_registry_also_opens_setup(self):
+        result, calls, prompt = self.pipeline(lambda *a, **kw: {'state': 'enrollment_created'},
+            [{'state': 'rejected', 'error': {'code': 'approver_unavailable', 'retryable': False}}])
+        self.assertEqual(result['state'], 'failed')
+        self.assertEqual(result['retryMode'], 'resume')
+        self.assertTrue(result['error']['retryable'])
+        self.assertTrue(prompt.call_args.kwargs['setup'])
+        self.assertEqual(len(calls), 1)
+
 if __name__ == '__main__': unittest.main()

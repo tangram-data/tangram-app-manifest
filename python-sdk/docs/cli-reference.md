@@ -216,6 +216,15 @@ the response explains why. Keep the invocation ID and use
 execution. A denied or expired invocation is terminal. An ambient-context
 mutation still requires an explicit confirmed `--workspace INSTANCE/WORKSPACE`.
 
+Workspace calls open native setup automatically when server approval setup or
+this Mac's enrollment is missing. There is no need to run `approval-enroll --help`
+or a separate enrollment command during normal use. The popup can create the
+protected device key and copy its public enrollment for the instance operator.
+Operator verification and registry configuration remain required; setup alone
+never approves or executes an action. Resume the original invocation after setup
+while its approval remains valid. The explicit enrollment command below remains
+available for administrators.
+
 One-time setup for a workspace account:
 
 1. The operator configures the server's `TANGRAM_WORKSPACE_APPROVAL_REGISTRY`
@@ -232,3 +241,11 @@ to `http://127.0.0.1:8081` for native approval. Use that literal origin in the
 registry. Remote origins require HTTPS. Redirects and proxies are refused.
 The native decision may require Touch ID or a macOS password in addition to
 clicking Allow/Deny. The CLI never receives private key material.
+
+Local calls with Desktop running share its governed runtime, including reads.
+Concurrent submissions queue within their caller timeout; backend dispatch is
+serialized in this release. Consecutive calls to the same app/contract reuse a
+warm runtime until it has been idle for 60 seconds or another app is selected.
+If an older standalone `run`/`open` session holds the app's lifecycle lock, close
+that session and resume the frozen invocation. The supervisor never steals its
+lock or bypasses approval through its HTTP endpoint.

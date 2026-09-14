@@ -137,7 +137,9 @@ def _local_call(args, target):
     entry, app, action, binding = _local_inspect(args.action, args.contract)
     arguments = _read_json_input(args.input_json)
     validate(arguments, binding.input_schema)
-    if action.effect.value != "Stateless" or action.requires_confirmation:
+    from .local_store import tangram_home
+    if (action.effect.value != "Stateless" or action.requires_confirmation
+            or (tangram_home() / "runtime.json").is_file()):
         from .desktop_invocation import call as desktop_call
         # Resolve the optional @operation suffix before freezing the desktop
         # request so the worker and approver bind the same canonical action.
@@ -398,6 +400,23 @@ def _run_pinned(args):
             deadline = time.monotonic() + args.timeout
             result = os_request(credential, "POST", f"{base}/{verb}", body,
                                 timeout_seconds=args.timeout, label=f"{args.command} {verb.removeprefix('knowledge-')}")
+            legacy_setup = (result.get("state") == "rejected"
+                            and result.get("error", {}).get("code") == "approver_unavailable")
+            if verb == "call" and (result.get("setupRequired") is True or legacy_setup):
+                if legacy_setup:
+                    # Older servers refused before issuing a challenge. Keep
+                    # the frozen ID and make the safe same-ID retry explicit.
+                    result = {**result, "state": "failed", "retryMode": "resume",
+                              "setupRequired": True,
+                              "error": {**result["error"], "retryable": True}}
+                from .workspace_approval import request as native_request
+                try:
+                    setup = native_request(target, credential, setup=True,
+                                           timeout=max(0, deadline - time.monotonic()))
+                    result = {**result, "approvalSetup": setup}
+                except HubError as error:
+                    result = {**result, "approvalError": {
+                        "code": error.code, "message": str(error), "retryable": True}}
             if verb == "call" and result.get("state") == "pending_approval":
                 from .workspace_approval import request as native_request
                 native_error = None
