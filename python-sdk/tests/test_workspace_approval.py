@@ -6,6 +6,27 @@ from tangram_app.workspace_approval import origin
 from tangram_app.cli_hub import _run_pinned
 
 class WorkspaceApprovalTest(unittest.TestCase):
+    def test_enrollment_submits_and_shows_fingerprint_before_waiting(self):
+        import io
+        target = {'workspace': 'demo', 'endpoint': 'http://localhost:8081'}
+        args = Namespace(capability_command='approval-enroll', target_ref='ref', timeout=2, wait=True)
+        enrollment = {'keyId': 'test-device', 'publicKeySpki': 'public-test-key'}
+        output = io.StringIO()
+        def server(credential, method, path, body=None, **kwargs):
+            if method == 'POST':
+                self.assertEqual(body, enrollment)
+                return {'state': 'pending', 'fingerprint': 'fingerprint-to-compare', 'confirmUrl': 'http://localhost:8081/approvals'}
+            self.assertIn('fingerprint-to-compare', output.getvalue())
+            return {'state': 'active'}
+        with patch('tangram_app.cli_hub.load', return_value=(target, {'token': 'shared'})), \
+             patch('tangram_app.cli_hub.os_request', side_effect=server), \
+             patch('tangram_app.workspace_approval.request', side_effect=[{'enrollment': enrollment}, {'state': 'pending'}]) as native, \
+             patch('sys.stderr', output):
+            result = _run_pinned(args)
+        self.assertEqual(result['state'], 'active')
+        self.assertTrue(native.call_args.kwargs['web'])
+        self.assertEqual(native.call_args.kwargs['enrollment_id'], 'test-device')
+
     def test_origin_boundaries(self):
         self.assertEqual(origin('http://localhost:8081'), 'http://127.0.0.1:8081')
         self.assertEqual(origin('http://[::1]:8081'), 'http://[::1]:8081')
@@ -42,6 +63,22 @@ class WorkspaceApprovalTest(unittest.TestCase):
         self.assertEqual(calls[0][2],calls[2][2])
         self.assertNotIn('approve',calls[0][2])
         prompt.assert_called_once()
+
+    def test_web_approval_waits_for_server_and_keeps_frozen_call(self):
+        result, calls, prompt = self.pipeline(lambda *a, **k: {'state': 'pending_approval'},
+            [{'state': 'pending_approval', 'webApprovalAvailable': True},
+             {'state': 'approved'}, {'state': 'approved'}, {'state': 'succeeded', 'result': 42}])
+        self.assertTrue(prompt.call_args.kwargs['web'])
+        self.assertEqual(result['result'], 42)
+        self.assertEqual(calls[0][2], calls[-1][2])
+        self.assertEqual(sum(c[0] == 'POST' for c in calls), 2)
+
+    def test_web_denial_never_dispatches(self):
+        result, calls, prompt = self.pipeline(lambda *a, **k: {'state': 'approved'},
+            [{'state': 'pending_approval', 'webApprovalAvailable': True},
+             {'state': 'rejected'}, {'state': 'rejected'}])
+        self.assertEqual(result['state'], 'rejected')
+        self.assertEqual(sum(c[0] == 'POST' for c in calls), 1)
 
     def test_fake_native_approval_cannot_trigger_dispatch(self):
         result, calls, _ = self.pipeline(lambda *a,**k: {'state':'approved'},

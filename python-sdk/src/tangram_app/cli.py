@@ -146,6 +146,12 @@ def _main(argv: Sequence[str] | None = None) -> int:
         if args.command in ("run", "open"):
             return _run_local_foreground(args, human=human)
         data = _run(args)
+        if getattr(args, "capability_command", None) == "approval-enroll" and data.get("state") in {"pending", "revoked"}:
+            message = ("Device enrollment awaits confirmation; open confirmUrl and compare the fingerprint."
+                       if data["state"] == "pending" else "This device key was revoked and cannot be reactivated.")
+            _emit({"schemaVersion": COMMAND_SCHEMA_VERSION, "ok": False, "data": data,
+                   "error": {"code": "enrollment_" + data["state"], "message": message}})
+            return 3
         if getattr(args, "capability_command", None) in {"call", "invocation", "resume", "inspect", "approval-enroll"} and data.get("state") in {"pending_approval", "approved", "expired", "running", "unknown", "failed", "rejected"}:
             _emit({"schemaVersion": COMMAND_SCHEMA_VERSION, "ok": False, "data": data,
                    "error": data.get("error") or {"code": data["state"], "message": "inspect invocation state before continuing"}})

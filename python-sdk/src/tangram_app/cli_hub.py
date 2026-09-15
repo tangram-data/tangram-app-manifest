@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import time
 import urllib.parse
 import uuid
@@ -33,6 +34,8 @@ def add_parser(commands, app_commands):
         p.add_argument("--instance")
         p.add_argument("--workspace")
         p.set_defaults(os_url=None, token=None)
+        if verb == "approval-enroll":
+            p.add_argument("--wait", action="store_true", help="Wait for human confirmation of the submitted device")
         p.add_argument("--timeout", type=float, default=300 if verb in ("call", "resume", "approval-enroll") else 30)
         if verb in ("search", "knowledge-search"):
             p.add_argument("query")
@@ -389,7 +392,24 @@ def _run_pinned(args):
         base = f"/api/core/v1/workspaces/{ws}/hub"
         if verb == "approval-enroll":
             from .workspace_approval import request as native_request
-            result = native_request(target, credential, timeout=args.timeout)
+            deadline = time.monotonic() + args.timeout
+            native = native_request(target, credential, timeout=args.timeout)
+            enrollment = native.get("enrollment")
+            if not isinstance(enrollment, dict):
+                result = native
+            else:
+                result = os_request(credential, "POST", f"{base}/approval-enrollments", enrollment,
+                                    timeout_seconds=max(1, deadline - time.monotonic()), label="submit approval device")
+                print(json.dumps({"approvalEnrollment": result}), file=sys.stderr, flush=True)
+                try:
+                    native_request(target, credential, web=True, enrollment_id=enrollment["keyId"],
+                                   timeout=max(1, deadline - time.monotonic()))
+                except HubError as error:
+                    result["presentationError"] = {"code": error.code, "message": str(error)}
+                while getattr(args, "wait", False) and result.get("state") == "pending" and time.monotonic() < deadline:
+                    time.sleep(min(.5, max(0, deadline - time.monotonic())))
+                    result = os_request(credential, "GET", f"{base}/approval-enrollments/{urllib.parse.quote(enrollment['keyId'], safe='')}",
+                                        timeout_seconds=max(1, min(30, deadline - time.monotonic())), label="approval device status")
         elif verb == "knowledge-search":
             if args.offset:
                 raise HubError("unsupported_pagination", "knowledge search currently supports bounded results, not offsets")
@@ -435,8 +455,23 @@ def _run_pinned(args):
                               "error": {**result["error"], "retryable": True}}
                 from .workspace_approval import request as native_request
                 try:
-                    setup = native_request(target, credential, setup=True,
+                    database_enrollment = result.get("enrollmentMode") == "database"
+                    setup = native_request(target, credential, setup=not database_enrollment,
                                            timeout=max(0, deadline - time.monotonic()))
+                    if database_enrollment and isinstance(setup.get("enrollment"), dict):
+                        device = setup["enrollment"]
+                        setup = os_request(credential, "POST", f"{base}/approval-enrollments", device,
+                                           timeout_seconds=max(1, deadline - time.monotonic()), label="submit approval device")
+                        print(json.dumps({"approvalEnrollment": setup}), file=sys.stderr, flush=True)
+                        native_request(target, credential, web=True, enrollment_id=device["keyId"],
+                                       timeout=max(1, deadline - time.monotonic()))
+                        while setup.get("state") == "pending" and time.monotonic() < deadline:
+                            time.sleep(min(.5, max(0, deadline - time.monotonic())))
+                            setup = os_request(credential, "GET", f"{base}/approval-enrollments/{urllib.parse.quote(device['keyId'], safe='')}",
+                                               timeout_seconds=max(1, min(30, deadline - time.monotonic())), label="approval device status")
+                        if setup.get("state") == "active" and time.monotonic() < deadline:
+                            result = os_request(credential, "POST", f"{base}/call", body,
+                                                timeout_seconds=max(1, deadline - time.monotonic()), label="resume after device enrollment")
                     result = {**result, "approvalSetup": setup}
                 except HubError as error:
                     result = {**result, "approvalError": {
@@ -444,12 +479,21 @@ def _run_pinned(args):
             if verb == "call" and result.get("state") == "pending_approval":
                 from .workspace_approval import request as native_request
                 native_error = None
+                if result.get("webApprovalAvailable") is True:
+                    print(json.dumps({"approvalUrl": result.get("approvalUrl"), "invocationId": args.invocation_id}), file=sys.stderr, flush=True)
                 try:
                     native = native_request(target, credential, invocation_id=args.invocation_id,
+                                            web=result.get("webApprovalAvailable") is True,
                                             timeout=max(0, deadline - time.monotonic()))
                     native_error = native.get("error")
                 except HubError as error:
                     native_error = {"code": error.code, "message": str(error), "retryable": True}
+                if result.get("webApprovalAvailable") is True:
+                    # Presentation carries no authority. Wait for a durable server decision.
+                    while result.get("state") == "pending_approval" and time.monotonic() < deadline:
+                        time.sleep(min(.5, max(0, deadline - time.monotonic())))
+                        result = os_request(credential, "GET", f"{base}/invocations/{args.invocation_id}",
+                                            timeout_seconds=max(1, min(30, deadline - time.monotonic())), label="web approval status")
                 # The helper's reply is advisory. Only the server journal releases execution.
                 # Keep the exact frozen body/UUID, including after a lost decision response.
                 try:
