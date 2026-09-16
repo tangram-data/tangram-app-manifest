@@ -17,7 +17,7 @@ from .models import CapabilityGraph
 SKILL_FORMAT_VERSION = "1"
 _SKILL_NAME = re.compile(r"[^a-z0-9-]+")
 BUILDER_SKILL_NAME = "tangram-app-builder"
-PACKAGED_SKILLS = ("tangram-app-builder", "tangram-connector-builder", "tangram-apps")
+PACKAGED_SKILLS = ("tangram-app-builder", "tangram-connector-builder", "tangram-apps", "tangram-sql")
 
 
 def packaged_skill_text(name: str) -> str:
