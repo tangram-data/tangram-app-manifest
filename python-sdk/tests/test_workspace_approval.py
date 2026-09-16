@@ -6,17 +6,16 @@ from tangram_app.workspace_approval import origin
 from tangram_app.cli_hub import _run_pinned
 
 class WorkspaceApprovalTest(unittest.TestCase):
-    def test_no_desktop_returns_link_without_opening_agent_selected_origin(self):
+    def test_no_desktop_fails_without_browser_fallback(self):
         from tangram_app.workspace_approval import request
         import tempfile
         from pathlib import Path
         invocation = '11111111-1111-4111-8111-111111111111'
         with tempfile.TemporaryDirectory() as directory, patch('tangram_app.workspace_approval.tangram_home', return_value=Path(directory)), patch('webbrowser.open', return_value=True) as browser:
-            result = request({'endpoint':'http://127.0.0.1:8081','workspace':'demo'}, {'token':'agent-token'}, invocation_id=invocation, web=True)
-        self.assertEqual(result['state'], 'pending_approval')
+            with self.assertRaises(HubError) as error:
+                request({'endpoint':'http://127.0.0.1:8081','workspace':'demo'}, {'token':'agent-token'}, invocation_id=invocation, web=True)
+        self.assertEqual(error.exception.code, 'approver_unavailable')
         browser.assert_not_called()
-        self.assertIn('http://localhost:8081/approvals?', result['approvalUrl'])
-        self.assertNotIn('agent-token', result['approvalUrl'])
 
     def test_desktop_origin_refusal_is_preserved_without_browser_bypass(self):
         import json
@@ -95,6 +94,21 @@ class WorkspaceApprovalTest(unittest.TestCase):
         self.assertEqual(calls[0][2],calls[2][2])
         self.assertNotIn('approve',calls[0][2])
         prompt.assert_called_once()
+
+    def test_native_session_advertisement_uses_desktop_and_reconciles_once(self):
+        result, calls, prompt = self.pipeline(lambda *a, **k: {'state': 'approved'},
+            [{'state': 'pending_approval', 'nativeApprovalAvailable': True, 'webApprovalAvailable': False},
+             {'state': 'approved'}, {'state': 'succeeded', 'result': 42}])
+        self.assertTrue(prompt.call_args.kwargs['web'])
+        self.assertEqual(result['result'], 42)
+        self.assertEqual([c[0] for c in calls], ['POST', 'GET', 'POST'])
+
+    def test_native_session_unavailable_does_not_wait_for_browser(self):
+        result, calls, prompt = self.pipeline(HubError('approver_unavailable', 'Sign in to Desktop'),
+            [{'state': 'pending_approval', 'nativeApprovalAvailable': True, 'webApprovalAvailable': False},
+             {'state': 'pending_approval'}])
+        self.assertEqual(result['error']['code'], 'approver_unavailable')
+        self.assertEqual([c[0] for c in calls], ['POST', 'GET'])
 
     def test_web_approval_waits_for_server_and_keeps_frozen_call(self):
         result, calls, prompt = self.pipeline(lambda *a, **k: {'state': 'pending_approval'},

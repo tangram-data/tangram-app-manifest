@@ -479,16 +479,14 @@ def _run_pinned(args):
             if verb == "call" and result.get("state") == "pending_approval":
                 from .workspace_approval import request as native_request
                 native_error = None
-                if result.get("webApprovalAvailable") is True:
-                    print(json.dumps({"approvalUrl": result.get("approvalUrl"), "invocationId": args.invocation_id}), file=sys.stderr, flush=True)
                 try:
                     native = native_request(target, credential, invocation_id=args.invocation_id,
-                                            web=result.get("webApprovalAvailable") is True,
+                                            web=(result.get("nativeApprovalAvailable") is True or result.get("webApprovalAvailable") is True),
                                             timeout=max(0, deadline - time.monotonic()))
                     native_error = native.get("error")
                 except HubError as error:
                     native_error = {"code": error.code, "message": str(error), "retryable": True}
-                if result.get("webApprovalAvailable") is True:
+                if result.get("webApprovalAvailable") is True and not native_error:
                     # Presentation carries no authority. Wait for a durable server decision.
                     while result.get("state") == "pending_approval" and time.monotonic() < deadline:
                         time.sleep(min(.5, max(0, deadline - time.monotonic())))

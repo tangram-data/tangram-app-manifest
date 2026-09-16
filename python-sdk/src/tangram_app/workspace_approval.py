@@ -28,18 +28,6 @@ def origin(endpoint):
     return f"{p.scheme}://{host}{suffix}"
 
 
-def web_approval_link(target, invocation_id=None, enrollment_id=None):
-    import uuid
-    web_origin = origin(target["endpoint"]).replace("http://127.0.0.1:", "http://localhost:").replace("http://[::1]:", "http://localhost:")
-    query = {"workspace": target["workspace"]}
-    if invocation_id:
-        query["invocation"] = str(uuid.UUID(invocation_id))
-    elif enrollment_id:
-        query["enrollment"] = enrollment_id
-    url = web_origin + "/approvals?" + urllib.parse.urlencode(query)
-    return {"state": "pending_approval", "invocationId": invocation_id or "", "approvalUrl": url}
-
-
 def request(target, credential, *, invocation_id=None, timeout=300, setup=False, web=False, enrollment_id=None):
     if not math.isfinite(timeout) or timeout < 1:
         raise HubError("approver_unavailable", "No time remains for native approval; resume this invocation")
@@ -49,7 +37,7 @@ def request(target, credential, *, invocation_id=None, timeout=300, setup=False,
         port, token = record["port"], record["token"]
         if type(port) is not int or not 1 <= port <= 65535 or not isinstance(token, str) or not token:
             raise ValueError("invalid desktop discovery")
-        body = {"mode": "workspace-web" if web else ("workspace-setup" if setup else ("workspace-approve" if invocation_id else "workspace-enroll")),
+        body = {"mode": "workspace-session" if web else ("workspace-setup" if setup else ("workspace-approve" if invocation_id else "workspace-enroll")),
                 "origin": remote_origin, "workspace": target["workspace"],
                 # Only the existing CLI bearer credential; never a refresh/enrollment secret.
                 "token": credential["token"], "timeoutSeconds": min(300, int(timeout))}
@@ -69,6 +57,4 @@ def request(target, credential, *, invocation_id=None, timeout=300, setup=False,
         return result
     except (OSError, ValueError, KeyError, TypeError) as error:
         # Do not interpolate transport exceptions: they may contain credentials.
-        if web:
-            return web_approval_link(target, invocation_id, enrollment_id)
-        raise HubError("approver_unavailable", "Native approval did not complete. Open a provisioned Tangram Desktop release and resume the same invocation.") from error
+        raise HubError("approver_unavailable", "Native approval did not complete. Open Tangram Desktop, sign in to this instance, and resume the same invocation. Browser approval is unavailable.") from error
