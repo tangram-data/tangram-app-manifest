@@ -104,6 +104,7 @@ _CODEX_SKILL_GUIDANCE = {
     "tangram-connector-builder": (
         "building a Tangram connector that maps an external SaaS HTTP API into governed actions"
     ),
+    "tangram-sql": "querying or modifying data in a workspace SQL engine from the command line",
 }
 
 
