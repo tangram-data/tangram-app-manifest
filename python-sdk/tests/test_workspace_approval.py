@@ -6,6 +6,38 @@ from tangram_app.workspace_approval import origin
 from tangram_app.cli_hub import _run_pinned
 
 class WorkspaceApprovalTest(unittest.TestCase):
+    def test_no_desktop_returns_link_without_opening_agent_selected_origin(self):
+        from tangram_app.workspace_approval import request
+        import tempfile
+        from pathlib import Path
+        invocation = '11111111-1111-4111-8111-111111111111'
+        with tempfile.TemporaryDirectory() as directory, patch('tangram_app.workspace_approval.tangram_home', return_value=Path(directory)), patch('webbrowser.open', return_value=True) as browser:
+            result = request({'endpoint':'http://127.0.0.1:8081','workspace':'demo'}, {'token':'agent-token'}, invocation_id=invocation, web=True)
+        self.assertEqual(result['state'], 'pending_approval')
+        browser.assert_not_called()
+        self.assertIn('http://localhost:8081/approvals?', result['approvalUrl'])
+        self.assertNotIn('agent-token', result['approvalUrl'])
+
+    def test_desktop_origin_refusal_is_preserved_without_browser_bypass(self):
+        import json
+        import tempfile
+        from pathlib import Path
+        from tangram_app.workspace_approval import request
+        invocation = '11111111-1111-4111-8111-111111111111'
+        refused = {'state': 'pending_approval', 'invocationId': invocation,
+                   'approvalUrl': 'https://agent-selected.example/approvals',
+                   'error': {'code': 'approval_origin_untrusted'}}
+        with tempfile.TemporaryDirectory() as directory, \
+             patch('tangram_app.workspace_approval.tangram_home', return_value=Path(directory)), \
+             patch('urllib.request.build_opener') as transport, \
+             patch('webbrowser.open') as browser:
+            (Path(directory) / 'runtime.json').write_text(json.dumps({'port': 1234, 'token': 'local-api'}))
+            transport.return_value.open.return_value.__enter__.return_value.read.return_value = json.dumps(refused).encode()
+            result = request({'endpoint': 'https://agent-selected.example', 'workspace': 'demo'},
+                             {'token': 'agent-token'}, invocation_id=invocation, web=True)
+            self.assertEqual(result, refused)
+            browser.assert_not_called()
+
     def test_enrollment_submits_and_shows_fingerprint_before_waiting(self):
         import io
         target = {'workspace': 'demo', 'endpoint': 'http://localhost:8081'}
