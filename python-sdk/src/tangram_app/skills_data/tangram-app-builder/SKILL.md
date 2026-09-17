@@ -21,7 +21,7 @@ Check, then self-heal, before installing anything by hand:
 ```sh
 command -v tangram >/dev/null 2>&1 || command -v tangram-app >/dev/null 2>&1 \
   || pip install tangram-app-sdk
-tangram doctor --fix    # diagnoses everything; auto-installs the Pkl CLI
+"$(command -v tangram || command -v tangram-app)" doctor --fix  # auto-installs the Pkl CLI
 ```
 
 (`tangram` is the unified front door: Tangram Desktop installs it with a
