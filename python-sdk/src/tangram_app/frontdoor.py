@@ -38,7 +38,7 @@ def route(args: list[str]) -> list[str] | None:
     """The `tangram-app` argv to run in-process, or None → native lane."""
     if not args:
         return None
-    if len(args) >= 2 and args[0] == "app" and args[1] in {"search", "inspect", "call", "invocation"}:
+    if len(args) >= 2 and args[0] == "app" and args[1] in {"search", "inspect", "call", "invocation", "resume", "approval-enroll"}:
         return args
     if args[0] in _PASSTHROUGH:
         return args

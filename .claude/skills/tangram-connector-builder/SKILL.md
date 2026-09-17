@@ -20,11 +20,12 @@ QuickBooks connector (tenant-path style).
 ## Prerequisites
 
 - Pkl CLI on PATH (`pkl --version`).
-- The `tangram` CLI for validation: `tangram doctor` (Tangram Desktop
-  bundles it — do not pip-install there); if the command is missing,
-  `pip install tangram-app-sdk` (or `pip install ./python-sdk` from a
-  tangram-app-manifest checkout). A legacy pip install exposing only
-  `tangram-app` runs the same commands as `tangram-app <command>`.
+- The `tangram` CLI for validation (Tangram Desktop bundles it — do not
+  pip-install there): probe with
+  `command -v tangram || command -v tangram-app`; only when NEITHER
+  exists, `pip install tangram-app-sdk` (or `pip install ./python-sdk`
+  from a tangram-app-manifest checkout). A legacy pip install exposing
+  only `tangram-app` runs the same commands as `tangram-app <command>`.
 
 ## Package layout
 

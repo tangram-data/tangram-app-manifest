@@ -19,15 +19,17 @@ no own backend) use the `tangram-connector-builder` skill instead.
 Check, then self-heal, before installing anything by hand:
 
 ```sh
-tangram doctor --fix \
-  || tangram-app doctor --fix \
-  || { pip install tangram-app-sdk && tangram doctor --fix; }
+command -v tangram >/dev/null 2>&1 || command -v tangram-app >/dev/null 2>&1 \
+  || pip install tangram-app-sdk
+tangram doctor --fix    # diagnoses everything; auto-installs the Pkl CLI
 ```
 
 (`tangram` is the unified front door: Tangram Desktop installs it with a
 bundled SDK — do NOT pip-install on those machines — and the pip SDK
-installs it too. Only if just the legacy `tangram-app` entry point is on
-PATH, every `tangram <command>` below works as `tangram-app <command>`.)
+installs it too. A `doctor` failure means missing prerequisites, never
+"install another SDK". Only if just the legacy `tangram-app` entry point
+is on PATH, every `tangram <command>` below works as
+`tangram-app <command>`.)
 
 `doctor` reports each prerequisite with a hint: Python 3.11+ (3.12+ to run
 backends), the Pkl CLI (`--fix` installs it into `~/.tangram/bin`, no PATH
@@ -271,6 +273,10 @@ an https URL.
 tangram app install ./my-app --workspace demo --dry-run --yes  # server's plan
 tangram app install ./my-app --workspace demo --upgrade --yes  # apply
 ```
+
+(A selector like `--workspace` routes this to the native platform CLI.
+On a pip-only machine without it, run the SDK's own OS lane instead:
+`tangram-app app install ./my-app --workspace demo ...` — same flags.)
 
 Non-interactive runs (you, the agent) must either use an explicit target
 — `--workspace INSTANCE/WS` (canonical) or `--instance NAME` — or pass

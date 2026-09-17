@@ -25,7 +25,8 @@ class RouteTest(unittest.TestCase):
                      ["app", "search", "query", "--target-ref", "ref"],
                      ["app", "inspect", "app#Todo.List", "--contract", "v1", "--target-ref", "ref"],
                      ["app", "call", "app#Todo.List", "--contract", "v1", "--target-ref", "ref", "--invocation-id", "id"],
-                     ["app", "invocation", "id", "--target-ref", "ref"]):
+                     ["app", "invocation", "id", "--target-ref", "ref"],
+                     ["app", "resume", "id", "--target-ref", "ref"]):
             self.assertEqual(route(args), args)
             self.assertTrue(parser.parse_args(args).capability_command)
         self.assertNotIn("hub", parser.format_help())
