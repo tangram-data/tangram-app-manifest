@@ -51,7 +51,7 @@ def _doctor(data: dict[str, Any]) -> str:
 
 def _apps(apps: list) -> str:
     if not apps:
-        return "no apps installed (tangram-app app install <source>)"
+        return "no apps installed (tangram app install <source>)"
     lines = []
     for app in apps:
         lines.append(

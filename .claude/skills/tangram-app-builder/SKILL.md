@@ -19,13 +19,15 @@ no own backend) use the `tangram-connector-builder` skill instead.
 Check, then self-heal, before installing anything by hand:
 
 ```sh
-tangram-app --help || pip install tangram-app-sdk
-tangram-app doctor --fix    # diagnoses everything; auto-installs the Pkl CLI
+tangram doctor --fix \
+  || tangram-app doctor --fix \
+  || { pip install tangram-app-sdk && tangram doctor --fix; }
 ```
 
-(The SDK also installs the unified `tangram` front door — the same
-commands work as `tangram <command>`; this skill uses `tangram-app` /
-`python -m tangram_app`, which is always unambiguous.)
+(`tangram` is the unified front door: Tangram Desktop installs it with a
+bundled SDK — do NOT pip-install on those machines — and the pip SDK
+installs it too. Only if just the legacy `tangram-app` entry point is on
+PATH, every `tangram <command>` below works as `tangram-app <command>`.)
 
 `doctor` reports each prerequisite with a hint: Python 3.11+ (3.12+ to run
 backends), the Pkl CLI (`--fix` installs it into `~/.tangram/bin`, no PATH
@@ -185,10 +187,10 @@ Every CLI command prints exactly one JSON envelope to stdout — parse it,
 don't scrape logs.
 
 ```sh
-python -m tangram_app validate my-app                 # structured findings
-python -m tangram_app actions my-app                  # compact action catalog (refs)
-python -m tangram_app run my-app                      # backend+db+ui until Ctrl-C
-printf '%s' '{}' | python -m tangram_app call my-app Order.List --local --input-json -
+tangram validate my-app                 # structured findings
+tangram actions my-app                  # compact action catalog (refs)
+tangram run my-app                      # backend+db+ui until Ctrl-C
+printf '%s' '{}' | tangram call my-app Order.List --local --input-json -
 ```
 
 `call` accepts short action refs — `Order.List` (or just `List` when
@@ -207,7 +209,7 @@ Know these before debugging "failures" that are actually policy:
   never by weakening the manifest:
 
   ```sh
-  printf '{"title":"Buy milk"}' | python -m tangram_app call my-app Todo.Create \
+  printf '{"title":"Buy milk"}' | tangram call my-app Todo.Create \
     --local --allow-mutation --confirm --input-json -
   ```
 
@@ -249,13 +251,13 @@ only when the ask names a workspace, an instance, or Tangram OS.
 **User store (default):**
 
 ```sh
-python -m tangram_app app install ./my-app     # validate + copy into ~/.tangram/apps/
-python -m tangram_app app install ./my-app --upgrade   # replace an existing install
-python -m tangram_app app list                 # normalized rows: id/version/context/state/detail
-python -m tangram_app app get my-app           # one app's details
-python -m tangram_app open my-app              # run + open the app UI in the browser
-printf '{}' | python -m tangram_app call my-app Todo.List --local --input-json -
-python -m tangram_app app uninstall my-app --yes   # destructive: --yes required non-interactively
+tangram app install ./my-app     # validate + copy into ~/.tangram/apps/
+tangram app install ./my-app --upgrade   # replace an existing install
+tangram app list                 # normalized rows: id/version/context/state/detail
+tangram app get my-app           # one app's details
+tangram open my-app              # run + open the app UI in the browser
+printf '{}' | tangram call my-app Todo.List --local --input-json -
+tangram app uninstall my-app --yes   # destructive: --yes required non-interactively
 ```
 
 Installed apps are addressable by app id (or unique bare name) everywhere
@@ -266,8 +268,8 @@ an https URL.
 **Tangram OS (local `localhost:8081` or remote):**
 
 ```sh
-python -m tangram_app app install ./my-app --workspace demo --dry-run --yes  # server's plan
-python -m tangram_app app install ./my-app --workspace demo --upgrade --yes  # apply
+tangram app install ./my-app --workspace demo --dry-run --yes  # server's plan
+tangram app install ./my-app --workspace demo --upgrade --yes  # apply
 ```
 
 Non-interactive runs (you, the agent) must either use an explicit target
@@ -286,7 +288,7 @@ UI); a backend-only/native App registers via the native CLI instead.
 
 ## Ship it
 
-- `python -m tangram_app skill generate my-app --output dist/skills/orders`
+- `tangram skill generate my-app --output dist/skills/orders`
   emits an integrity-locked consumer skill (agents discover + call actions;
   refuses on source drift).
 - The Python compiler is `authority: "development"`. Publishing conformance

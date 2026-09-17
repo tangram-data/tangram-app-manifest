@@ -159,7 +159,7 @@ class ConnectedCallTest(unittest.TestCase):
             "--connected", "--input-json", "{}",
         )
         self.assertFalse(envelope["ok"])
-        self.assertIn("tangram-app connect", envelope["error"]["message"])
+        self.assertIn("tangram connect", envelope["error"]["message"])
 
     def test_spec_loading_refuses_non_connectors(self):
         with self.assertRaises(LocalConnectionError):

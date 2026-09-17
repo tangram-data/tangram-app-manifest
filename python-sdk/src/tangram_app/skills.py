@@ -142,7 +142,7 @@ def _codex_agents_block(names: list[str], home: Path) -> str:
         lines.append(f"- Before {what}, read and follow `{ref}` first.")
     if "tangram-apps" in names:
         lines += ["", "Use the stable Tangram apps skill to discover live capabilities, including newly installed apps.",
-                  "Pin the target with `tangram-app context resolve` and carry its targetRef through search, inspect and call.",
+                  "Pin the target with `tangram context resolve` and carry its targetRef through search, inspect and call.",
                   "App-specific skills are optional workflow guidance; do not change global context or rewrite skills to discover apps.",
                   CODEX_AGENTS_END]
         return "\n".join(lines) + "\n"
@@ -155,12 +155,12 @@ def _codex_agents_block(names: list[str], home: Path) -> str:
             "To USE Tangram apps installed on this machine — list them, list an",
             'app\'s actions, or answer questions from an app\'s data (e.g. "list',
             'my todos" when a todo app is installed) — go through the governed',
-            "`tangram-app` CLI (`tangram` works the same on machines with the",
-            "desktop app):",
+            "`tangram` CLI (the legacy pip entry point `tangram-app` works the",
+            "same):",
             "",
-            "- `tangram-app app list` — installed apps (the `~/.tangram` store)",
-            "- `tangram-app actions <app>` — an app's callable actions",
-            "- `tangram-app call <app> <Action> --local --input-json '{...}'` — invoke",
+            "- `tangram app list` — installed apps (the `~/.tangram` store)",
+            "- `tangram actions <app>` — an app's callable actions",
+            "- `tangram call <app> <Action> --local --input-json '{...}'` — invoke",
             "  one action through the governed pipeline; put the action's arguments",
             "  in the JSON object (`'{}'` when it takes none — without `--input-json`",
             "  the command reads stdin). Writes need `--allow-mutation`, plus",
@@ -171,7 +171,7 @@ def _codex_agents_block(names: list[str], home: Path) -> str:
             "",
             "CONTEXT: `local` (this machine) is the default; `tangram instance use",
             "NAME [--workspace WS]` and `tangram workspace use WS` point the ambient",
-            "context at a Tangram OS workspace, and a bare `tangram-app call app Ref",
+            "context at a Tangram OS workspace, and a bare `tangram call app Ref",
             "--input-json '{...}'` follows it (machine → local lane; workspace →",
             "server-governed). Rules:",
             "- Check with `tangram use` (bare = prints the context; `--list` = all),",

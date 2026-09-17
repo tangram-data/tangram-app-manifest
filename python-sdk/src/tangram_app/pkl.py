@@ -56,7 +56,7 @@ class PklEvaluator:
         if resolved is None:
             raise PklNotFoundError(
                 f"Pkl executable {str(executable)!r} was not found; run "
-                "`tangram-app doctor --fix` to install it, or get it from pkl-lang.org"
+                "`tangram doctor --fix` to install it, or get it from pkl-lang.org"
             )
         self.executable = resolved
         self.timeout_seconds = timeout_seconds

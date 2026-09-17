@@ -110,7 +110,7 @@ def diagnose() -> dict:
             "detail": pkl,
             "hint": None
             if pkl
-            else "run `tangram-app doctor --fix` (installs it), or install from pkl-lang.org",
+            else "run `tangram doctor --fix` (installs it), or install from pkl-lang.org",
         }
     )
 

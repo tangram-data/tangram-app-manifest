@@ -187,7 +187,7 @@ class ProjectionTest(unittest.TestCase):
         install_app(str(FIXTURE))
         _run_cli("skill", "sync", "--enable")
         text = self._skill("claude", "tangram-orders").read_text(encoding="utf-8")
-        self.assertIn("`tangram-app actions com.example/orders --local`", text)
+        self.assertIn("`tangram actions com.example/orders --local`", text)
         self.assertIn("--local --input-json", text)
 
     def test_rebuild_backfills_missing_projection(self):

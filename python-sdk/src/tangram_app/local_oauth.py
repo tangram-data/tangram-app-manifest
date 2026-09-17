@@ -331,7 +331,7 @@ def ensure_fresh(spec: dict, app_id: str, connection: dict) -> dict:
         if client is None:
             raise LocalOAuthError(
                 "token expired and no developer OAuth client is stored — reconnect "
-                "with `tangram-app connect ... --oauth`"
+                "with `tangram connect ... --oauth`"
             )
         payload = _token_request(
             oauth,

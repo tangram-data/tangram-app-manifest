@@ -20,9 +20,11 @@ QuickBooks connector (tenant-path style).
 ## Prerequisites
 
 - Pkl CLI on PATH (`pkl --version`).
-- The Python SDK for validation: `python3 -m tangram_app --help`; if
-  missing, `pip install tangram-app-sdk` (or `pip install ./python-sdk`
-  from a tangram-app-manifest checkout).
+- The `tangram` CLI for validation: `tangram doctor` (Tangram Desktop
+  bundles it — do not pip-install there); if the command is missing,
+  `pip install tangram-app-sdk` (or `pip install ./python-sdk` from a
+  tangram-app-manifest checkout). A legacy pip install exposing only
+  `tangram-app` runs the same commands as `tangram-app <command>`.
 
 ## Package layout
 
@@ -167,8 +169,8 @@ use `www.googleapis.com`; `drive.googleapis.com` answers HTML 404s).
 
 ```sh
 cd manifests && pkl project resolve && cd ..
-python3 -m tangram_app validate .          # structured findings
-python3 -m tangram_app inspect . --tools   # actions as the agent will see them
+tangram validate .          # structured findings
+tangram inspect . --tools   # actions as the agent will see them
 ```
 
 Live-fire against the real vendor API with a developer connection — two
@@ -179,13 +181,13 @@ lanes:
 # itself: consent, scopes, PKCE, tenant capture, refresh). Register your
 # own native/desktop OAuth client with the vendor first — loopback
 # redirect URIs are permitted for those.
-python3 -m tangram_app connect . --oauth --client-id YOUR_ID --client-secret -
+tangram connect . --oauth --client-id YOUR_ID --client-secret -
 # (--no-browser prints the authorize URL instead of opening it — headless agents)
 
 # Lane 2 — quick token paste; tests API modeling only, not the oauth block.
-gcloud auth print-access-token | python3 -m tangram_app connect . --token -
+gcloud auth print-access-token | tangram connect . --token -
 
-printf '{}' | python3 -m tangram_app call . \
+printf '{}' | tangram call . \
   'com.google/gmail#Message.List@listMessages' --connected --input-json -
 ```
 

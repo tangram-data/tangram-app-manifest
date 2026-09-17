@@ -463,7 +463,7 @@ def _check_package_digest(app, args) -> None:
     if expected and actual != expected:
         raise CliArgumentsError(
             f"installed package digest {actual} does not match --package-digest {expected} "
-            "(the app changed since this reference was generated; run: tangram-app skill sync)"
+            "(the app changed since this reference was generated; run: tangram skill sync)"
         )
 
 

@@ -60,7 +60,7 @@ def connected_call(args, app, root, arguments, *, policy=None) -> dict:
     if connection is None:
         raise ConnectionArgumentsError(
             f"no developer connection for {app.graph.package.id}; run "
-            f"`tangram-app connect {args.target} --oauth` (or --token ...) first"
+            f"`tangram connect {args.target} --oauth` (or --token ...) first"
         )
     connection = ensure_fresh(spec, app.graph.package.id, connection)
     endpoint, auth_headers = render_connection(

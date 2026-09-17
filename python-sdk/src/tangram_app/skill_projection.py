@@ -121,7 +121,7 @@ def _projection_problem(app_id: str, block: Any) -> str | None:
     if not isinstance(app_id, str) or not _SAFE_ID.fullmatch(app_id):
         return "app id contains characters unsafe to template"
     if not isinstance(block, dict):
-        return "projection record missing (run: tangram-app skill sync --rebuild)"
+        return "projection record missing (run: tangram skill sync --rebuild)"
     if not isinstance(block.get("packageDigest"), str) or not _SAFE_PACKAGE_DIGEST.fullmatch(block["packageDigest"]):
         return "projection packageDigest is malformed"
     actions = block.get("actions")
@@ -227,12 +227,12 @@ def _render(entry: dict, name: str, freeform: dict) -> str:
     docs = freeform.get("actionDocs") or {}
     description = (
         f"Use the installed Tangram app {bare} ({app_id}) on this machine — "
-        "list its actions and invoke them through the tangram-app CLI."
+        "list its actions and invoke them through the tangram CLI."
     )
     if freeform.get("description"):
         description = (
             f"{_one_line(freeform['description'], 200)} — installed Tangram app "
-            f"{app_id}; use it through the tangram-app CLI."
+            f"{app_id}; use it through the tangram CLI."
         )
     lines = [
         "---",
@@ -247,7 +247,7 @@ def _render(entry: dict, name: str, freeform: dict) -> str:
         "",
         f"# {bare} — installed Tangram app",
         "",
-        f"App id: `{app_id}`. Managed by `tangram-app skill sync`; edits are overwritten.",
+        f"App id: `{app_id}`. Managed by `tangram skill sync`; edits are overwritten.",
         "",
     ]
     if freeform.get("description"):
@@ -265,14 +265,14 @@ def _render(entry: dict, name: str, freeform: dict) -> str:
         "",
         "## How to use (governed CLI — required)",
         "",
-        f"1. `tangram-app actions {app_id} --local` — the current action catalog",
-        f"2. `tangram-app inspect {app_id} --action <Ref> --package-digest {digest}` — an action's argument schema",
-        f"3. `tangram-app call {app_id} <Ref> --local --input-json '{{...}}' --package-digest {digest}`",
+        f"1. `tangram actions {app_id} --local` — the current action catalog",
+        f"2. `tangram inspect {app_id} --action <Ref> --package-digest {digest}` — an action's argument schema",
+        f"3. `tangram call {app_id} <Ref> --local --input-json '{{...}}' --package-digest {digest}`",
         "   — put the action's arguments in the JSON object (`'{}'` when it takes none).",
         "   Writes need `--allow-mutation`; confirmation-gated actions also `--confirm`.",
         "",
         "If `--package-digest` is refused the app changed since this skill was",
-        "generated: run `tangram-app skill sync` and re-read this skill.",
+        "generated: run `tangram skill sync` and re-read this skill.",
         "Never inspect the app's files or database, and never call its backend",
         "over HTTP directly — that bypasses policy and audit.",
         "",
@@ -451,7 +451,7 @@ def sync(*, apply: bool = True) -> dict:
         "pendingFreeform": [],
     }
     if not report["enabled"]:
-        report["hint"] = "projection is disabled; re-enable with: tangram-app skill sync --enable"
+        report["hint"] = "projection is disabled; re-enable with: tangram skill sync --enable"
         return report
 
     entries = list_installed()
@@ -464,7 +464,7 @@ def sync(*, apply: bool = True) -> dict:
             skipped.append({"app": entry.get("id"), "problem": problem})
     report["skippedNoProjection"] = sorted(skipped, key=lambda item: str(item["app"]))
     if skipped:
-        report["hint"] = "backfill/repair skipped apps with: tangram-app skill sync --rebuild"
+        report["hint"] = "backfill/repair skipped apps with: tangram skill sync --rebuild"
     # Liveness comes from store DIRECTORIES, so a corrupt or unparseable
     # install record keeps both its name reservation and its projected skill.
     live_dirs = _store_dir_names() | {entry["id"].replace("/", "__") for entry in entries}
