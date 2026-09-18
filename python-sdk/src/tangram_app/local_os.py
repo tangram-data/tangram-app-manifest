@@ -208,7 +208,8 @@ def base_url(credential: dict) -> str:
     """CliHttp parity via the canonical endpoint parser — handles every
     stored spelling (bare host, host:port, localhost[:port], full URL)."""
     tls, host, port = _canonical_endpoint(str(credential.get("url") or ""))
-    return f"{'https' if tls else 'http'}://{host}:{port}"
+    rendered = f"[{host}]" if ":" in host else host  # re-bracket IPv6 literals
+    return f"{'https' if tls else 'http'}://{rendered}:{port}"
 
 
 def read_tree(root: str | Path) -> dict[str, str]:
