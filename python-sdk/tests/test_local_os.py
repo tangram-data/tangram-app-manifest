@@ -111,6 +111,15 @@ class LocalOsTest(unittest.TestCase):
         with self.assertRaises(LocalOsError):
             load_os_credential()
 
+    def test_base_url_renders_every_stored_spelling(self):
+        self.assertEqual(base_url({"url": "os.example.com"}), "https://os.example.com:443")
+        self.assertEqual(base_url({"url": "https://os.example.com"}), "https://os.example.com:443")
+        self.assertEqual(base_url({"url": "alt.example.test:8443"}), "https://alt.example.test:8443")
+        self.assertEqual(base_url({"url": "localhost"}), "http://localhost:8081")
+        self.assertEqual(base_url({"url": "localhost:9090"}), "http://localhost:9090")
+        self.assertEqual(base_url({"url": "127.0.0.1"}), "http://localhost:8081")
+        self.assertEqual(base_url({"url": "https://localhost:8443"}), "https://localhost:8443")
+
     def test_read_tree_contract(self):
         tree = read_tree(FIXTURE)
         self.assertIn("manifests/app.pkl", tree)

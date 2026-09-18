@@ -205,13 +205,10 @@ def configured_instances() -> list[str]:
 
 
 def base_url(credential: dict) -> str:
-    """CliHttp parity: bare `localhost` is the local http instance on 8081."""
-    url = credential.get("url") or ""
-    if url == "localhost":
-        return "http://localhost:8081"
-    if url.startswith(("http://", "https://")):
-        return url.rstrip("/")
-    return f"https://{url}:443"
+    """CliHttp parity via the canonical endpoint parser — handles every
+    stored spelling (bare host, host:port, localhost[:port], full URL)."""
+    tls, host, port = _canonical_endpoint(str(credential.get("url") or ""))
+    return f"{'https' if tls else 'http'}://{host}:{port}"
 
 
 def read_tree(root: str | Path) -> dict[str, str]:
