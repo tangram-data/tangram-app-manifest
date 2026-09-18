@@ -37,6 +37,33 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
         return None  # never re-send the bearer token to a redirected host
 
 
+def _canonical_endpoint(url: str) -> tuple[bool, str, int]:
+    """Mirror the native CLI's HostUrl.parse: the store may hold a bare host
+    (host = https:443, localhost/127.0.0.1[:port] = the http quickstart
+    runtime, default 8081) or a full URL (desktop-written). Hostnames compare
+    case-insensitively; http loopback spellings alias."""
+    trimmed = url.strip().rstrip("/").lower()
+    if trimmed.startswith(("http://", "https://")):
+        parts = urllib.parse.urlsplit(trimmed)
+        tls = parts.scheme == "https"
+        host = parts.hostname or trimmed
+        port = parts.port or (443 if tls else 80)
+    else:
+        host, sep, maybe_port = trimmed.partition(":")
+        explicit = int(maybe_port) if sep and maybe_port.isdigit() else None
+        if host in ("localhost", "127.0.0.1"):
+            tls, port = False, explicit or 8081
+        else:
+            tls, port = True, explicit or 443
+    if not tls and host == "127.0.0.1":
+        host = "localhost"
+    return (tls, host, port)
+
+
+def _same_endpoint(a: str, b: str) -> bool:
+    return _canonical_endpoint(a) == _canonical_endpoint(b)
+
+
 def load_os_credential(instance: str | None = None, *, expected_url: str | None = None) -> dict:
     """The native CLI's stored credential for `instance` (default: `.HEAD`),
     matched by name EXACTLY and validated against the profile's endpoint
@@ -67,7 +94,9 @@ def load_os_credential(instance: str | None = None, *, expected_url: str | None 
     rows = [entry for entry in (credentials if isinstance(credentials, list) else []) if isinstance(entry, dict)]
     for entry in rows:
         if entry.get("instance") == instance and entry.get("token"):
-            if expected_url and entry.get("url") != expected_url:
+            # Endpoint identity, not string identity: the store holds bare
+            # hosts (CLI) and full URLs (desktop) for the same server.
+            if expected_url and not _same_endpoint(str(entry.get("url") or ""), expected_url):
                 raise LocalOsError(
                     f"stored credential for {instance!r} was issued for {entry.get('url')!r} but the "
                     f"instance profile points at {expected_url!r} — log in again with the native CLI"

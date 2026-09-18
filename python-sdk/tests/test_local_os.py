@@ -95,6 +95,22 @@ class LocalOsTest(unittest.TestCase):
             load_os_credential("dev")
         self.assertIn("issued for", str(caught.exception))
 
+    def test_credential_endpoint_matches_across_formats(self):
+        # The desktop may write full URLs where the CLI writes bare hosts;
+        # the same server in either spelling must resolve, not mismatch.
+        home = Path(self._home.name)
+        self._write_credentials("https://os.example.com")
+        (home / ".HEAD").write_text(json.dumps({"instance": "dev", "url": "os.example.com"}))
+        self.assertEqual(load_os_credential()["token"], "tok-dev")
+        (home / ".HEAD").write_text(json.dumps({"instance": "dev", "url": "OS.Example.Com"}))
+        self.assertEqual(load_os_credential()["token"], "tok-dev")
+        (home / ".HEAD").write_text(json.dumps({"instance": "local", "url": "http://127.0.0.1:8081"}))
+        self.assertEqual(load_os_credential()["token"], "tok-local")
+        # A genuinely different server still mismatches.
+        (home / ".HEAD").write_text(json.dumps({"instance": "dev", "url": "https://os.example.com:8443"}))
+        with self.assertRaises(LocalOsError):
+            load_os_credential()
+
     def test_read_tree_contract(self):
         tree = read_tree(FIXTURE)
         self.assertIn("manifests/app.pkl", tree)
