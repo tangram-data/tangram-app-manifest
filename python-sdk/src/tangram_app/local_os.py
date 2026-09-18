@@ -48,6 +48,12 @@ def _canonical_endpoint(url: str) -> tuple[bool, str, int]:
         tls = parts.scheme == "https"
         host = parts.hostname or trimmed
         port = parts.port or (443 if tls else 80)
+    elif trimmed.startswith("["):
+        # Bracketed bare IPv6 authority, e.g. "[::1]:8443" — https defaults.
+        parts = urllib.parse.urlsplit(f"//{trimmed}")
+        tls = True
+        host = parts.hostname or trimmed
+        port = parts.port or 443
     else:
         host, sep, maybe_port = trimmed.partition(":")
         explicit = int(maybe_port) if sep and maybe_port.isdigit() else None

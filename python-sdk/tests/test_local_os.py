@@ -120,6 +120,9 @@ class LocalOsTest(unittest.TestCase):
         self.assertEqual(base_url({"url": "127.0.0.1"}), "http://localhost:8081")
         self.assertEqual(base_url({"url": "https://localhost:8443"}), "https://localhost:8443")
         self.assertEqual(base_url({"url": "https://[::1]:8443"}), "https://[::1]:8443")
+        self.assertEqual(base_url({"url": "[::1]:8443"}), "https://[::1]:8443")
+        self.assertEqual(base_url({"url": "[::1]"}), "https://[::1]:443")
+        self.assertEqual(base_url({"url": "https://[::1]"}), "https://[::1]:443")
 
     def test_read_tree_contract(self):
         tree = read_tree(FIXTURE)
