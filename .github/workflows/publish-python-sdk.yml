@@ -43,6 +43,19 @@ jobs:
             echo "module versions (staged=${staged}, fallback=${fallback}) != ${version}"; exit 1; }
       - name: Build sdist and wheel
         run: pipx run build --sdist --wheel --outdir dist python-sdk
+      - name: Verify installed wheel capabilities
+        run: |
+          python -m venv /tmp/sdk-wheel-check
+          /tmp/sdk-wheel-check/bin/pip install dist/*.whl
+          cd /tmp
+          expected="${GITHUB_REF_NAME#tangram-app-sdk@}"
+          actual=$(/tmp/sdk-wheel-check/bin/python -c 'import tangram_app; print(tangram_app.__version__)')
+          test "$actual" = "$expected"
+          /tmp/sdk-wheel-check/bin/tangram-app --version
+          /tmp/sdk-wheel-check/bin/tangram-app context resolve --help
+          /tmp/sdk-wheel-check/bin/tangram-app app search --help
+          /tmp/sdk-wheel-check/bin/tangram-app app inspect --help
+          /tmp/sdk-wheel-check/bin/tangram-app app call --help
       - name: Check metadata
         run: pipx run twine check dist/*
       - uses: actions/upload-artifact@v4
